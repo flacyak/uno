@@ -15,8 +15,12 @@ export const TITLE_AT_MOST = 200;
 /** A chart's refresh when its source is read again by hand only. */
 export const BY_HAND = 0;
 
+/** The minutes in an hour and in a day. */
+export const HOUR_MINUTES = 60;
+export const DAY_MINUTES = 24 * HOUR_MINUTES;
+
 /** The longest wait between scheduled checks of a source: one week. */
-export const REFRESH_MINUTES_AT_MOST = 7 * 24 * 60;
+export const REFRESH_MINUTES_AT_MOST = 7 * DAY_MINUTES;
 
 /**
  * The decimals a saved x or y keeps, so a window that has not moved saves the

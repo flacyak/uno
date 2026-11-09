@@ -2,15 +2,17 @@
  * @fileoverview What a chart's caption says of how much of its source it has
  * read, in the language chosen: the share read while its tally is partial, and
  * the rows once it is complete, then the cells the tally left out. And what its
- * plot says in place of a chart it cannot draw.
+ * plot says in place of a chart it cannot draw. And at the caption's right end,
+ * how often its source is checked.
  */
 
 import { afterEach, expect, test } from "vite-plus/test";
 
+import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
 import type { GroupsTally, SampleTally, Tally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
-import { blank, body, coverage, notNumbers } from "@renderer/chart/caption";
+import { blank, body, coverage, every, notNumbers } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
 import { BARS, SCATTER } from "../charted.ts";
 
@@ -43,6 +45,11 @@ const UNREAD: Tally = {
   plot: BARS.plot,
   said: { t: "chart-column-gone", header: "region", name: NAME },
 };
+
+/** Schedules the caption names: a quarter hour, an hour and a half, and two hours. */
+const QUARTER_HOUR = 15;
+const HOUR_AND_HALF = 90;
+const TWO_HOURS = 2 * HOUR_MINUTES;
 
 afterEach(() => void setLocale(baseLocale, { reload: false }));
 
@@ -174,4 +181,25 @@ test("the plot says its source is missing or waits on its bucket, with Re-point 
     words: "open-data no está conectado",
     action: { words: "Conectar open-data", opens: "panel" },
   });
+});
+
+test("the caption names a chart's schedule in the language chosen, and nothing for one read by hand", () => {
+  const schedules = [BY_HAND, QUARTER_HOUR, HOUR_MINUTES, HOUR_AND_HALF, TWO_HOURS, DAY_MINUTES];
+  expect(schedules.map(every)).toStrictEqual([
+    "",
+    "every 15 min",
+    "every hour",
+    "every 90 min",
+    "every 2 h",
+    "every day",
+  ]);
+  void setLocale("es", { reload: false });
+  expect(schedules.map(every)).toStrictEqual([
+    "",
+    "cada 15 min",
+    "cada hora",
+    "cada 90 min",
+    "cada 2 h",
+    "cada día",
+  ]);
 });

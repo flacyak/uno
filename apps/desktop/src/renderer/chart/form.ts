@@ -14,7 +14,13 @@
 
 import "./form.css";
 
-import { BY_HAND, REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from "@document";
+import {
+  BY_HAND,
+  DAY_MINUTES,
+  HOUR_MINUTES,
+  REFRESH_MINUTES_AT_MOST,
+  TITLE_AT_MOST,
+} from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
 import { placeOf } from "@engine";
 import type { ColumnInfo, Link, PartInfo } from "@engine";
@@ -62,10 +68,6 @@ const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
   ["pie", m.chart_kind_pie],
   ["scatter", m.chart_kind_scatter],
 ];
-
-/** The minutes in an hour and in a day. */
-const HOUR_MINUTES = 60;
-const DAY_MINUTES = 24 * HOUR_MINUTES;
 
 /** The schedules under an hour the form offers, in minutes between checks. */
 const EVERY_FEW_MINUTES = [5, 15, 30];

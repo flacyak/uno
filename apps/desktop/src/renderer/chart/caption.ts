@@ -4,8 +4,10 @@
  * tally is partial, and the rows once it is complete, then the cells the tally
  * left out. The track under the head shows the same share while the chart
  * reads, and the plot says why it draws nothing while it has nothing to draw.
+ * At its right end it says how often its source is checked.
  */
 
+import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
 import type { ChartColumn, Plot } from "@document";
 import type { Coverage, GroupsTally, SampleTally, Skipped, Tally } from "@engine";
 import { m } from "@paraglide/messages";
@@ -145,4 +147,17 @@ export function body(plot: Plot, heard: Heard): Body | undefined {
   }
   if (latest === undefined) return { words: m.chart_reading({ name }) };
   return { words: m.chart_no_values_yet({ columns: list(valued(plot)) }) };
+}
+
+/**
+ * every gives what the caption calls a chart's schedule of `minutes` between
+ * checks: an hour or a day by name, whole hours in hours, or else minutes, and
+ * nothing for a chart read by hand.
+ */
+export function every(minutes: number): string {
+  if (minutes === BY_HAND) return "";
+  if (minutes === HOUR_MINUTES) return m.chart_every_hour();
+  if (minutes === DAY_MINUTES) return m.chart_every_day();
+  if (minutes % HOUR_MINUTES !== 0) return m.chart_every_minutes({ count: num(minutes) });
+  return m.chart_every_hours({ count: num(minutes / HOUR_MINUTES) });
 }

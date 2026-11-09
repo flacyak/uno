@@ -54,6 +54,8 @@ export {
 export {
   BY_HAND,
   CHARTS_AT_MOST,
+  DAY_MINUTES,
+  HOUR_MINUTES,
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
 } from './chart.ts';

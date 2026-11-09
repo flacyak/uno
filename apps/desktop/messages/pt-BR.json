@@ -533,6 +533,10 @@
     }
   ],
   "chart_partial": "parcial · {read} lido",
+  "chart_every_minutes": "a cada {count} min",
+  "chart_every_hours": "a cada {count} h",
+  "chart_every_hour": "a cada hora",
+  "chart_every_day": "todo dia",
   "chart_reading": "lendo {name}…",
   "chart_no_values_yet": "ainda não há valores em {columns}",
   "chart_source_missing": "{name} está ausente",
