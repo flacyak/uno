@@ -4,24 +4,38 @@
  * bars of it, which draw from the real engine in a window that takes the keys.
  * Another insert keeps the windows there, and adds one window however many
  * Enters it takes. A pie and a scatter chosen in the form draw too. Ctrl+Shift+G
- * and :chart open the same form.
+ * and :chart open the same form. A schedule chosen in it is saved, and the
+ * workspace opened again checks the chart's source on it.
  *
  * @vitest-environment happy-dom
  */
 
-import { beforeAll, expect, test } from "vite-plus/test";
+import { mkdtempSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
+import { beforeAll, expect, test, vi } from "vite-plus/test";
 
+import { readContainer } from "@document";
 import { REGION, ROWS, UNITS, counted } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
+import { Refresher } from "@renderer/refresh";
 import type { Shell } from "@renderer/shell/shell";
-import { FIRST_ROWS_MS, bootShell } from "./smoke/dom-harness.ts";
+import { MINUTE_MS } from "@renderer/timing";
+import { Workspace } from "@renderer/workspace";
+import { FIRST_ROWS_MS, FIXTURE, bootShell } from "./smoke/dom-harness.ts";
 import { domPage, frame, until } from "./smoke/dom-page.ts";
 
 /** The sales export's regions, as its tally sends them, each a quarter of its rows. */
 const REGIONS = ["East", "North", "South", "West"];
 
+/** The schedule the form sets: a check every 15 minutes. */
+const QUARTER_HOUR = 15;
+
 const page = domPage();
 let shell: Shell;
+/** Where the first save writes the workspace. */
+const saved = join(mkdtempSync(join(tmpdir(), "uno-chart-insert-")), "q3.uno");
 
 const texts = (selector: string): Array<string | null> =>
   [...document.querySelectorAll(selector)].map((at) => at.textContent);
@@ -53,7 +67,10 @@ async function enter(at: Element, times = 1): Promise<void> {
 }
 
 beforeAll(async () => {
-  shell = await bootShell();
+  shell = await bootShell({
+    pickSave: () => Promise.resolve(saved),
+    save: (path, bytes) => writeFile(path, bytes),
+  });
 }, FIRST_ROWS_MS);
 
 test("Insert chart… makes bars of the selected column, which draw from the engine", async () => {
@@ -141,4 +158,34 @@ test(":chart at the vim-style prompt opens the chart form on the selected column
   expect([by.value, document.activeElement]).toStrictEqual([String(REGION), by]);
   by.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   shell.setInput("default");
+});
+
+test("a schedule chosen in the form saves, and the workspace opened again checks on it", async () => {
+  shell.insertChartHere();
+  const by = await formOpened();
+  document.querySelector<HTMLSelectElement>('.chart-form select[name="refresh"]')!.value =
+    String(QUARTER_HOUR);
+  await enter(by);
+  await shell.save();
+  const scheduled = readContainer(basename(saved), await readFile(saved)).charts?.at(-1);
+  expect(scheduled?.refresh).toBe(QUARTER_HOUR);
+
+  const dispose = vi.spyOn(Refresher.prototype, "dispose");
+  await shell.openRef({ name: basename(FIXTURE), path: FIXTURE });
+  expect(dispose).toHaveBeenCalledOnce();
+  const checked = vi.spyOn(Workspace.prototype, "refresh");
+  await shell.openRef({ name: basename(saved), path: saved }, saved);
+  // The first check comes once the source is indexed, and the next a quarter hour on.
+  const first = async (): Promise<boolean> => (await checked.mock.results[0]?.value)?.t === "same";
+  await vi.waitUntil(first, { timeout: FIRST_ROWS_MS });
+  // The schedule notes when the check ended before the next frame.
+  await frame();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.now() + QUARTER_HOUR * MINUTE_MS);
+  document.dispatchEvent(new Event("visibilitychange"));
+  vi.useRealTimers();
+  await vi.waitUntil(() => checked.mock.calls.length === 2);
+  expect(checked.mock.calls).toStrictEqual([[scheduled?.source], [scheduled?.source]]);
+  dispose.mockRestore();
+  checked.mockRestore();
 });

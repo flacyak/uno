@@ -9,7 +9,7 @@
  * first workspace that has charts.
  */
 
-import { isWorkspace } from "@document";
+import { BY_HAND, isWorkspace } from "@document";
 import type { Chart, ChartColumn } from "@document";
 import { Engine, messagePort } from "@engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@engine";
@@ -71,9 +71,6 @@ const SIDEBAR_CLOSED = "closed";
 
 /** The class on #app while the sidebar is closed. */
 const NO_SIDEBAR = "no-sidebar";
-
-/** A new chart's minutes between checks: 0, by hand only, until the form asks. */
-const BY_HAND = 0;
 
 /**
  * An action that would close the workspace and drop its edits: Ctrl+O, the
@@ -590,8 +587,9 @@ export class Shell {
     let made: string | undefined;
     this.closePopups();
     this.chartForm = new ChartForm(place, w.sources, tab, opening, {
-      send: async (source, plot, title) => {
-        made = (await this.chart(w, source, { plot, title }, grid.columnSpan(col))).id;
+      send: async (source, plot, title, refresh) => {
+        const shown = { plot, title, refresh };
+        made = (await this.chart(w, source, shown, grid.columnSpan(col))).id;
         this.say(m.chart_inserted({ title: title === "" ? madeTitle(plot) : title }));
       },
       closed: () => {
@@ -691,7 +689,7 @@ export class Shell {
   private async chart(
     w: Workspace,
     source: ChartSource,
-    shown: Pick<Chart, "plot" | "title">,
+    shown: Pick<Chart, "plot" | "title" | "refresh">,
     column: { left: number; right: number },
   ): Promise<Chart> {
     const layer = await this.loadLayer();
@@ -700,7 +698,7 @@ export class Shell {
     }
     layer.show(w.charts);
     const place = layer.fresh(column);
-    return this.drawn(w.charts.add({ ...shown, source: source.id, place, refresh: BY_HAND }));
+    return this.drawn(w.charts.add({ ...shown, source: source.id, place }));
   }
 
   /**
