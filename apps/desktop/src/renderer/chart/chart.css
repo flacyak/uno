@@ -771,7 +771,8 @@
   color: var(--ink-3);
 }
 
-/* What the caption says of the plot takes the room before the grip. Where a
+/* What the caption says of the plot takes the room it needs before the grip,
+ * and the words of the source's checks after it take what is left. Where a
  * window is too narrow for it, the words after the button give way first, as
  * they take only the room the rest leaves, down to none, and then the words
  * before it, each ending in an ellipsis while any of it shows; the button and
@@ -783,7 +784,7 @@
 .chart-said {
   --find-reach: 5px;
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   align-items: baseline;
   min-width: 0;
   padding-right: var(--find-reach);
@@ -808,6 +809,19 @@
 .chart-said-dot,
 .chart-find {
   flex: none;
+}
+
+/* What the caption says of the source's checks stands at its right end, before
+ * the grip, in the room the plot's words leave, down to none, so it ends in an
+ * ellipsis before they do where the window is too narrow for both. */
+.chart-checks {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-left: 1ch;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: pre;
 }
 
 /* The count of the cells that were not numbers is the button that finds them.

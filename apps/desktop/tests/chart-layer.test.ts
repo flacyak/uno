@@ -152,8 +152,11 @@ const remove = vi.fn();
 /** What the layer calls to write on the status line. */
 const say = vi.fn();
 
+/** What the layer reads of a source's checks: none yet. */
+const checks = (): undefined => undefined;
+
 /** Everything the layer asks of the shell. */
-const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say };
+const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say, checks };
 
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {

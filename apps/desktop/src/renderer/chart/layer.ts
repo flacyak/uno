@@ -17,6 +17,7 @@ import type { Chart, ChartColumn, ChartPlace } from "@document";
 import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import type { ColumnSpan } from "@renderer/grid/view";
+import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
 import { fresh, overfull, placed, stackHeight, thin, tucked, tucks } from "./place.ts";
@@ -27,7 +28,7 @@ import type { Stage } from "./window.ts";
 /** What a window asks of the shell, which the layer hands on. */
 export type Asks = Pick<
   Stage,
-  "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "refresh" | "remove" | "say"
+  "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "refresh" | "remove" | "say" | "checks"
 >;
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
@@ -194,6 +195,18 @@ export class ChartLayer implements Stage {
   /** heard gives what chart `id` last heard, for its window to draw. */
   heard(id: string): Heard | undefined {
     return this.charts.heard(id);
+  }
+
+  /** checks gives when `source` was last checked, for its windows' captions. */
+  checks(source: string): Checks | undefined {
+    return this.asks.checks(source);
+  }
+
+  /** checked draws the windows over `source` again, as its checks changed. */
+  checked(source: string): void {
+    for (const chart of this.charts.all) {
+      if (chart.source === source) this.windows.get(chart.id)?.redraw();
+    }
   }
 
   /** tallied draws chart `id`'s window again, as the chart heard a tally. */

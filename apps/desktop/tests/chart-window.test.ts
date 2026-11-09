@@ -40,6 +40,7 @@ const NO_LAYER: Stage = {
   leave: () => undefined,
   wheelBy: () => undefined,
   heard: () => undefined,
+  checks: () => undefined,
   repoint: () => undefined,
   notNumbers: () => undefined,
   edit: () => undefined,
