@@ -3,7 +3,8 @@
  * a workspace whose export was rewritten since it was saved opens saying so,
  * one rewritten while it is open is marked when the window gets the focus back,
  * Reload reads the newer one with the edits replayed over it, and so does r on
- * a chart over it at the end of the run.
+ * a chart over it at the end of the run, showing the track under the head
+ * while it reads and then saying when it checked.
  *
  * They run after meets.ts, with acme-exports/2025/ connected, so the saved
  * workspace opens its object at once. smoke.js rewrites the object when a
@@ -144,13 +145,19 @@ export const CHART_REFRESH: Check[] = [
       document.querySelector(".chart-form select").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
       const chart = () => document.querySelector(".chart");
       if (!(await arrives(() => / rows/.test(chart()?.querySelector(".chart-said")?.textContent ?? "")))) return "the chart never completed";
+      // The next check reads whether the track showed while r read.
+      const track = chart().querySelector(".chart-coverage");
+      new MutationObserver(() => {
+        if (!track.hidden) track.dataset.shown = "";
+      }).observe(track, { attributes: true, attributeFilter: ["hidden"] });
       return document.activeElement === chart() ? "" : "the keys are in " + document.activeElement?.className;
     `,
   },
   {
     // The digit smoke.js changed twice above changes a third time, read by r
-    // alone. The chart then goes, and the workspace is as it opened.
-    name: "r on the chart reads the object's newer version, and its removal leaves the workspace clean",
+    // alone, with the track under the head while it reads and the time of the
+    // check once it ends. The chart then goes, and the workspace is as it opened.
+    name: "r on the chart reads the object's newer version under its track, says when, and its removal leaves the workspace clean",
     ask: `rewrite ${KEY}`,
     input: { events: PRESS_R, through: true },
     script: `
@@ -158,6 +165,9 @@ export const CHART_REFRESH: Check[] = [
       if (!(await arrives(() => said.test(text("#status-msg"))))) return "the status bar says " + JSON.stringify(text("#status-msg"));
       const first = () => document.querySelector("tbody tr:not(.pending) td:nth-child(2)")?.textContent;
       if (!(await arrives(() => first() === "A4000"))) return "the first cell reads " + JSON.stringify(first());
+      if (document.querySelector(".chart-coverage")?.dataset.shown === undefined) return "the track never showed";
+      const checked = () => text(".chart .chart-checks");
+      if (!(await arrives(() => /^checked \\d/.test(checked())))) return "the caption's right end says " + JSON.stringify(checked());
       const del = () => document.querySelector(".chart").dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
       // The first Delete arms the ×, and the second removes the chart.
       del();
