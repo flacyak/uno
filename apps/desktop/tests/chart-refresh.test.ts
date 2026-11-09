@@ -285,12 +285,13 @@ test("a schedule opens nothing over the file as it was read, and draws the rewri
 });
 
 test("a scheduled chart's caption names its schedule, and says when its source was read by hand once the read ends", async () => {
-  vi.useFakeTimers({ toFake: ["Date"], now: CHECKED_AT });
+  // The read ends well inside the minute CHECKED_AT starts, as the clock runs on.
+  vi.useFakeTimers({ toFake: ["Date"], now: CHECKED_AT, shouldAdvanceTime: true });
   r();
-  vi.useRealTimers();
   const every = m.chart_every_minutes({ count: `${EVERY_MINUTE}` });
-  const said = `${every} · ${m.chart_checked({ time: clock(CHECKED_AT) })}`;
-  expect(await until(page, () => checks() === said)).toBe(true);
+  const caption = `${every} · ${m.chart_checked({ time: clock(CHECKED_AT) })}`;
+  expect(await until(page, () => checks() === caption)).toBe(true);
+  vi.useRealTimers();
 });
 
 test("a scheduled check that fails says why and when the next try is, and the next that succeeds clears it", async () => {
