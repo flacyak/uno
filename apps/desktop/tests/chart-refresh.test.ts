@@ -12,8 +12,9 @@
  * and when the source was read, a check that fails saying why and when the
  * next try is until one succeeds, r or Reload starts the schedule over, one
  * over several files appends the new one alone, another workspace's open
- * stops the schedule, and one over a file still indexing checks it once its
- * index completes.
+ * stops the schedule, one over a file still indexing checks it once its
+ * index completes, and one a cell edit holds back says so, until a read by
+ * hand the edit refuses says it failed.
  *
  * @vitest-environment happy-dom
  */
@@ -32,7 +33,7 @@ import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
 
 import { Engine, Refusal, TUNING } from "@engine";
-import { ROWS } from "@main/smoke/fixture";
+import { ROWS, UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import type { Provider } from "@plugin";
 import { trouble } from "@renderer/chart/caption";
@@ -382,3 +383,38 @@ test(
   },
   FIRST_ROWS_MS,
 );
+
+test("a scheduled check held back by a cell edit says so, and a read by hand the edit refuses says it failed", async () => {
+  const csv = join(dir, "held.csv");
+  await copyFile(FIXTURE, csv);
+  const uno = join(dir, "held.uno");
+  await writeFile(uno, unoOf([{ ...BARS, refresh: EVERY_MINUTE }], [], csv));
+  await shell.openRef({ name: basename(uno), path: uno }, uno);
+  expect(await counts(ROWS)).toBe(true);
+  await page.press("e", { ctrlKey: true });
+  await page.clickCell(0, UNITS);
+  await page.settle(1);
+  await page.press("Enter");
+  await page.setEditorValue("8");
+  await page.press("Enter");
+  expect(await until(page, () => shell.unsaved)).toBe(true);
+
+  await appendFile(csv, ADDED_ROW);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.now() + MINUTE_MS);
+  document.dispatchEvent(new Event("visibilitychange"));
+  vi.useRealTimers();
+  const held = m.chart_held({ edits: m.edits_count({ count: 1 }) });
+  expect(await until(page, () => checks() === held)).toBe(true);
+  expect(box().querySelector(".chart-checks-trouble")).not.toBeNull();
+
+  // The file cut to its header has no row for the edit to replay on.
+  const [header] = (await readFile(FIXTURE, "utf8")).split("\n");
+  await writeFile(csv, `${header}\n`);
+  const told = vi.spyOn(Refresher.prototype, "checks");
+  r();
+  expect(await until(page, () => checks().startsWith("!") && checks() !== held)).toBe(true);
+  const failed = told.mock.results.at(-1)!.value as Checks;
+  expect([failed.found.t, checks()]).toStrictEqual(["failed", trouble(failed)]);
+  told.mockRestore();
+});
