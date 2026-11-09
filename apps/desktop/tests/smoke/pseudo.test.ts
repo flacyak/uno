@@ -68,6 +68,9 @@ const ONE_SENTENCE = ["#empty p"];
 /** The attributes a person reads or hears, beside the text itself. */
 const SPOKEN = ["title", "aria-label", "aria-roledescription", "placeholder"];
 
+/** The chart form's Refresh option that shows a number and a unit. */
+const EVERY = "every";
+
 /**
  * Patterns for text that is the same in every language, removed from a text
  * once its messages are taken out.
@@ -196,6 +199,12 @@ test("the chart form is in the language chosen", async () => {
   const items = [...document.querySelectorAll<HTMLElement>(".pop-item")];
   items.find((item) => item.firstChild?.textContent === m.menu_insert_chart())?.click();
   expect(await until(domPage(), () => document.querySelector(".chart-form") !== null)).toBe(true);
+  expect(english()).toEqual([]);
+  // Enter on Every… with no number says what it takes.
+  const refresh = document.querySelector<HTMLSelectElement>('.chart-form select[name="refresh"]')!;
+  refresh.value = EVERY;
+  refresh.dispatchEvent(new Event("change"));
+  refresh.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   expect(english()).toEqual([]);
   const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
   document.querySelector(".chart-form")?.dispatchEvent(escape);

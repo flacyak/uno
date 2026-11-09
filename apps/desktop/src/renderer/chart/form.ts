@@ -14,7 +14,7 @@
 
 import "./form.css";
 
-import { BY_HAND, TITLE_AT_MOST } from "@document";
+import { BY_HAND, REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
 import { placeOf } from "@engine";
 import type { ColumnInfo } from "@engine";
@@ -84,6 +84,9 @@ const EVERY_AT_MOST = 999;
 
 /** A minute, in minutes. */
 const ONE_MINUTE = 1;
+
+/** What Every…'s number holds when it is a whole number as written: digits alone. */
+const DIGITS = /^\d+$/;
 
 /** The units Every… counts in, in minutes, and their words. */
 const UNITS: ReadonlyArray<readonly [number, () => string]> = [
@@ -302,18 +305,29 @@ export class ChartForm {
     this.unit.hidden = preset;
   }
 
-  /** minutes gives the minutes between checks that Refresh holds. */
-  private minutes(): number {
+  /** minutes gives the minutes between checks that Refresh holds, or undefined
+   * for an Every… of no whole number, or of under a minute or over a week. */
+  private minutes(): number | undefined {
     if (this.refresh.value !== EVERY) return Number(this.refresh.value);
-    return Number(this.count.value) * Number(this.unit.value);
+    const minutes = Number(this.count.value) * Number(this.unit.value);
+    const kept = DIGITS.test(this.count.value) && minutes >= ONE_MINUTE;
+    return kept && minutes <= REFRESH_MINUTES_AT_MOST ? minutes : undefined;
   }
 
-  /** send sends the chart, unless one is in flight, and closes once the engine keeps it. */
+  /** send sends the chart, unless one is in flight or Every… holds no
+   * schedule, and closes once the engine keeps it. */
   private async send(): Promise<void> {
+    const minutes = this.minutes();
+    if (minutes === undefined) {
+      const most = REFRESH_MINUTES_AT_MOST / HOUR_MINUTES;
+      this.form.say(m.chart_refresh_range({ least: num(ONE_MINUTE), most: num(most) }), true);
+      this.count.focus();
+      return;
+    }
     if (this.form.submit.disabled) return;
     this.form.submit.disabled = true;
     try {
-      await this.asks.send(this.source, this.plot(), this.title.value.trim(), this.minutes());
+      await this.asks.send(this.source, this.plot(), this.title.value.trim(), minutes);
       this.close();
     } catch (err) {
       this.form.say(message(err), true);
