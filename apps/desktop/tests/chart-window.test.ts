@@ -31,6 +31,9 @@ const TITLED: Chart = { ...BARS, title: "Where the rows are" };
 /** The name of a source, as a head writes it. */
 const SOURCE = "sales-q3";
 
+/** A chart's schedule of a check every 15 minutes. */
+const QUARTER_HOUR = 15;
+
 /** A layer for a window whose words are all a test reads. */
 const NO_LAYER: Stage = {
   room: () => ({ w: 0, h: 0 }),
@@ -396,6 +399,30 @@ test("the head's edit button stands between the table's and the ×, named for wh
   expect(edit.previousElementSibling).toBe(box.querySelector(".chart-table-toggle"));
   expect(edit.nextElementSibling).toBe(close(box));
   expect(edit.getAttribute("aria-label")).toBe(m.chart_edit());
+});
+
+test("the caption's schedule is a button that asks for the chart form on its checks field", async () => {
+  const edit = vi.fn();
+  const scheduled = { ...BARS, refresh: QUARTER_HOUR };
+  const made = hearing(
+    () => ({ state: "fine", name: SOURCE, latest: undefined, complete: undefined }),
+    scheduled,
+    { edit },
+  );
+  await frame();
+  const schedule = made.box.querySelector<HTMLButtonElement>(".chart-caption button.chart-every")!;
+  expect(schedule.textContent).toBe(m.chart_every_minutes({ count: `${QUARTER_HOUR}` }));
+  schedule.click();
+  expect(edit).toHaveBeenCalledWith(BARS.id, expect.anything(), "refresh");
+});
+
+test("the caption names no schedule over a source whose files the open did not find", async () => {
+  const made = hearing(
+    () => ({ state: "fine", name: SOURCE, latest: undefined, complete: undefined, lost: true }),
+    { ...BARS, refresh: QUARTER_HOUR },
+  );
+  await frame();
+  expect(made.box.querySelector<HTMLButtonElement>(".chart-every")!.hidden).toBe(true);
 });
 
 test("the head's refresh button stands first of its buttons, and it and r ask to read the chart's source", () => {
