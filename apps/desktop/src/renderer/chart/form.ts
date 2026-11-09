@@ -98,11 +98,19 @@ const UNITS: ReadonlyArray<readonly [number, () => string]> = [
   [HOUR_MINUTES, m.chart_refresh_unit_hours],
 ];
 
-/** What a scheduled check reads of each kind of source, or why it reads nothing. */
+/** What a scheduled check reads of each kind of source, or why it reads
+ * nothing, in a note's two lines. */
 const CHECKS: Record<Rereads, (named: { name: string }) => string> = {
   file: m.chart_refresh_does_file,
   object: m.chart_refresh_does_object,
   folder: m.chart_refresh_does_folder,
+  carried: m.chart_refresh_note_carried,
+  lost: m.chart_refresh_note_lost,
+};
+
+/** Why a check of a source with nothing to read again reads nothing, in full,
+ * as the chart window's refresh button says it. */
+const READS_NOTHING: Partial<Record<Rereads, (named: { name: string }) => string>> = {
   carried: m.chart_refresh_carried,
   lost: m.chart_refresh_lost,
 };
@@ -219,7 +227,7 @@ export class ChartForm {
       this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
     }
     this.offer(this.at(by), kept);
-    this.tell();
+    this.reveal();
   }
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
@@ -324,8 +332,10 @@ export class ChartForm {
     this.reveal();
   }
 
-  /** reveal shows Every…'s number and unit while it is chosen. */
+  /** reveal shows Every…'s number and unit while it is chosen. A source with
+   * nothing to read again is checked by hand, whatever was chosen. */
   private reveal(): void {
+    if (READS_NOTHING[rereads(this.source)] !== undefined) this.refresh.value = String(BY_HAND);
     const preset = this.refresh.value !== EVERY;
     this.count.hidden = preset;
     this.unit.hidden = preset;
@@ -333,11 +343,19 @@ export class ChartForm {
   }
 
   /** tell says in the note what a check reads of the source chosen while
-   * Refresh holds a schedule, or else what Enter and Esc do. */
+   * Refresh holds a schedule, or else what Enter and Esc do. Over a source with
+   * nothing to read again, Refresh is off and the note says why. */
   private tell(): void {
-    const said = CHECKS[rereads(this.source)]({ name: this.source.name });
+    const reads = rereads(this.source);
+    const named = { name: this.source.name };
+    const why = READS_NOTHING[reads]?.(named);
+    for (const control of [this.refresh, this.count, this.unit]) {
+      control.disabled = why !== undefined;
+      control.title = why ?? "";
+    }
     const hint = this.opening.t === "change" ? m.chart_form_hint_change() : m.chart_form_hint();
-    this.form.say(this.refresh.value !== String(BY_HAND) ? said : hint, false);
+    const checks = why !== undefined || this.refresh.value !== String(BY_HAND);
+    this.form.say(checks ? CHECKS[reads](named) : hint, false);
   }
 
   /** minutes gives the minutes between checks that Refresh holds, or undefined

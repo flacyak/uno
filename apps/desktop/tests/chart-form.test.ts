@@ -64,10 +64,13 @@ const TWINS = {
 };
 const UNITS_TWIN = 1;
 const REGION_TWIN = 3;
-/** Then the sales export in a bucket, and in parts. */
+/** Then the sales export in a bucket, in parts, carried inside the workspace,
+ * and in parts the open did not find. */
 const OBJECT = { ...SALES, id: "object", link: { path: "s3://acme-exports/sales-q3.csv" } };
 const PARTS = { ...SALES, id: "parts", link: undefined, parts: [{ name: "q3-1.csv", path: "" }] };
-const SOURCES = [SALES, ADS, GONE, SUMS, TAKINGS, TWINS, OBJECT, PARTS];
+const CARRIED = { ...SALES, id: "carried", link: undefined };
+const LOST = { ...SALES, id: "lost", link: { path: "" } };
+const SOURCES = [SALES, ADS, GONE, SUMS, TAKINGS, TWINS, OBJECT, PARTS, CARRIED, LOST];
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id, refresh = BY_HAND): string =>
@@ -349,6 +352,23 @@ test("a schedule's note says what a check reads of a file, an object or a folder
   expect(note()).toBe(m.chart_form_hint());
 });
 
+test("a carried source, or one whose files the open did not find, turns Refresh off and says why", () => {
+  const off = (source: ChartSource): Array<string | boolean | null> => {
+    const { box } = form(undefined, { t: "insert", col: REGION }, source);
+    return [
+      select("refresh").disabled,
+      select("refresh").title,
+      box.querySelector(".note")!.textContent,
+    ];
+  };
+  const name = { name: SALES.name };
+  const carried = [m.chart_refresh_carried(name), m.chart_refresh_note_carried(name)];
+  expect(off(CARRIED)).toStrictEqual([true, ...carried]);
+  const lost = [m.chart_refresh_lost(name), m.chart_refresh_note_lost(name)];
+  expect(off(LOST)).toStrictEqual([true, ...lost]);
+  expect(off(SALES)).toStrictEqual([false, "", m.chart_form_hint()]);
+});
+
 test("Esc closes it and inserts nothing", () => {
   const { asked } = form();
   press("Escape");
@@ -466,4 +486,20 @@ test("a chart's form opens on the chart's own columns where two share a header",
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(twinned, "", TWINS.id), "closed"]);
+});
+
+test("a source with nothing to read again is checked by hand, whatever was chosen", async () => {
+  const { asked } = form();
+  pick("refresh", EVERY);
+  pick("source", String(SOURCES.indexOf(CARRIED)));
+  const off = [chosen("refresh"), count().hidden, count().disabled, select("unit").disabled];
+  expect(off).toStrictEqual([[String(BY_HAND)], true, true, true]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "", CARRIED.id), "closed"]);
+  const { asked: applied } = changing(REGION_BARS, "", LOST, QUARTER_HOUR);
+  expect(chosen("refresh")).toStrictEqual([String(BY_HAND)]);
+  press("Enter");
+  await settle();
+  expect(applied).toStrictEqual([inserting(REGION_BARS, "", LOST.id), "closed"]);
 });

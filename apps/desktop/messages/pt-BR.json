@@ -497,6 +497,8 @@
   "chart_refresh_does_file": "lê {name} de novo se o tamanho ou a data mudar",
   "chart_refresh_does_object": "lê do bucket uma versão mais nova de {name}",
   "chart_refresh_does_folder": "acrescenta os arquivos novos da pasta de {name}",
+  "chart_refresh_note_carried": "{name} vai no espaço de trabalho: nada para reler",
+  "chart_refresh_note_lost": "faltam os arquivos de {name}: nada para reler",
   "chart_refresh_range": "A cada… aceita um número inteiro, de {least} min a {most} h",
   "chart_form_hint": "Enter insere · Esc fecha",
   "chart_form_title_chart": "Gráfico · {title}",

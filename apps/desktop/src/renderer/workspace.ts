@@ -112,7 +112,10 @@ function sameCell(a: Cell, b: Cell): boolean {
 export type Rereads = "file" | "object" | "folder" | "carried" | "lost";
 
 /** rereads says what `source`'s refresh reads again. */
-export function rereads(source: { link?: Pick<Link, "path">; parts?: unknown }): Rereads {
+export function rereads(source: {
+  link?: Pick<Link, "path">;
+  parts?: readonly PartInfo[];
+}): Rereads {
   if (source.parts !== undefined) return "folder";
   if (source.link === undefined) return "carried";
   if (source.link.path === "") return "lost";
@@ -308,8 +311,9 @@ export class Workspace {
   private sourceState(source: string): SourceState {
     const tab = this.tabs.find((t) => t.id === source);
     if (tab === undefined) return { state: "missing", name: source };
-    const carried = tab.link === undefined && tab.parts === undefined;
-    const lost = tab.link?.path === "";
+    const reads = rereads(tab);
+    const carried = reads === "carried";
+    const lost = reads === "lost";
     return { state: tab.state, name: tab.name, bucket: tab.link?.connect?.bucket, carried, lost };
   }
 
