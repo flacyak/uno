@@ -155,7 +155,8 @@ export function bytes(n: number): string {
   return UNITS[unit]!({ size: written });
 }
 
-const MS_PER_SECOND = 1000;
+/** A second, in ms. */
+export const MS_PER_SECOND = 1000;
 
 /** Formats a time in milliseconds as seconds to one decimal, with its unit: 2.4 s. */
 export function seconds(ms: number): string {

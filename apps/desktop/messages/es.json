@@ -541,6 +541,7 @@
   "chart_held": "! hay datos nuevos - {edits} en esta pestaña",
   "chart_check_failed": "! no se pudo actualizar ({time})",
   "chart_next_try": "próximo intento {time}",
+  "chart_check_no_answer": "sin respuesta en {seconds} s",
   "chart_reading": "leyendo {name}…",
   "chart_no_values_yet": "aún no hay valores en {columns}",
   "chart_source_missing": "falta {name}",

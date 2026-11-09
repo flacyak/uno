@@ -14,9 +14,11 @@ import type { Coverage, GroupsTally, SampleTally, Skipped, Tally } from "@engine
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
-import { clock, list, num, percent } from "@renderer/locale";
+import { MS_PER_SECOND, clock, list, num, percent } from "@renderer/locale";
+import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { said, say } from "@renderer/said";
+import { CHECK_TIMEOUT_MS } from "@renderer/timing";
 
 /** What parts the caption's words. */
 export const SEP = " · ";
@@ -191,5 +193,11 @@ export function trouble(checks: Checks | undefined): string {
   if (found.t === "held") return m.chart_held({ edits: m.edits_count({ count: found.edits }) });
   if (found.t !== "failed") return "";
   const nextTry = next === undefined ? [] : [m.chart_next_try({ time: clock(next) })];
-  return [m.chart_check_failed({ time: clock(at) }), ...nextTry, said(found.error)].join(SEP);
+  return [m.chart_check_failed({ time: clock(at) }), ...nextTry, failure(found.error)].join(SEP);
+}
+
+/** failure gives what failed a check: the engine's words, or that its source gave no answer in time. */
+function failure(error: unknown): string {
+  if (!(error instanceof NoAnswer)) return said(error);
+  return m.chart_check_no_answer({ seconds: num(CHECK_TIMEOUT_MS / MS_PER_SECOND) });
 }

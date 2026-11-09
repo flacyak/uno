@@ -22,6 +22,7 @@ import {
   trouble,
 } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
+import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { MINUTE_MS } from "@renderer/timing";
 import { BARS, SCATTER } from "../charted.ts";
@@ -271,4 +272,12 @@ test("the caption says, as trouble, why a check failed and when the next try is,
   expect(trouble(checksOf(found))).toBe("! couldn't refresh at 2:32 PM · refused");
   void setLocale("es", { reload: false });
   expect(trouble(failed)).toBe("! no se pudo actualizar (14:32) · próximo intento 14:47 · refused");
+});
+
+test("the caption says, as trouble, that a check had no answer in time, in the language chosen", () => {
+  vi.useFakeTimers({ now: AT });
+  const unanswered = checksOf({ t: "failed", error: new NoAnswer() });
+  expect(trouble(unanswered)).toBe("! couldn't refresh at 2:32 PM · no answer in 30 s");
+  void setLocale("es", { reload: false });
+  expect(trouble(unanswered)).toBe("! no se pudo actualizar (14:32) · sin respuesta en 30 s");
 });
