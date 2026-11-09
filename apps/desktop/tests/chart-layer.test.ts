@@ -32,7 +32,8 @@ import {
 import type { Rect, Room } from "@renderer/chart/place";
 import { madeTitle } from "@renderer/chart/window";
 import type { Heard, SourceState } from "@renderer/charts";
-import { num } from "@renderer/locale";
+import { clock, num } from "@renderer/locale";
+import type { Checks } from "@renderer/refresh";
 import { BARS, MOVED, PIE, SCATTER, SHARES, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
@@ -154,6 +155,15 @@ const say = vi.fn();
 
 /** What the layer reads of a source's checks: none yet. */
 const checks = (): undefined => undefined;
+
+/** Ten minutes to midnight on 29 October 2026 where the test runs, and the
+ * time from it to midnight. Date counts months from 0. */
+const OCTOBER = 9;
+const LATE = new Date(2026, OCTOBER, 29, 23, 50).getTime();
+const TO_MIDNIGHT_MS = new Date(2026, OCTOBER, 30).getTime() - LATE;
+
+/** How long the machine sleeps from LATE: until five minutes to midnight. */
+const SLEPT_MS = new Date(2026, OCTOBER, 29, 23, 55).getTime() - LATE;
 
 /** Everything the layer asks of the shell. */
 const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say, checks };
@@ -1164,4 +1174,40 @@ test("a wheel on a window's head goes to the sheet, with a scrollable in its plo
   scrollable();
   turn(head(), DOWN);
   expect(wheelBy).toHaveBeenCalledOnce();
+});
+
+test("a window's caption writes the time of its source's check again as the day turns, with its date", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout"], now: LATE });
+  const checks = (): Checks => ({ at: LATE, found: { t: "same" }, next: undefined });
+  const layer = new ChartLayer(root(), content(), { ...asks, checks });
+  roomIs(ROOM);
+  layer.show(modelOf(FLUSH));
+  await frame();
+  const said = (): string => document.querySelector(".chart-checks")?.textContent ?? "";
+  expect(said()).toBe(m.chart_checked({ time: clock(LATE) }));
+  const today = said();
+  vi.advanceTimersByTime(TO_MIDNIGHT_MS);
+  await frame();
+  // From midnight on, clock() writes LATE with its date.
+  expect(said()).toBe(m.chart_checked({ time: clock(LATE) }));
+  expect(said()).not.toBe(today);
+  vi.useRealTimers();
+});
+
+test("a window's caption writes its check's time with its date at midnight after the machine slept", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout"], now: LATE });
+  const checks = (): Checks => ({ at: LATE, found: { t: "same" }, next: undefined });
+  const layer = new ChartLayer(root(), content(), { ...asks, checks });
+  roomIs(ROOM);
+  layer.show(modelOf(FLUSH));
+  await frame();
+  const said = (): string => document.querySelector(".chart-checks")?.textContent ?? "";
+  const today = said();
+  // A timer stands still while the machine sleeps, and the clock runs on.
+  vi.setSystemTime(LATE + SLEPT_MS);
+  layer.woke();
+  vi.advanceTimersByTime(TO_MIDNIGHT_MS - SLEPT_MS);
+  await frame();
+  expect(said()).not.toBe(today);
+  vi.useRealTimers();
 });

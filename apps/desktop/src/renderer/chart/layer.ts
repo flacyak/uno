@@ -8,6 +8,9 @@
  * Stage, which stores its place for the next save and raises it, and hands the
  * grid what the window does not take.
  *
+ * Each window draws again as the day turns, so a time its caption wrote as
+ * today's carries its date from then on.
+ *
  * It is loaded with the first workspace that has charts.
  */
 
@@ -68,6 +71,9 @@ export class ChartLayer implements Stage {
   /** The order F6 goes in: the windows front to back, as they stood before it raised any. */
   private round: string[] = [];
 
+  /** The timer that draws every window again at the next midnight. */
+  private midnight: ReturnType<typeof setTimeout> | undefined;
+
   constructor(
     private readonly root: HTMLElement,
     /** Every change to the layer's box is a change to this one's. */
@@ -81,6 +87,25 @@ export class ChartLayer implements Stage {
     root.addEventListener("focusin", () => {
       if (root.classList.contains("overfull")) this.draw();
     });
+    this.tomorrow();
+  }
+
+  /** tomorrow draws every window again at the next midnight, and each one after. */
+  private tomorrow(): void {
+    clearTimeout(this.midnight);
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    this.midnight = setTimeout(() => {
+      this.draw();
+      this.tomorrow();
+    }, next.getTime() - now.getTime());
+  }
+
+  /** woke draws every window again as the machine wakes, and times the next
+   * midnight's draw again, as a timer stands still while the machine sleeps. */
+  woke(): void {
+    this.draw();
+    this.tomorrow();
   }
 
   /** show takes over from the last workspace's windows with `charts`, if it

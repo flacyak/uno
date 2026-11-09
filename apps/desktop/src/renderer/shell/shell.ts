@@ -728,10 +728,13 @@ export class Shell {
 
   /**
    * wake checks each chart's source whose schedule came due while the machine
-   * slept, the page was hidden or the network was down.
+   * slept, the page was hidden or the network was down, and draws the chart
+   * windows again, so a time their captions wrote as today's carries its date
+   * once the day has turned.
    */
   wake(): void {
     this.refresher?.wake();
+    this.layer?.woke();
   }
 
   /**
