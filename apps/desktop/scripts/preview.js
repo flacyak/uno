@@ -39,6 +39,9 @@
  * - `change`: opens the chart form from a chart window's edit button, steps By
  *   from region to rep and applies it, then presses the × once to arm it and
  *   again to remove the chart. Goes to out/change.gif.
+ * - `schedule`: opens the chart form from a chart window's edit button, steps
+ *   its checks through Every 15 min to Every…, applies 10 min, and opens the
+ *   form on it again. Goes to out/schedule.gif.
  * - `reread`: the export under a window of region's bars gains North's rows
  *   again on disk, read by the head's refresh button, then South's, read by r.
  *   Goes to out/reread.gif.
@@ -50,7 +53,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|reread|focus|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|schedule|reread|focus|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -94,7 +97,18 @@ const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 /** The stories that open the chart form by its keys or the View menu. */
 const KEYED = ["chord", "command", "menu"];
 /** The other stories that film charts. */
-const CHARTED = ["moves", "wheel", "table", "tip", "insert", "kinds", "change", "reread", "focus"];
+const CHARTED = [
+  "moves",
+  "wheel",
+  "table",
+  "tip",
+  "insert",
+  "kinds",
+  "change",
+  "schedule",
+  "reread",
+  "focus",
+];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
@@ -380,6 +394,7 @@ const staged = {
   insert: () => stageCharts("insert", []),
   kinds: () => stageCharts("kinds", []),
   change: () => stageCharts("change", [REGION_BARS]),
+  schedule: () => stageCharts("schedule", [REGION_BARS]),
   reread: () => stageCharts("reread", [REGION_BARS]),
   focus: () => stageCharts("focus", [REGION_BARS, AGAINST]),
   chord: () => stageCharts("chord", []),
