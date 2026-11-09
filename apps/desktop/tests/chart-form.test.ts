@@ -434,6 +434,18 @@ test("a chart's form opens on its schedule, and Apply sends the one chosen", asy
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
+test("a chart's form opened on its schedule gives the keys to the checks field, or to its first over a source with nothing to read again", () => {
+  const opening: Opening = {
+    t: "change",
+    chart: { plot: REGION_BARS, title: "", refresh: QUARTER_HOUR },
+    on: "refresh",
+  };
+  form(undefined, opening);
+  expect(document.activeElement).toBe(select("refresh"));
+  form(undefined, opening, LOST);
+  expect(document.activeElement).toBe(select("by"));
+});
+
 test("a chart's form opens on a schedule it does not offer as Every…, in hours where whole", () => {
   changing(REGION_BARS, "", SALES, NINETY_MINUTES);
   const minutes = [EVERY, String(ONE_MINUTE), String(NINETY_MINUTES)];

@@ -220,7 +220,7 @@ test("a chart whose column has gone offers Edit chart, which asks for the chart 
   const button = made.box.querySelector<HTMLButtonElement>(".chart-state button")!;
   expect(button.textContent).toBe(m.chart_edit());
   button.click();
-  expect(edit).toHaveBeenCalledWith(BARS.id, expect.anything());
+  expect(edit).toHaveBeenCalledWith(BARS.id, expect.anything(), undefined);
 });
 
 /** The sales export's file, as a window hears its source named. */

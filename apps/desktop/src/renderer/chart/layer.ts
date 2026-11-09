@@ -192,9 +192,9 @@ export class ChartLayer implements Stage {
     this.asks.notNumbers(source, columns);
   }
 
-  /** edit opens the chart form on chart `id`, hung at `place`. */
-  edit(id: string, place: MenuPlace): void {
-    this.asks.edit(id, place);
+  /** edit opens the chart form on chart `id`, hung at `place`, with the keys on its field `on`. */
+  edit(id: string, place: MenuPlace, on?: "refresh"): void {
+    this.asks.edit(id, place, on);
   }
 
   /** refresh reads `source` again by hand. */

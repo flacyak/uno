@@ -147,8 +147,8 @@ export interface Stage {
    * not read as a number.
    */
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
-  /** Opens the chart form on chart `id`, hung at `place`. */
-  edit(id: string, place: MenuPlace): void;
+  /** Opens the chart form on chart `id`, hung at `place`, with the keys on its field `on`. */
+  edit(id: string, place: MenuPlace, on?: "refresh"): void;
   /** Reads `source` again by hand: Reload for one file, an append of new files for several. */
   refresh(source: string): void;
   /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
@@ -731,12 +731,13 @@ export class ChartWindow {
     return !inTable && this.nudge(press);
   }
 
-  /** change asks for the chart form on the chart, its border on the window's and the head's rule. */
-  private change(): void {
+  /** change asks for the chart form on the chart, its border on the window's and
+   * the head's rule, with the keys on its field `on`, or else its first. */
+  private change(on?: "refresh"): void {
     const { left } = this.box.getBoundingClientRect();
     const { bottom } = this.head.getBoundingClientRect();
     const rule = parseFloat(getComputedStyle(this.head).borderBottomWidth);
-    this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) });
+    this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) }, on);
   }
 
   /** refresh asks to read the chart's source again, or says why it has nothing to read. */
