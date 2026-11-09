@@ -65,6 +65,13 @@ const inserting = (plot: Plot, title = "", source = SALES.id, refresh = BY_HAND)
 /** The schedules under an hour the form offers, in minutes between checks. */
 const EVERY_FEW_MINUTES = [5, 15, 30];
 const QUARTER_HOUR = 15;
+/** The Refresh option that shows a number and a unit, and the minutes in an
+ * hour, one of those units. Two hours are on no other option. */
+const EVERY = "every";
+const HOUR_MINUTES = 60;
+const TWO = 2;
+/** The open form's number of minutes or hours. */
+const count = (): HTMLInputElement => document.querySelector<HTMLInputElement>(".count")!;
 
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
@@ -253,12 +260,27 @@ test("Refresh opens by hand, offers every 5, 15 or 30 min, hour or day, and Ente
     ...EVERY_FEW_MINUTES.map((count) => m.chart_refresh_every_minutes({ count: num(count) })),
     m.chart_refresh_every_hour(),
     m.chart_refresh_every_day(),
+    m.chart_refresh_every_other(),
   ]);
   expect(select("refresh").value).toBe(String(BY_HAND));
   pick("refresh", String(QUARTER_HOUR));
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(REGION_BARS, "", SALES.id, QUARTER_HOUR), "closed"]);
+});
+
+test("Every… shows a number and a unit, and Enter sends the minutes they make", async () => {
+  const { asked } = form();
+  expect([count().hidden, select("unit").hidden]).toStrictEqual([true, true]);
+  pick("refresh", EVERY);
+  expect([count().hidden, select("unit").hidden]).toStrictEqual([false, false]);
+  const units = [m.chart_refresh_unit_minutes(), m.chart_refresh_unit_hours()];
+  expect([...select("unit").options].map((o) => o.textContent)).toStrictEqual(units);
+  count().value = String(TWO);
+  pick("unit", String(HOUR_MINUTES));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "", SALES.id, TWO * HOUR_MINUTES), "closed"]);
 });
 
 test("Esc closes it and inserts nothing", () => {

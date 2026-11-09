@@ -76,6 +76,21 @@ const SCHEDULES: ReadonlyArray<readonly [number, () => string]> = [
   [DAY_MINUTES, m.chart_refresh_every_day],
 ];
 
+/** The Refresh option that shows a number and a unit of one's own. */
+const EVERY = "every";
+
+/** The most Every… counts, which its number's digits hold. */
+const EVERY_AT_MOST = 999;
+
+/** A minute, in minutes. */
+const ONE_MINUTE = 1;
+
+/** The units Every… counts in, in minutes, and their words. */
+const UNITS: ReadonlyArray<readonly [number, () => string]> = [
+  [ONE_MINUTE, m.chart_refresh_unit_minutes],
+  [HOUR_MINUTES, m.chart_refresh_unit_hours],
+];
+
 /** How many number columns a scatter needs: one across it and one up it. */
 const SCATTER_COLUMNS = 2;
 
@@ -99,6 +114,9 @@ export class ChartForm {
   private readonly title = el("input");
   /** The minutes between checks of the source, or By hand. */
   private readonly refresh = select("refresh");
+  /** Every…'s number, of minutes or hours as its unit says. */
+  private readonly count = el("input", "count");
+  private readonly unit = select("unit");
   /** The source chosen, whose columns the selects offer. */
   private source: ChartSource;
 
@@ -148,6 +166,15 @@ export class ChartForm {
     this.title.autocomplete = "off";
     if (opening.t === "change") this.title.value = opening.chart.title;
     this.refresh.append(...SCHEDULES.map(([minutes, words]) => option(words(), String(minutes))));
+    this.refresh.append(option(m.chart_refresh_every_other(), EVERY));
+    this.refresh.addEventListener("change", () => this.reveal());
+    this.count.inputMode = "numeric";
+    this.count.maxLength = String(EVERY_AT_MOST).length;
+    this.count.autocomplete = "off";
+    this.unit.append(...UNITS.map(([minutes, words]) => option(words(), String(minutes))));
+    this.reveal();
+    const schedule = el("span", "schedule");
+    schedule.append(this.refresh, this.count, this.unit);
 
     const fields = [
       field(m.chart_form_source(), this.from),
@@ -155,7 +182,7 @@ export class ChartForm {
       ...this.grouped,
       ...this.paired,
       field(m.chart_form_title_field(), this.title),
-      ...(changes ? [] : [field(m.chart_form_refresh(), this.refresh)]),
+      ...(changes ? [] : [field(m.chart_form_refresh(), schedule)]),
     ];
     this.form.open(fields, place);
     this.form.say(changes ? m.chart_form_hint_change() : m.chart_form_hint(), false);
@@ -268,13 +295,25 @@ export class ChartForm {
     this.title.placeholder = madeTitle(this.plot());
   }
 
+  /** reveal shows Every…'s number and unit while it is chosen. */
+  private reveal(): void {
+    const preset = this.refresh.value !== EVERY;
+    this.count.hidden = preset;
+    this.unit.hidden = preset;
+  }
+
+  /** minutes gives the minutes between checks that Refresh holds. */
+  private minutes(): number {
+    if (this.refresh.value !== EVERY) return Number(this.refresh.value);
+    return Number(this.count.value) * Number(this.unit.value);
+  }
+
   /** send sends the chart, unless one is in flight, and closes once the engine keeps it. */
   private async send(): Promise<void> {
     if (this.form.submit.disabled) return;
     this.form.submit.disabled = true;
     try {
-      const refresh = Number(this.refresh.value);
-      await this.asks.send(this.source, this.plot(), this.title.value.trim(), refresh);
+      await this.asks.send(this.source, this.plot(), this.title.value.trim(), this.minutes());
       this.close();
     } catch (err) {
       this.form.say(message(err), true);
