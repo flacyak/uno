@@ -4,7 +4,8 @@
  * tally is partial, and the rows once it is complete, then the cells the tally
  * left out. The track under the head shows the same share while the chart
  * reads, and the plot says why it draws nothing while it has nothing to draw.
- * At its right end it says how often its source is checked, and when it was.
+ * At its right end it says how often its source is checked, and when it was,
+ * or what held its newer data back.
  */
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
@@ -172,4 +173,15 @@ export function checked(checks: Checks | undefined): string {
   const found = checks?.found.t;
   if (checks === undefined || (found !== "same" && found !== "read")) return "";
   return m.chart_checked({ time: clock(checks.at) });
+}
+
+/**
+ * trouble gives what the caption says, in --flag, of a check that could not
+ * draw its source's newer data: unsaved cell edits hold it back for a refresh
+ * by hand. It is nothing after any other check.
+ */
+export function trouble(checks: Checks | undefined): string {
+  const found = checks?.found;
+  if (found?.t !== "held") return "";
+  return m.chart_held({ edits: m.edits_count({ count: found.edits }) });
 }

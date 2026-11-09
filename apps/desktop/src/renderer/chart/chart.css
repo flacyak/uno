@@ -824,6 +824,12 @@
   white-space: pre;
 }
 
+/* A check that could not draw the newer data is a minor error, at the
+ * caption's own size. */
+.chart-checks-trouble {
+  color: var(--flag);
+}
+
 /* The count of the cells that were not numbers is the button that finds them.
  * It wears the caption's words where they would stand, its margins taking back
  * its padding and its border, and shows as a button under the pointer, as the

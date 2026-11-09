@@ -538,6 +538,7 @@
   "chart_every_hour": "a cada hora",
   "chart_every_day": "todo dia",
   "chart_checked": "revisado {time}",
+  "chart_held": "! há dados novos - esta aba tem {edits}",
   "chart_reading": "lendo {name}…",
   "chart_no_values_yet": "ainda não há valores em {columns}",
   "chart_source_missing": "{name} está ausente",
