@@ -3,16 +3,44 @@
  * workspace opens it on the selected column, and it wears the formula form's
  * look in light and in dark, its controls in line with the formula form's.
  * Escape closes it with nothing inserted, so the chart layer still waits for
- * the first workspace with charts. Ctrl+Shift+G and the View menu open it
- * under the selected column's header, which comes back first if it was
- * scrolled out of a zoomed window.
+ * the first workspace with charts. Each note a schedule shows fits its two
+ * lines in every language. Ctrl+Shift+G and the View menu open it under the
+ * selected column's header, which comes back first if it was scrolled out of
+ * a zoomed window.
  */
 
+import { m } from "@paraglide/messages";
+import { offered } from "@renderer/language";
 import { DEFAULT_THEME } from "@renderer/theme";
 import { pressing } from "./chart-moves.ts";
 import { DOUBLE_ZOOM, NARROW_WIDTH } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { RIGHT_CLICK } from "./sidebar.ts";
+
+/** The fixture's name, for the notes that name the source. */
+const NAMED = { name: "sales-q3.csv" };
+
+/** In each language a person can choose, the chart form's labels in the order
+ * of its fields, which set the note's width, and each note a schedule shows. */
+const SAID = offered(false).map((locale) => ({
+  labels: [
+    m.chart_form_source,
+    m.chart_form_kind,
+    m.chart_form_by,
+    m.chart_form_sum,
+    m.chart_form_x,
+    m.chart_form_y,
+    m.chart_form_title_field,
+    m.chart_form_refresh,
+  ].map((label) => label({}, { locale })),
+  notes: [
+    m.chart_refresh_does_file,
+    m.chart_refresh_does_object,
+    m.chart_refresh_does_folder,
+    m.chart_refresh_note_carried,
+    m.chart_refresh_note_lost,
+  ].map((note) => note(NAMED, { locale })),
+}));
 
 /** Helpers: a form opened from the workspace's menu, and what it looks like. */
 const FORMS = `
@@ -115,6 +143,25 @@ export const CHART_FORM: Check[] = [
       await frame();
       if (document.querySelector(".chart") !== null) return "a chart was inserted";
       return document.querySelector("#charts").hidden ? "" : "the layer shows";
+    `,
+  },
+  {
+    name: "every note the chart form says of a schedule fits its two lines, in every language",
+    script: `
+      ${FORMS}
+      const form = await open("Insert chart…", ".chart-form");
+      if (form === null) return "no chart form opened";
+      const [labels, note] = [[...form.querySelectorAll(".field .what")], form.querySelector(".note")];
+      const cut = [];
+      for (const said of ${JSON.stringify(SAID)}) {
+        said.labels.forEach((label, i) => (labels[i].textContent = label));
+        for (const text of said.notes) {
+          note.textContent = text;
+          if (note.scrollHeight > note.clientHeight) cut.push(text);
+        }
+      }
+      escape(form);
+      return cut.length === 0 ? "" : "cut: " + cut.join(" · ");
     `,
   },
   {
