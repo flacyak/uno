@@ -66,12 +66,13 @@ const inserting = (plot: Plot, title = "", source = SALES.id, refresh = BY_HAND)
 const EVERY_FEW_MINUTES = [5, 15, 30];
 const QUARTER_HOUR = 15;
 /** The Refresh option that shows a number and a unit, and the minutes in an
- * hour, one of those units. Two hours are on no other option, and a minute is
- * the least Every… takes. */
+ * hour, one of those units. Two hours and ninety minutes are on no other
+ * option, and a minute is the least Every… takes. */
 const EVERY = "every";
 const HOUR_MINUTES = 60;
 const TWO = 2;
 const ONE_MINUTE = 1;
+const NINETY_MINUTES = 90;
 /** The open form's number of minutes or hours. */
 const count = (): HTMLInputElement => document.querySelector<HTMLInputElement>(".count")!;
 
@@ -368,12 +369,37 @@ test("a refusal stays in the form, on the column chosen", async () => {
   expect(document.activeElement).toBe(select("by"));
 });
 
-/** Opens the form to change a chart of `plot` titled `title` over `active`. */
-const changing = (plot: Plot, title = "", active: ChartSource = SALES): ReturnType<typeof form> =>
-  form(undefined, { t: "change", chart: { plot, title } }, active);
+/** Opens the form to change a chart of `plot` titled `title` over `active`,
+ * checked every `refresh` minutes. */
+const changing = (
+  plot: Plot,
+  title = "",
+  active: ChartSource = SALES,
+  refresh = BY_HAND,
+): ReturnType<typeof form> =>
+  form(undefined, { t: "change", chart: { plot, title, refresh } }, active);
 
 /** The values of the open form's selects named `names`. */
 const chosen = (...names: string[]): string[] => names.map((name) => select(name).value);
+
+test("a chart's form opens on its schedule, and Apply sends the one chosen", async () => {
+  const { asked } = changing(REGION_BARS, "", SALES, QUARTER_HOUR);
+  expect([chosen("refresh"), count().hidden]).toStrictEqual([[String(QUARTER_HOUR)], true]);
+  pick("refresh", String(BY_HAND));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([regionBars, "closed"]);
+});
+
+test("a chart's form opens on a schedule it does not offer as Every…, in hours where whole", () => {
+  changing(REGION_BARS, "", SALES, NINETY_MINUTES);
+  const minutes = [EVERY, String(ONE_MINUTE), String(NINETY_MINUTES)];
+  expect([...chosen("refresh", "unit"), count().value]).toStrictEqual(minutes);
+  expect(count().hidden).toBe(false);
+  changing(REGION_BARS, "", SALES, TWO * HOUR_MINUTES);
+  const hours = [EVERY, String(HOUR_MINUTES), String(TWO)];
+  expect([...chosen("refresh", "unit"), count().value]).toStrictEqual(hours);
+});
 
 test("a chart's form opens on what it shows, over its source", () => {
   const units = { col: UNITS, header: "units" };
@@ -382,7 +408,6 @@ test("a chart's form opens on what it shows, over its source", () => {
   expect(chosen("kind", "by", "sum")).toStrictEqual(["bars", String(REGION), String(REVENUE)]);
   expect(document.querySelector<HTMLInputElement>(".chart-form input")!.value).toBe("Takings");
   expect(document.activeElement).toBe(select("by"));
-  expect(document.querySelector('select[name="refresh"]')).toBeNull();
 
   // The ads export has region second.
   changing({ t: "pie", by: { col: REGION, header: "region" } }, "", ADS);
