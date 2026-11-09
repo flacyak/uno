@@ -27,6 +27,7 @@ import type {
 import { NO_ROW, Op, editEquals } from "@sheet";
 import type { Edit } from "@sheet";
 import type { Listing, SingleRef } from "@store";
+import { s3Location } from "@store/s3";
 
 import { Charts } from "./charts.ts";
 import type { SourceState } from "./charts.ts";
@@ -103,6 +104,19 @@ function samePath(was: Tab, now: Tab): boolean {
 /** Returns whether `a` and `b` are the same cell. */
 function sameCell(a: Cell, b: Cell): boolean {
   return a.row === b.row && a.col === b.col;
+}
+
+/** What a source's refresh reads again: its file on disk, or in a bucket, the
+ * new files of its folder, or nothing, for a source carried inside the
+ * workspace or one of several files the open did not find. */
+export type Rereads = "file" | "object" | "folder" | "carried" | "lost";
+
+/** rereads says what `source`'s refresh reads again. */
+export function rereads(source: { link?: Pick<Link, "path">; parts?: unknown }): Rereads {
+  if (source.parts !== undefined) return "folder";
+  if (source.link === undefined) return "carried";
+  if (source.link.path === "") return "lost";
+  return s3Location(source.link.path) === undefined ? "file" : "object";
 }
 
 /** One source in the workspace. */

@@ -17,7 +17,7 @@ import "./form.css";
 import { BY_HAND, REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST } from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
 import { placeOf } from "@engine";
-import type { ColumnInfo } from "@engine";
+import type { ColumnInfo, Link, PartInfo } from "@engine";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
@@ -25,15 +25,19 @@ import { num } from "@renderer/locale";
 import { PopForm, field } from "@renderer/shell/form";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, message, option } from "@renderer/shell/util";
+import { rereads } from "@renderer/workspace";
+import type { Rereads } from "@renderer/workspace";
 import { madeTitle } from "./window.ts";
 
 /** A source the form charts, as a tab has it: its id, its name, its columns,
- * and whether its file is missing. */
+ * whether its file is missing, and the file or files a refresh reads again. */
 export interface ChartSource {
   id: string;
   name: string;
   band: { columns: ReadonlyArray<Pick<ColumnInfo, "header" | "kind" | "flagged">> };
   missing: boolean;
+  link?: Pick<Link, "path">;
+  parts?: readonly PartInfo[];
 }
 
 /** What the form asks of the shell. */
@@ -93,6 +97,15 @@ const UNITS: ReadonlyArray<readonly [number, () => string]> = [
   [ONE_MINUTE, m.chart_refresh_unit_minutes],
   [HOUR_MINUTES, m.chart_refresh_unit_hours],
 ];
+
+/** What a scheduled check reads of each kind of source, or why it reads nothing. */
+const CHECKS: Record<Rereads, (named: { name: string }) => string> = {
+  file: m.chart_refresh_does_file,
+  object: m.chart_refresh_does_object,
+  folder: m.chart_refresh_does_folder,
+  carried: m.chart_refresh_carried,
+  lost: m.chart_refresh_lost,
+};
 
 /** How many number columns a scatter needs: one across it and one up it. */
 const SCATTER_COLUMNS = 2;
@@ -188,7 +201,6 @@ export class ChartForm {
       field(m.chart_form_refresh(), schedule),
     ];
     this.form.open(fields, place);
-    this.form.say(changes ? m.chart_form_hint_change() : m.chart_form_hint(), false);
     this.first().focus();
   }
 
@@ -207,6 +219,7 @@ export class ChartForm {
       this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
     }
     this.offer(this.at(by), kept);
+    this.tell();
   }
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
@@ -316,6 +329,15 @@ export class ChartForm {
     const preset = this.refresh.value !== EVERY;
     this.count.hidden = preset;
     this.unit.hidden = preset;
+    this.tell();
+  }
+
+  /** tell says in the note what a check reads of the source chosen while
+   * Refresh holds a schedule, or else what Enter and Esc do. */
+  private tell(): void {
+    const said = CHECKS[rereads(this.source)]({ name: this.source.name });
+    const hint = this.opening.t === "change" ? m.chart_form_hint_change() : m.chart_form_hint();
+    this.form.say(this.refresh.value !== String(BY_HAND) ? said : hint, false);
   }
 
   /** minutes gives the minutes between checks that Refresh holds, or undefined
