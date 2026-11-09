@@ -52,6 +52,7 @@ export {
   samePath,
 } from './path.ts';
 export {
+  BY_HAND,
   CHARTS_AT_MOST,
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,

@@ -7,19 +7,21 @@
  * primary button is Apply.
  *
  * An empty title shows the one the chart makes, which follows the language.
+ * Refresh sets how often the chart's source is checked for newer data.
  * The engine keeps the chart, and a refusal is shown in the form, which stays
  * open on what was chosen.
  */
 
 import "./form.css";
 
-import { TITLE_AT_MOST } from "@document";
+import { BY_HAND, TITLE_AT_MOST } from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
 import { placeOf } from "@engine";
 import type { ColumnInfo } from "@engine";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
+import { num } from "@renderer/locale";
 import { PopForm, field } from "@renderer/shell/form";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, message, option } from "@renderer/shell/util";
@@ -38,8 +40,8 @@ export interface ChartSource {
 export interface ChartAsks {
   /** Inserts a chart of `plot` over `source`, titled `title` or "" for the one
    * it makes, or changes the chart the form opened on to it. Throws with a
-   * message when refused. */
-  send(source: ChartSource, plot: Plot, title: string): Promise<void>;
+   * message when refused. Its source is checked every `refresh` minutes. */
+  send(source: ChartSource, plot: Plot, title: string, refresh: number): Promise<void>;
   /** Called when the form closes. */
   closed(): void;
 }
@@ -55,6 +57,23 @@ const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
   ["bars", m.chart_kind_bars],
   ["pie", m.chart_kind_pie],
   ["scatter", m.chart_kind_scatter],
+];
+
+/** The minutes in an hour and in a day. */
+const HOUR_MINUTES = 60;
+const DAY_MINUTES = 24 * HOUR_MINUTES;
+
+/** The schedules under an hour the form offers, in minutes between checks. */
+const EVERY_FEW_MINUTES = [5, 15, 30];
+
+/** The schedules the form offers, in minutes between checks, and their words. */
+const SCHEDULES: ReadonlyArray<readonly [number, () => string]> = [
+  [BY_HAND, m.chart_refresh_by_hand],
+  ...EVERY_FEW_MINUTES.map(
+    (n) => [n, () => m.chart_refresh_every_minutes({ count: num(n) })] as const,
+  ),
+  [HOUR_MINUTES, m.chart_refresh_every_hour],
+  [DAY_MINUTES, m.chart_refresh_every_day],
 ];
 
 /** How many number columns a scatter needs: one across it and one up it. */
@@ -78,6 +97,8 @@ export class ChartForm {
   ];
   private readonly paired = [field(m.chart_form_x(), this.x), field(m.chart_form_y(), this.y)];
   private readonly title = el("input");
+  /** The minutes between checks of the source, or By hand. */
+  private readonly refresh = select("refresh");
   /** The source chosen, whose columns the selects offer. */
   private source: ChartSource;
 
@@ -126,6 +147,7 @@ export class ChartForm {
     this.title.maxLength = TITLE_AT_MOST;
     this.title.autocomplete = "off";
     if (opening.t === "change") this.title.value = opening.chart.title;
+    this.refresh.append(...SCHEDULES.map(([minutes, words]) => option(words(), String(minutes))));
 
     const fields = [
       field(m.chart_form_source(), this.from),
@@ -133,6 +155,7 @@ export class ChartForm {
       ...this.grouped,
       ...this.paired,
       field(m.chart_form_title_field(), this.title),
+      ...(changes ? [] : [field(m.chart_form_refresh(), this.refresh)]),
     ];
     this.form.open(fields, place);
     this.form.say(changes ? m.chart_form_hint_change() : m.chart_form_hint(), false);
@@ -250,7 +273,8 @@ export class ChartForm {
     if (this.form.submit.disabled) return;
     this.form.submit.disabled = true;
     try {
-      await this.asks.send(this.source, this.plot(), this.title.value.trim());
+      const refresh = Number(this.refresh.value);
+      await this.asks.send(this.source, this.plot(), this.title.value.trim(), refresh);
       this.close();
     } catch (err) {
       this.form.say(message(err), true);
