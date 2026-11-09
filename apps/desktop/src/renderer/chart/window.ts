@@ -41,6 +41,7 @@ import type { MenuPlace } from "@renderer/shell/menu";
 import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
 import {
+  SEP,
   blank,
   body,
   checked,
@@ -101,9 +102,6 @@ const SCROLLS = ".chart-scrolls";
  * fractional, and the sizes it adds up to are rounded, so an end can read short.
  */
 const SCROLL_END_SLACK = 1;
-
-/** What parts the caption's words. */
-const SEP = " · ";
 
 /** The key that puts the table in the plot's place, and the plot back. */
 const TABLE_KEY = "t";
@@ -465,9 +463,10 @@ export class ChartWindow {
    * and a first one draws as it comes. The caption says how much of its
    * source the chart has read and what the tally left out, then what the
    * plot's kind says, and at its right end the chart's schedule and when its
-   * source was last checked, or in --flag what held its newer data back. The
-   * track under the head shows how far the chart has read, while it reads,
-   * and a chart with nothing to draw says why in the plot's place.
+   * source was last checked, or in --flag what held its newer data back or
+   * failed its check. The track under the head shows how far the chart has
+   * read, while it reads, and a chart with nothing to draw says why in the
+   * plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);

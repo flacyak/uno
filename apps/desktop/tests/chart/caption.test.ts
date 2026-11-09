@@ -23,6 +23,7 @@ import {
 } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
 import type { Checks } from "@renderer/refresh";
+import { MINUTE_MS } from "@renderer/timing";
 import { BARS, SCATTER } from "../charted.ts";
 
 /** The sales export's rows, and how many of them a tally two fifths through has read. */
@@ -260,4 +261,14 @@ test("the caption says, as trouble, that edits hold newer data back, in the lang
   expect(trouble(checksOf({ t: "held", edits: EDITS }))).toBe(
     "! hay datos nuevos - 12 ediciones en esta pestaña",
   );
+});
+
+test("the caption says, as trouble, why a check failed and when the next try is, once one is due, in the language chosen", () => {
+  vi.useFakeTimers({ now: AT });
+  const found = { t: "failed", error: new Error("refused") } as const;
+  const failed = { ...checksOf(found), next: AT + QUARTER_HOUR * MINUTE_MS };
+  expect(trouble(failed)).toBe("! couldn't refresh at 2:32 PM · next try 2:47 PM · refused");
+  expect(trouble(checksOf(found))).toBe("! couldn't refresh at 2:32 PM · refused");
+  void setLocale("es", { reload: false });
+  expect(trouble(failed)).toBe("! no se pudo actualizar (14:32) · próximo intento 14:47 · refused");
 });

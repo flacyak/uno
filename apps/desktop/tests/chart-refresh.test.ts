@@ -9,7 +9,8 @@
  * opens nothing over the file as it was read, one that came due while the
  * page was hidden or offline runs once it is back, over the rewritten file
  * drawing its new row and saying nothing, its caption naming the schedule
- * and when the source was read, r or Reload starts the schedule over, one
+ * and when the source was read, a check that fails saying why and when the
+ * next try is until one succeeds, r or Reload starts the schedule over, one
  * over several files appends the new one alone, another workspace's open
  * stops the schedule, and one over a file still indexing checks it once its
  * index completes.
@@ -17,7 +18,15 @@
  * @vitest-environment happy-dom
  */
 
-import { appendFile, copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
@@ -26,9 +35,11 @@ import { Engine, Refusal, TUNING } from "@engine";
 import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import type { Provider } from "@plugin";
+import { trouble } from "@renderer/chart/caption";
 import { Charts } from "@renderer/charts";
 import { clock } from "@renderer/locale";
 import { Refresher } from "@renderer/refresh";
+import type { Checks } from "@renderer/refresh";
 import type { Shell } from "@renderer/shell/shell";
 import { MINUTE_MS } from "@renderer/timing";
 import { Workspace } from "@renderer/workspace";
@@ -49,6 +60,9 @@ const OCTOBER = 9;
 
 /** When a test reads a chart's source by hand: 29 October 2026 at 14:32 where it runs. */
 const CHECKED_AT = new Date(2026, OCTOBER, 29, 14, 32).getTime();
+
+/** The wait after one failed check, in intervals: the interval doubled. */
+const BACKED_OFF = 2;
 
 /** How many files core's testdata cuts the sales export into, beside it. */
 const PART_COUNT = 3;
@@ -277,6 +291,27 @@ test("a scheduled chart's caption names its schedule, and says when its source w
   const every = m.chart_every_minutes({ count: `${EVERY_MINUTE}` });
   const said = `${every} · ${m.chart_checked({ time: clock(CHECKED_AT) })}`;
   expect(await until(page, () => checks() === said)).toBe(true);
+});
+
+test("a scheduled check that fails says why and when the next try is, and the next that succeeds clears it", async () => {
+  const csv = join(dir, "scheduled", basename(FIXTURE));
+  const told = vi.spyOn(Refresher.prototype, "checks");
+  await rename(csv, `${csv}.away`);
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(await until(page, () => checks().startsWith("!"))).toBe(true);
+  const failed = told.mock.results.at(-1)!.value as Checks;
+  const nextTry = failed.at + BACKED_OFF * EVERY_MINUTE * MINUTE_MS;
+  expect([failed.found.t, failed.next]).toStrictEqual(["failed", nextTry]);
+  expect(checks()).toBe(trouble(failed));
+
+  await rename(`${csv}.away`, csv);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(nextTry);
+  document.dispatchEvent(new Event("visibilitychange"));
+  vi.useRealTimers();
+  const every = m.chart_every_minutes({ count: `${EVERY_MINUTE}` });
+  expect(await until(page, () => checks().startsWith(`${every} · `))).toBe(true);
+  told.mockRestore();
 });
 
 test("r on a scheduled chart, or Reload on its source's line, starts its schedule over", async () => {
