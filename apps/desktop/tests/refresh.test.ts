@@ -209,6 +209,18 @@ test("a failed check says what failed it, and its next try waits out the backoff
   expect(refresher.checks("a")).toStrictEqual({ at, found, next: at + BACKED_OFF * EVERY_MS });
 });
 
+test("a check's next try counts from the time its checks say, however the clock moves while it ends", async () => {
+  refresher = new Refresher(() => Promise.reject(new Error("refused")));
+  // Each read of the clock finds it a millisecond on, as a busy machine can.
+  let clock = Date.now();
+  const now = vi.spyOn(Date, "now").mockImplementation(() => clock++);
+  refresher.plan([{ source: "a", everyMs: EVERY_MS }]);
+  await vi.advanceTimersByTimeAsync(0);
+  const checks = refresher.checks("a")!;
+  now.mockRestore();
+  expect(checks.next).toBe(checks.at + BACKED_OFF * EVERY_MS);
+});
+
 test("a read by hand of a source no chart schedules says what came of it once it ends, with no next check", async () => {
   const told: string[] = [];
   refresher = new Refresher(

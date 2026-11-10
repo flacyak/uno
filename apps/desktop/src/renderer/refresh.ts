@@ -133,8 +133,10 @@ export class Refresher {
    * failure as a check's is. */
   readEnded(source: string, found: Refreshed | Failed): void {
     if (found.t === "failed") this.failures.set(source, (this.failures.get(source) ?? 0) + 1);
-    this.checked.set(source, Date.now());
-    this.found.set(source, { at: Date.now(), found });
+    // One instant, so the next check counts from the time the caption says.
+    const at = Date.now();
+    this.checked.set(source, at);
+    this.found.set(source, { at, found });
     this.tick();
     this.told(source);
   }
@@ -188,8 +190,10 @@ export class Refresher {
     }
     if (found.t === "waiting") this.waiting.add(source);
     this.running.delete(source);
-    this.checked.set(source, Date.now());
-    this.found.set(source, { at: Date.now(), found });
+    // One instant, so the next check counts from the time the caption says.
+    const at = Date.now();
+    this.checked.set(source, at);
+    this.found.set(source, { at, found });
     this.tick();
     this.told(source);
   }
