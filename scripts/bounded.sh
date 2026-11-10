@@ -16,6 +16,7 @@
 #   core, inside a systemd scope under one slice whose CPU, memory and task
 #   limits all runs share;
 # - gets a temporary directory of its own on disk, as TMPDIR;
+# - starts Electron with no screen, so no run opens a window;
 # - is stopped at a deadline, even if nothing is left to stop it; and
 # - once it ends, however it ends, has every process it started stopped,
 #   those that moved themselves to a scope of their own included, and its
@@ -67,6 +68,13 @@ readonly TIMED_OUT_STATUS=124
 # Commands that start Electron: the smoke, the preview, and Electron itself.
 # The happy-dom tests under tests/smoke/ do not match.
 readonly DISPLAY_COMMANDS=' (smoke|preview) |smoke\.js|preview\.js|electron'
+# Electron's npm package starts the binary in the folder that
+# ELECTRON_OVERRIDE_DIST_PATH names. This one opens no window.
+HEADLESS_ELECTRON="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/headless-electron"
+readonly HEADLESS_ELECTRON
+# The smoke and the preview refuse to start with no DISPLAY. Headless never
+# connects to it, so a shell that has none gets this.
+readonly UNUSED_DISPLAY=:0
 # What reap --orphans may stop: the tools a build, test or app run starts.
 readonly ORPHAN_COMMANDS='^(node|electron|esbuild|vp|vite|vitest)'
 
@@ -291,7 +299,10 @@ run() {
     "$(($(date +%s) + timeout))" \
     </dev/null >/dev/null 2>&1 8>&- 9>&- &
 
-  local -a wrap=(env "${MARKER}=${id}" "TMPDIR=${dir}/tmp" nice -n "${NICENESS}")
+  local -a wrap=(env "${MARKER}=${id}" "TMPDIR=${dir}/tmp"
+    "ELECTRON_OVERRIDE_DIST_PATH=${HEADLESS_ELECTRON}"
+    "DISPLAY=${DISPLAY:-${UNUSED_DISPLAY}}"
+    nice -n "${NICENESS}")
   [[ -n "${cpus}" ]] && command -v taskset >/dev/null \
     && wrap+=(taskset -c "${cpus}")
   if have_systemd; then
