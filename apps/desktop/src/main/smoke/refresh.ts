@@ -134,7 +134,11 @@ export const CHART_REFRESH: Check[] = [
     send: ["menu:open-path", SAVED],
     script: `
       ${LINE}
-      if (!(await arrives(() => tab("ads-q3.csv") !== undefined))) return "no tab for the object";
+      if (!(await arrives(() => tab("ads-q3.csv") !== undefined))) {
+        // Any message in between takes the warning down, and the open warns again.
+        const tabs = [...document.querySelectorAll(".tab")].map((t) => t.textContent);
+        return "no tab for the object · the status bar says " + JSON.stringify(text("#status-msg")) + " over the tabs " + JSON.stringify(tabs);
+      }
       tab("ads-q3.csv").click();
       if (!(await arrives(() => document.querySelector("tbody tr:not(.pending)") !== null))) return "no rows came";
       const content = document.querySelector("#content");
