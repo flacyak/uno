@@ -25,7 +25,8 @@
  * box beside it, and the arrows step the box through the marks while the
  * plot has the keys. The caption's count of the cells that were not numbers
  * is a button that finds them in the sheet. Its right end names the chart's
- * schedule and says when its source was last checked, once a read ends.
+ * schedule, a button that opens the chart form on it, and says when its
+ * source was last checked, once a read ends.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -147,8 +148,8 @@ export interface Stage {
    * not read as a number.
    */
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
-  /** Opens the chart form on chart `id`, hung at `place`. */
-  edit(id: string, place: MenuPlace): void;
+  /** Opens the chart form on chart `id`, hung at `place`, with the keys on its field `on`. */
+  edit(id: string, place: MenuPlace, on?: "refresh"): void;
   /** Reads `source` again by hand: Reload for one file, an append of new files for several. */
   refresh(source: string): void;
   /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
@@ -302,8 +303,11 @@ export class ChartWindow {
   private readonly before = el("span", "chart-said-before");
   private readonly dot = el("span", "chart-said-dot");
   private readonly after = el("span", "chart-said-after");
-  /** What the caption says of the source's checks, at its right end. */
+  /** What the caption says of the source's checks, at its right end: the
+   * schedule, the button that opens the chart form on it, and the words after it. */
   private readonly checking = el("span", "chart-checks");
+  private readonly schedule = button("chart-every", "", () => this.change("refresh"));
+  private readonly afterSchedule = el("span", "chart-checks-when");
   /** The count of the cells that were not numbers, the button that finds them in the sheet. */
   private readonly find = button("chart-find", "", () =>
     this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
@@ -370,6 +374,7 @@ export class ChartWindow {
     // The button shows once a tally counts cells that were not numbers.
     this.find.hidden = true;
     this.said.append(this.before, this.dot, this.find, this.after);
+    this.checking.append(this.schedule, this.afterSchedule);
     caption.append(this.said, this.checking, grip);
 
     const right = el("div", "chart-edge chart-edge-right");
@@ -486,9 +491,16 @@ export class ChartWindow {
     // A read says when its check was once it ends.
     const checks = read === undefined ? this.stage.checks(this.chart.source) : undefined;
     const flagged = trouble(checks);
-    const when = [every(this.chart.refresh), checked(checks)].filter((w) => w !== "").join(SEP);
+    // A source with nothing to read again has no schedule to change.
+    const schedule = flagged === "" && why === undefined ? every(this.chart.refresh) : "";
+    const when = flagged === "" ? checked(checks) : flagged;
+    if (schedule === "" && document.activeElement === this.schedule) {
+      this.box.focus({ preventScroll: true });
+    }
     this.checking.classList.toggle("chart-checks-trouble", flagged !== "");
-    this.checking.textContent = flagged === "" ? when : flagged;
+    this.schedule.hidden = schedule === "";
+    this.schedule.textContent = schedule;
+    this.afterSchedule.textContent = schedule !== "" && when !== "" ? SEP + when : when;
     this.checking.title = this.checking.textContent;
     // A right end that says nothing leaves its room to the plot's words.
     this.checking.hidden = this.checking.textContent === "";
@@ -731,12 +743,13 @@ export class ChartWindow {
     return !inTable && this.nudge(press);
   }
 
-  /** change asks for the chart form on the chart, its border on the window's and the head's rule. */
-  private change(): void {
+  /** change asks for the chart form on the chart, its border on the window's and
+   * the head's rule, with the keys on its field `on`, or else its first. */
+  private change(on?: "refresh"): void {
     const { left } = this.box.getBoundingClientRect();
     const { bottom } = this.head.getBoundingClientRect();
     const rule = parseFloat(getComputedStyle(this.head).borderBottomWidth);
-    this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) });
+    this.stage.edit(this.chart.id, { left: Math.round(left), top: Math.round(bottom - rule) }, on);
   }
 
   /** refresh asks to read the chart's source again, or says why it has nothing to read. */

@@ -615,10 +615,11 @@ export class Shell {
 
   /**
    * editChart opens the chart form at `place` on chart `id` of the open
-   * workspace, over its source, and Apply sends the chart what the form holds.
+   * workspace, over its source, with the keys on its field `on`, or else its
+   * first, and Apply sends the chart what the form holds.
    * The chart's window takes the keys back as the form closes.
    */
-  private async editChart(id: string, place: MenuPlace): Promise<void> {
+  private async editChart(id: string, place: MenuPlace, on?: "refresh"): Promise<void> {
     const w = this.workspace;
     const chart = w?.charts.all.find((c) => c.id === id);
     const tab = w?.sources.find((t) => t.id === chart?.source);
@@ -629,7 +630,7 @@ export class Shell {
     }
     const { ChartForm } = await import("@renderer/chart/form");
     if (this.workspace !== w) return;
-    const opening: Opening = { t: "change", chart };
+    const opening: Opening = { t: "change", chart, on };
     this.closePopups();
     this.chartForm = new ChartForm(place, w.sources, tab, opening, {
       send: (source, plot, title, refresh) =>
@@ -974,7 +975,7 @@ export class Shell {
           repoint: (source) => this.withTab(source, (tab) => this.repoint(tab)),
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
-          edit: (id, place) => void this.editChart(id, place),
+          edit: (id, place, on) => void this.editChart(id, place, on),
           refresh: (source) => this.withTab(source, (tab) => void this.refresh(tab)),
           remove: (id, title) => void this.unchart(id, title),
           say: (text) => this.say(text),

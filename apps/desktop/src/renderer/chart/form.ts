@@ -60,7 +60,7 @@ export interface ChartAsks {
  * of it, or a chart over the active source, to change it. */
 export type Opening =
   | { t: "insert"; col: number }
-  | { t: "change"; chart: Pick<Chart, "plot" | "title" | "refresh"> };
+  | { t: "change"; chart: Pick<Chart, "plot" | "title" | "refresh">; on?: "refresh" };
 
 /** The kinds of chart, in the order the form offers them. */
 const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
@@ -211,7 +211,9 @@ export class ChartForm {
       field(m.chart_form_refresh(), schedule),
     ];
     this.form.open(fields, place);
-    this.first().focus();
+    // A source with nothing to read again has the checks field off, so the keys go first.
+    const onRefresh = opening.t === "change" && opening.on === "refresh" && !this.refresh.disabled;
+    (onRefresh ? this.refresh : this.first()).focus();
   }
 
   close(): void {

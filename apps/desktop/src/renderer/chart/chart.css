@@ -769,6 +769,7 @@
   border-top: 1px solid var(--rule);
   font-size: 11px;
   color: var(--ink-3);
+  --find-reach: 5px;
 }
 
 /* What the caption says of the plot takes the room it needs before the grip,
@@ -782,7 +783,6 @@
  * though the grip's reach still stands over its last `--grip-reach` there.
  * The spaces around a · are kept, as each stands at an end of its span. */
 .chart-said {
-  --find-reach: 5px;
   display: flex;
   flex: 0 1 auto;
   align-items: baseline;
@@ -807,21 +807,33 @@
 }
 
 .chart-said-dot,
-.chart-find {
+.chart-find,
+.chart-every {
   flex: none;
 }
 
 /* What the caption says of the source's checks stands at its right end, before
- * the grip, in the room the plot's words leave, down to none, so it ends in an
- * ellipsis before they do where the window is too narrow for both. */
+ * the grip, in the room the plot's words leave. Its words after the schedule's
+ * button take what the button leaves of it, down to none, so they end in an
+ * ellipsis before the plot's words do where the window is too narrow for
+ * both; the button stays whole. A width of 0 keeps those words out of the
+ * least room the checks take, which is the button's. The padding keeps the
+ * button's box inside the caption's, as the find button's is. */
 .chart-checks {
+  display: flex;
   flex: 1 1 0;
-  min-width: 0;
-  padding-left: 1ch;
-  overflow: hidden;
-  text-align: right;
-  text-overflow: ellipsis;
+  justify-content: flex-end;
+  align-items: baseline;
+  padding: 0 var(--find-reach) 0 1ch;
   white-space: pre;
+}
+
+.chart-checks-when {
+  flex-grow: 1;
+  width: 0;
+  max-width: max-content;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A check that could not draw the newer data is a minor error, at the
@@ -834,8 +846,10 @@
  * It wears the caption's words where they would stand, its margins taking back
  * its padding and its border, and shows as a button under the pointer, as the
  * status bar's toggles do. It stands over the foot edge's zone, as the grip
- * does. */
-.chart-find {
+ * does. The schedule is a button the same way, which opens the chart form on
+ * it. */
+.chart-find,
+.chart-every {
   position: relative;
   z-index: 1;
   margin: 0 calc(-1 * var(--find-reach));
@@ -848,13 +862,15 @@
   cursor: pointer;
 }
 
-.chart-find:hover {
+.chart-find:hover,
+.chart-every:hover {
   color: var(--ink);
   background: var(--surface);
   border-color: var(--rule);
 }
 
-.chart-find:focus-visible {
+.chart-find:focus-visible,
+.chart-every:focus-visible {
   outline: none;
   border-color: var(--accent);
 }
