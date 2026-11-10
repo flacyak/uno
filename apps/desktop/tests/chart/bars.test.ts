@@ -122,6 +122,31 @@ test("sums all above zero or all below leave no room past zero, but a sum of not
   expect(property(bars(SUMS, nothing, TALL), "--room-above")).toBe("calc(1ch + var(--tip-gap))");
 });
 
+test("sums past the largest double with none finite beside them draw across their sides", () => {
+  const box = bars(
+    SUMS,
+    tallyOf({ value: "a", rows: 2, sum: Infinity }, { value: "b", rows: 2, sum: -Infinity }),
+    TALL,
+  );
+  expect([Number(property(box, "--zero")), ...shares(box)]).toStrictEqual([0.5, 0.5, 0.5]);
+});
+
+test("a sum past the largest double draws as long as the longest finite bar on its side, or the other's", () => {
+  const most = { value: "a", rows: 2, sum: Infinity };
+  const above = { value: "b", rows: 1, sum: 5 };
+  const below = { value: "c", rows: 1, sum: -100 };
+  const own = bars(SUMS, tallyOf(most, above, below), TALL);
+  const span = above.sum - below.sum;
+  expect([Number(property(own, "--zero")), ...shares(own)]).toStrictEqual([
+    -below.sum / span,
+    above.sum / span,
+    above.sum / span,
+    -below.sum / span,
+  ]);
+  const other = bars(SUMS, tallyOf(most, below), TALL);
+  expect([Number(property(other, "--zero")), ...shares(other)]).toStrictEqual([0.5, 0.5, 0.5]);
+});
+
 test("values that would leave the bars under SPAN_LEAST of their track give way to the bars", () => {
   const signed = tallyOf({ value: "a", rows: 1, sum: 300 }, { value: "b", rows: 1, sum: -100 });
   // Draws `signed` in tracks `track` px wide, each value TIP_PX wide, and fits it.
