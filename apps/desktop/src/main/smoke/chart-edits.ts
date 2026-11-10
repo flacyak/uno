@@ -7,10 +7,12 @@
  * workspace unsaved. F2 opens the form again, Escape gives the window the keys
  * back, and Ctrl+Z there undoes nothing and says why. A click on the × arms it
  * and the second removes the chart, as two presses of Delete remove another.
+ * A chart inserted with the panel closed then stands in from the room's right
+ * edge, its × clear of the window's, and one inserted with it open flush.
  */
 
 import { pressing } from "./chart-moves.ts";
-import { CLICK_AND_ARROW, STATE_WINDOWS } from "./charts.ts";
+import { CLICK_AND_ARROW, GEOMETRY, STATE_WINDOWS } from "./charts.ts";
 import type { Check } from "./check.ts";
 
 /** The last window, its head and its ×. */
@@ -151,6 +153,37 @@ export const CHART_EDITS: Check[] = [
     script: `
       ${FORM}
       return (await until(() => removed(${STATE_WINDOWS - 2}))) ? "" : count() + " windows stand · " + text("#status-msg");
+    `,
+  },
+  {
+    // The panel closes, so the room reaches under the window's ×, and opens
+    // again for a second insert and the checks that follow.
+    name: "a chart inserted at the far edge keeps its × clear of the window's, and stands flush with the panel open",
+    script: `
+      ${GEOMETRY}
+      ${FORM}
+      const own = document.querySelector("#close").getBoundingClientRect();
+      const open = room().right;
+      const content = document.querySelector("#content");
+      const insert = async () => {
+        const before = new Set(document.querySelectorAll(".chart"));
+        const added = () => [...document.querySelectorAll(".chart")].find((at) => !before.has(at));
+        content.focus();
+        content.dispatchEvent(new KeyboardEvent("keydown", { key: "G", ctrlKey: true, shiftKey: true, bubbles: true }));
+        if (!(await until(() => form() !== null))) return undefined;
+        form().querySelector("select").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        return (await until(() => added() !== undefined)) ? added() : undefined;
+      };
+      document.querySelector("#panel-toggle").click();
+      const closed = (await until(() => room().right > open)) ? await insert() : undefined;
+      const x = closed?.querySelector(".chart-close").getBoundingClientRect();
+      const far = x !== undefined && x.left > (room().left + room().right) / 2;
+      await openPanel();
+      if (!far) return "no chart was inserted on the right with the panel closed, so this checks nothing";
+      if (x.right >= own.left) return "the new window's × ends at " + x.right + ", over the window's × from " + own.left;
+      const at = (await insert())?.getBoundingClientRect();
+      if (at === undefined) return "no chart was inserted with the panel open";
+      return at.right === room().right ? "" : "with the panel open the new window stands at " + edges(at) + " in a room at " + edges(room());
     `,
   },
 ];
