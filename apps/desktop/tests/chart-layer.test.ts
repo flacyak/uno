@@ -143,6 +143,9 @@ const notNumbers = vi.fn();
 /** What the layer calls to open the chart form on a window's chart. */
 const edit = vi.fn();
 
+/** What the layer calls to read a window's source again. */
+const refresh = vi.fn();
+
 /** What the layer calls to remove a window's chart. */
 const remove = vi.fn();
 
@@ -150,7 +153,7 @@ const remove = vi.fn();
 const say = vi.fn();
 
 /** Everything the layer asks of the shell. */
-const asks = { leave, wheelBy, repoint, notNumbers, edit, remove, say };
+const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say };
 
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {

@@ -937,6 +937,7 @@ export class Shell {
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
           edit: (id, place) => void this.editChart(id, place),
+          refresh: (source) => this.withTab(source, (tab) => void this.refresh(tab)),
           remove: (id, title) => void this.unchart(id, title),
           say: (text) => this.say(text),
         });
@@ -1220,6 +1221,15 @@ export class Shell {
     const path = tab.link?.path;
     if (path === undefined) return;
     await this.pointAt(tab, refAt(path), (fresh) => reloaded(tab, fresh));
+  }
+
+  /**
+   * refresh reads a tab's source again by hand, as Reload does. A tab waiting
+   * on its bucket opens the connect form, as its ! mark does.
+   */
+  private async refresh(tab: Tab): Promise<void> {
+    if (tab.state === "unconnected") return this.repoint(tab);
+    return this.reload(tab);
   }
 
   /**

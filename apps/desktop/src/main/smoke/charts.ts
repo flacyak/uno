@@ -405,11 +405,18 @@ export const CHARTS: Check[] = [
   {
     // Tucked here, the windows are what the next check's reshape lands on, so
     // that check has to tell them from the ones it waits for.
-    name: "at 200% zoom with both side columns open, each window tucks to its head",
+    name: "at 200% zoom with both side columns open, each window tucks to its head, its × whole",
     script: `
       ${GEOMETRY}
       await openPanel();
-      return (await until(heads)) ? "" : "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+      if (!(await until(heads))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
+      // A head too narrow for its buttons drops them, and its × keeps its inset.
+      for (const at of document.querySelectorAll(".chart")) {
+        const x = at.querySelector(".chart-close");
+        const inset = at.getBoundingClientRect().right - border() - x.getBoundingClientRect().right;
+        if (inset !== parseFloat(getComputedStyle(x).marginRight)) return "a tucked head's × stands " + inset + " px inside its edge";
+      }
+      return "";
     `,
   },
   {

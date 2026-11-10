@@ -27,7 +27,7 @@ import type { Stage } from "./window.ts";
 /** What a window asks of the shell, which the layer hands on. */
 export type Asks = Pick<
   Stage,
-  "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "remove" | "say"
+  "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "refresh" | "remove" | "say"
 >;
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
@@ -169,6 +169,11 @@ export class ChartLayer implements Stage {
   /** edit opens the chart form on chart `id`, hung at `place`. */
   edit(id: string, place: MenuPlace): void {
     this.asks.edit(id, place);
+  }
+
+  /** refresh reads `source` again by hand. */
+  refresh(source: string): void {
+    this.asks.refresh(source);
   }
 
   /** remove removes chart `id`, titled `title`, on the second ask. */
