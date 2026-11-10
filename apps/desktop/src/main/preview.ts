@@ -362,6 +362,44 @@ const POINTER =
   '<path d="M1 1v18l5-5 3.5 8 3-1.5L9 13h6z" fill="#000" stroke="#fff" stroke-linejoin="round"/>' +
   "</svg>";
 
+/** The side of the move and nwse-resize stand-ins' box, in px, which their arrows fill. */
+const ARROWS_BOX = 20;
+/** The middle of that box, where the pointer stands. */
+const ARROWS_MIDDLE = ARROWS_BOX / 2;
+
+/** The arrows of the stand-ins for the move and nwse-resize cursors, drawn about ARROWS_MIDDLE. */
+const FOUR_WAYS =
+  "M10 1l3.5 3.5H11V9h4.5V6.5L19 10l-3.5 3.5V11H11v4.5h2.5L10 19l-3.5-3.5H9V11H4.5v2.5L1 10" +
+  "l3.5-3.5V9H9V4.5H6.5z";
+const TWO_WAYS = "M10 1l4 4h-2.5v10H14l-4 4-4-4h2.5V5H6z";
+
+/** The turn that takes TWO_WAYS from up and down to top-left and bottom-right, in degrees. */
+const TO_NWSE = -45;
+
+/** aboutMiddle draws `arrows` about the box's middle, turned `turn` degrees. */
+function aboutMiddle(arrows: string, turn: number): string {
+  const box = `width="${ARROWS_BOX}" height="${ARROWS_BOX}" viewBox="0 0 ${ARROWS_BOX} ${ARROWS_BOX}"`;
+  const turned = `rotate(${turn} ${ARROWS_MIDDLE} ${ARROWS_MIDDLE})`;
+  return (
+    `<svg ${box}>` +
+    `<path d="${arrows}" transform="${turned}" fill="#000" stroke="#fff" stroke-linejoin="round"/>` +
+    "</svg>"
+  );
+}
+
+/** Where the pointer stands in the move and nwse-resize stand-ins. */
+const AT_MIDDLE = { x: ARROWS_MIDDLE, y: ARROWS_MIDDLE };
+
+/**
+ * The stand-in's pictures by the CSS cursor they draw, each with the point in
+ * it that stands where the pointer is.
+ */
+const PICTURES = {
+  default: { svg: POINTER, at: { x: 0, y: 0 } },
+  move: { svg: aboutMiddle(FOUR_WAYS, 0), at: AT_MIDDLE },
+  "nwse-resize": { svg: aboutMiddle(TWO_WAYS, TO_NWSE), at: AT_MIDDLE },
+};
+
 /** The stand-in's id, where a script finds it, and a z-index over the app's popups. */
 const POINTER_ID = "preview-pointer";
 const POINTER_ON_TOP = 99;
@@ -919,9 +957,11 @@ async function playMoves(win: BrowserWindow, at: Clock): Promise<void> {
   await at(MOVES.carry);
   await carry(win, ".chart .chart-title", CARRY);
   await at(MOVES.stretch);
-  await carry(win, ".chart .chart-grip", STRETCH);
+  const grip = await carry(win, ".chart .chart-grip", STRETCH);
   await at(MOVES.nudge);
   await presses(win, "Left", NUDGES, ARROW_GAP);
+  // The window steps out from under the pointer, which shows what is there now.
+  pointTo(win, grip.x, grip.y);
   await at(MOVES.grow);
   await presses(win, "Down", NUDGES, ARROW_GAP, ["shift"]);
   await at(MOVES.end);
@@ -1271,7 +1311,11 @@ async function standInMenu(win: BrowserWindow, keys: string): Promise<string> {
   return `#${MENU_ID} [data-picked]`;
 }
 
-/** pointTo moves the pointer and its stand-in to (`x`, `y`). */
+/**
+ * pointTo moves the pointer and its stand-in to (`x`, `y`). The stand-in is
+ * drawn as the cursor the page shows there, and keeps its picture while the
+ * button is held, as the page's cursor does through a drag.
+ */
 function pointTo(
   win: BrowserWindow,
   x: number,
@@ -1279,20 +1323,37 @@ function pointTo(
   modifiers: "leftbuttondown"[] = [],
 ): void {
   through(win, () => win.webContents.sendInputEvent({ type: "mouseMove", x, y, modifiers }));
+  const held = modifiers.includes("leftbuttondown");
   void win.webContents.executeJavaScript(`
-    Object.assign(document.getElementById(${JSON.stringify(POINTER_ID)}).style, {
-      display: "block",
-      transform: "translate(${x}px, ${y}px)",
-    });
+    (() => {
+      const pictures = ${JSON.stringify(PICTURES)};
+      const pointer = document.getElementById(${JSON.stringify(POINTER_ID)});
+      const under = document.elementFromPoint(${x}, ${y});
+      const cursor = under === null ? "default" : getComputedStyle(under).cursor;
+      const shown = Object.hasOwn(pictures, cursor) ? cursor : "default";
+      const picture = ${held} ? (pointer.dataset.picture ?? shown) : shown;
+      if (pointer.dataset.picture !== picture) {
+        pointer.dataset.picture = picture;
+        pointer.innerHTML = pictures[picture].svg;
+      }
+      const { at } = pictures[picture];
+      Object.assign(pointer.style, {
+        display: "block",
+        transform: "translate(" + (${x} - at.x) + "px, " + (${y} - at.y) + "px)",
+      });
+    })()
   `);
 }
 
-/** carry takes hold of what `selector` picks and drags it `by` px, eased as a hand goes. */
+/**
+ * carry takes hold of what `selector` picks and drags it `by` px, eased as a
+ * hand goes. Gives where it lets go.
+ */
 async function carry(
   win: BrowserWindow,
   selector: string,
   by: { x: number; y: number },
-): Promise<void> {
+): Promise<{ x: number; y: number }> {
   const { x, y } = await hover(win, selector);
   pointTo(win, x, y);
   await sleep(HOVER);
@@ -1305,6 +1366,7 @@ async function carry(
   }
   const to = { x: x + by.x, y: y + by.y };
   through(win, () => win.webContents.sendInputEvent({ type: "mouseUp", ...to, ...left }));
+  return to;
 }
 
 /**
