@@ -23,6 +23,8 @@ const ROW_H = 29;
 const HEAD_H = 30;
 /** A sheet far past the scroller's cap, where one row is under a px of scrollTop. */
 const VAST = 100_000_000;
+/** Where the second column's header cell stands on the screen, as layout would put it. */
+const SECOND_HEAD = new DOMRect(100, 50, 80, HEAD_H);
 /** A wheel's deltas in px, which its mode reads as they are. */
 const PIXELS = WheelEvent.DOM_DELTA_PIXEL;
 
@@ -127,6 +129,48 @@ test("the same rows shown again keep where they were scrolled to", () => {
   view.show(sheet(40, 12), true);
 
   expect(scroller.scrollLeft).toBe(500);
+});
+
+/** Stands the second column's header cell, and the scroller `viewport` px tall from its top, on the screen. */
+function stand(scroller: HTMLElement, viewport: number): void {
+  // The gutter's header cell comes first.
+  const head = scroller.querySelector("thead tr")!.children[2]!;
+  vi.spyOn(head, "getBoundingClientRect").mockReturnValue(SECOND_HEAD);
+  const box = new DOMRect(0, SECOND_HEAD.top, SECOND_HEAD.right, viewport);
+  vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue(box);
+}
+
+test.each([
+  ["an unscaled sheet", 40],
+  ["a scaled sheet", VAST],
+])("a cell scrolled to the foot of %s stands there, under its header cell", (_, total) => {
+  const viewport = 600;
+  const { view, scroller } = make(viewport);
+  view.show(sheet(total), false);
+  stand(scroller, viewport);
+
+  view.scrollIntoView(total - 1, 1);
+  view.layout();
+
+  const { left, top, width } = SECOND_HEAD;
+  expect(view.cellRect(total - 1, 1)).toEqual(
+    new DOMRect(left, top + viewport - ROW_H, width, ROW_H),
+  );
+});
+
+test("a cell scrolled under the header shows none of itself, and one partly under it the rest", () => {
+  const viewport = 600;
+  const { view, scroller } = make(viewport);
+  view.show(sheet(40), false);
+  stand(scroller, viewport);
+  const halfRow = ROW_H / 2;
+
+  scroller.scrollTop = ROW_H + halfRow;
+  view.layout();
+
+  const { left, bottom, width } = SECOND_HEAD;
+  expect(view.cellRect(0, 1)).toBeUndefined();
+  expect(view.cellRect(1, 1)).toEqual(new DOMRect(left, bottom, width, halfRow));
 });
 
 // ------------------------------------------------------------------ wheel
