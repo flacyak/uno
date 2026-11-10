@@ -12,7 +12,15 @@ import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
 import type { GroupsTally, SampleTally, Tally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
-import { blank, body, checked, coverage, every, notNumbers } from "@renderer/chart/caption";
+import {
+  blank,
+  body,
+  checked,
+  coverage,
+  every,
+  notNumbers,
+  trouble,
+} from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
 import type { Checks } from "@renderer/refresh";
 import { BARS, SCATTER } from "../charted.ts";
@@ -60,6 +68,9 @@ const NEXT_DAY = new Date(2026, OCTOBER, 30).getTime();
 const QUARTER_HOUR = 15;
 const HOUR_AND_HALF = 90;
 const TWO_HOURS = 2 * HOUR_MINUTES;
+
+/** The unsaved cell edits that hold a source's newer data back. */
+const EDITS = 12;
 
 /** A source's checks, of which the last ended at AT and found `found`. */
 function checksOf(found: Checks["found"]): Checks {
@@ -235,4 +246,18 @@ test("the caption says when a check found its source or read it, with the date o
 test("the caption says nothing of a source never checked, or whose check waits", () => {
   expect(checked(undefined)).toBe("");
   expect(checked(checksOf({ t: "waiting", why: "indexing" }))).toBe("");
+});
+
+test("the caption says, as trouble, that edits hold newer data back, in the language chosen, and nothing after a check that read", () => {
+  expect(trouble(checksOf({ t: "held", edits: 1 }))).toBe(
+    "! newer data is waiting - this tab has 1 edit",
+  );
+  expect(trouble(checksOf({ t: "held", edits: EDITS }))).toBe(
+    "! newer data is waiting - this tab has 12 edits",
+  );
+  expect([trouble(undefined), trouble(checksOf({ t: "read" }))]).toStrictEqual(["", ""]);
+  void setLocale("es", { reload: false });
+  expect(trouble(checksOf({ t: "held", edits: EDITS }))).toBe(
+    "! hay datos nuevos - 12 ediciones en esta pestaña",
+  );
 });

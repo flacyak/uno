@@ -520,6 +520,7 @@
   "chart_every_hour": "every hour",
   "chart_every_day": "every day",
   "chart_checked": "checked {time}",
+  "chart_held": "! newer data is waiting - this tab has {edits}",
   "chart_reading": "reading {name}…",
   "chart_no_values_yet": "no values in {columns} yet",
   "chart_source_missing": "{name} is missing",

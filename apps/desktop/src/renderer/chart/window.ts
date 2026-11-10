@@ -40,7 +40,17 @@ import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
-import { blank, body, checked, coverage, drawable, every, notNumbers, reading } from "./caption.ts";
+import {
+  blank,
+  body,
+  checked,
+  coverage,
+  drawable,
+  every,
+  notNumbers,
+  reading,
+  trouble,
+} from "./caption.ts";
 import { belowZero, fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
@@ -455,9 +465,9 @@ export class ChartWindow {
    * and a first one draws as it comes. The caption says how much of its
    * source the chart has read and what the tally left out, then what the
    * plot's kind says, and at its right end the chart's schedule and when its
-   * source was last checked. The track under the head shows how far the
-   * chart has read, while it reads, and a chart with nothing to draw says why
-   * in the plot's place.
+   * source was last checked, or in --flag what held its newer data back. The
+   * track under the head shows how far the chart has read, while it reads,
+   * and a chart with nothing to draw says why in the plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -475,8 +485,11 @@ export class ChartWindow {
     this.again.title = why ?? "";
     const read = reading(heard);
     // A read says when its check was once it ends.
-    const when = read === undefined ? checked(this.stage.checks(this.chart.source)) : "";
-    this.checking.textContent = [every(this.chart.refresh), when].filter((w) => w !== "").join(SEP);
+    const checks = read === undefined ? this.stage.checks(this.chart.source) : undefined;
+    const flagged = trouble(checks);
+    const when = [every(this.chart.refresh), checked(checks)].filter((w) => w !== "").join(SEP);
+    this.checking.classList.toggle("chart-checks-trouble", flagged !== "");
+    this.checking.textContent = flagged === "" ? when : flagged;
     this.checking.title = this.checking.textContent;
     // A right end that says nothing leaves its room to the plot's words.
     this.checking.hidden = this.checking.textContent === "";
