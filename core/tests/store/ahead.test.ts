@@ -156,6 +156,21 @@ test('a scan with the grid drawing in the middle of it asks for every chunk once
   expect(r.asked).toHaveLength(SIZE / CHUNK + blocks.length);
 });
 
+// More than REMEMBERED reads from elsewhere come between two of a reader in
+// order, as a chart's blocks do between two of the index's chunks. The
+// chunks asked ahead of it are kept for it, and none is asked for again.
+test('a reader in order keeps its chunks through more than REMEMBERED reads from elsewhere', async () => {
+  const r = counting();
+  const size = 20 * CHUNK;
+  const read = readAhead(r.read, size);
+  for (let at = 0; at < RUN * CHUNK; at += CHUNK) await read(at, CHUNK);
+  expect(r.asked).toEqual([0, 100, 200, 300, 400, 500]);
+  for (let i = 0; i <= REMEMBERED; i++) await read(1000 + i * CHUNK, 30);
+  const before = r.asked.length;
+  await read(RUN * CHUNK, CHUNK);
+  expect(r.asked.slice(before), 'only the next chunk ahead').toEqual([600]);
+});
+
 // Two in-order readers: the second reads as asked until the first is
 // forgotten, after REMEMBERED reads, then gets read-ahead of its own. The
 // first reader's chunks are let go, and asked for again if it comes back.
@@ -185,13 +200,13 @@ test("a second reader in order gets its chunks once the first is forgotten, and 
   expect(r.asked.filter((a) => a === RUN * CHUNK)).toHaveLength(2);
 });
 
-test('a reader that has gone is not asked ahead for again at every read from elsewhere', async () => {
+test('a reader that stops partway is asked nothing more at reads from elsewhere', async () => {
   const r = counting();
   const size = 20 * CHUNK;
   const read = readAhead(r.read, size);
   for (let at = 0; at < 5 * CHUNK; at += CHUNK) await read(at, CHUNK);
   const scanned = r.asked.length;
-  // Scattered reads cost one request each, with the forgotten scan left alone.
+  // Scattered reads cost one request each, the stopped scan's chunks kept.
   const elsewhere = [1500, 900, 1700, 1100, 1900, 1300, 800, 1600];
   for (const at of elsewhere) await read(at, CHUNK);
   expect(r.asked.length - scanned).toBe(elsewhere.length);

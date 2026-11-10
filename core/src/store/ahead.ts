@@ -26,7 +26,8 @@ export type ReadRange = (offset: number, length: number) => Promise<Uint8Array>;
 /**
  * How many recent reads are remembered. A read that continues one of them is
  * the same reader. A reader none of them belong to is gone, and the chunks
- * held for it are dropped.
+ * held for it are dropped, unless it is the stream: its chunks stay until it
+ * takes them, or leaves the recent reads once another reader is the stream.
  */
 export const REMEMBERED = 4;
 
@@ -50,8 +51,9 @@ interface Stream {
  * band's blocks of rows, ask for nothing ahead, nor do two of one length.
  *
  * A held chunk stays with the reader it was requested for while that reader
- * is among the last `REMEMBERED` reads. Then it is dropped. Two sequential
- * readers share the window.
+ * is among the last `REMEMBERED` reads or is still the stream, so reads from
+ * elsewhere between two of the stream's cost it nothing. Then it is dropped.
+ * Two sequential readers share the window.
  *
  * A held chunk whose request failed throws from the read that takes it, with
  * the error `read` threw.
@@ -78,16 +80,20 @@ export function readAhead(
 
   /**
    * topUp requests the stream's next chunks. Chunks held for readers that
-   * left `recent` are dropped first. The chunk the caller is waiting on
-   * counts as one of `ahead`, so at most `ahead - 1` are held.
+   * left `recent`, other than the stream, are dropped first. The chunk the
+   * caller is waiting on counts as one of `ahead`, so at most `ahead - 1` are
+   * held.
    */
   function topUp(): void {
     if (stream === undefined) return;
     for (const [offset, chunk] of held) {
-      if (!recent.includes(chunk.for)) held.delete(offset);
+      const wanted = chunk.for === stream || recent.includes(chunk.for);
+      if (!wanted) held.delete(offset);
     }
-    // A stream none of the recent reads belong to is gone.
-    if (!recent.includes(stream)) {
+    // A stream none of the recent reads belong to, with nothing held for
+    // it, is gone.
+    const holds = [...held.values()].some((chunk) => chunk.for === stream);
+    if (!holds && !recent.includes(stream)) {
       stream = undefined;
       return;
     }
@@ -106,12 +112,13 @@ export function readAhead(
   return (offset, length) => {
     // A read that starts where a recent read of its length ended, or that
     // takes what is left of the object, continues that reader, which becomes
-    // the stream once its run is RUN reads long.
-    const going = recent.findLast(
-      (who) =>
-        who.next === offset &&
-        (who.length === length || offset + length === size),
-    );
+    // the stream once its run is RUN reads long. So does a read that
+    // continues the stream after it left the recent reads.
+    const continues = (who: Stream | undefined) =>
+      who?.next === offset &&
+      (who.length === length || offset + length === size);
+    const going =
+      recent.findLast(continues) ?? (continues(stream) ? stream : undefined);
     if (going === undefined) {
       remember({ next: offset + length, length, run: 1 });
     } else {
