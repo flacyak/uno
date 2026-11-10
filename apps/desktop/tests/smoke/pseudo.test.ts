@@ -68,8 +68,10 @@ const ONE_SENTENCE = ["#empty p"];
 /** The attributes a person reads or hears, beside the text itself. */
 const SPOKEN = ["title", "aria-label", "aria-roledescription", "placeholder"];
 
-/** The chart form's Refresh option that shows a number and a unit. */
+/** The chart form's Refresh option that shows a number and a unit, and one
+ * that checks the source every 15 minutes. */
 const EVERY = "every";
+const QUARTER_HOUR = 15;
 
 /**
  * Patterns for text that is the same in every language, removed from a text
@@ -205,6 +207,10 @@ test("the chart form is in the language chosen", async () => {
   refresh.value = EVERY;
   refresh.dispatchEvent(new Event("change"));
   refresh.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  expect(english()).toEqual([]);
+  // A schedule's note says what a check reads.
+  refresh.value = String(QUARTER_HOUR);
+  refresh.dispatchEvent(new Event("change"));
   expect(english()).toEqual([]);
   const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
   document.querySelector(".chart-form")?.dispatchEvent(escape);

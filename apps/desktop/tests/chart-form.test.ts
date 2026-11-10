@@ -37,12 +37,19 @@ const REVENUE = 5;
 /** The workspace's sources: the sales export, active, then an ads export with
  * its region elsewhere and no revenue, then one whose file is missing, which
  * the engine opens with no columns. */
-const SALES = { id: "sales", name: "sales-q3.csv", band: { columns: COLUMNS }, missing: false };
+const SALES = {
+  id: "sales",
+  name: "sales-q3.csv",
+  band: { columns: COLUMNS },
+  missing: false,
+  link: { path: "/exports/sales-q3.csv" },
+};
 const ADS = {
   id: "ads",
   name: "ads-q3.csv",
   band: { columns: [COLUMNS[4], COLUMNS[REGION]] },
   missing: false,
+  link: { path: "/exports/ads-q3.csv" },
 };
 const GONE = { id: "gone", name: "ads-q2.csv", band: { columns: [] }, missing: true };
 /** Then the sales export's sums, revenue before units, and its takings, revenue beside a cost. */
@@ -57,6 +64,13 @@ const TWINS = {
 };
 const UNITS_TWIN = 1;
 const REGION_TWIN = 3;
+/** Then the sales export in a bucket, in parts, carried inside the workspace,
+ * and in parts the open did not find. */
+const OBJECT = { ...SALES, id: "object", link: { path: "s3://acme-exports/sales-q3.csv" } };
+const PARTS = { ...SALES, id: "parts", link: undefined, parts: [{ name: "q3-1.csv", path: "" }] };
+const CARRIED = { ...SALES, id: "carried", link: undefined };
+const LOST = { ...SALES, id: "lost", link: { path: "" } };
+const SOURCES = [SALES, ADS, GONE, SUMS, TAKINGS, TWINS, OBJECT, PARTS, CARRIED, LOST];
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id, refresh = BY_HAND): string =>
@@ -90,7 +104,7 @@ function form(
 } {
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
-  new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS, TWINS], active, opening, {
+  new ChartForm({ left: 0, top: 0 }, SOURCES, active, opening, {
     send: (source, plot, title, refresh) => {
       asked.push(inserting(plot, title, source.id, refresh));
       return insert();
@@ -251,9 +265,7 @@ test("another source offers its columns, and keeps those it has a header for", a
 test("a source whose file is missing is offered, and cannot be chosen", () => {
   form();
   const offered = [...select("source").options].map((o) => [o.textContent, o.disabled]);
-  expect(offered).toStrictEqual(
-    [SALES, ADS, GONE, SUMS, TAKINGS, TWINS].map((s) => [s.name, s.missing]),
-  );
+  expect(offered).toStrictEqual(SOURCES.map((s) => [s.name, s.missing]));
 });
 
 test("Refresh opens by hand, offers every 5, 15 or 30 min, hour or day, and Enter sends it", async () => {
@@ -324,6 +336,37 @@ test("Every… refuses none, 0, a number that is not whole and more than a week,
     inserting(REGION_BARS, "", SALES.id, REFRESH_MINUTES_AT_MOST),
     "closed",
   ]);
+});
+
+test("a schedule's note says what a check reads of a file, an object or a folder", () => {
+  const { box } = form();
+  const note = (): string | null => box.querySelector(".note")!.textContent;
+  pick("refresh", String(QUARTER_HOUR));
+  const name = { name: SALES.name };
+  expect(note()).toBe(m.chart_refresh_does_file(name));
+  pick("source", String(SOURCES.indexOf(OBJECT)));
+  expect(note()).toBe(m.chart_refresh_does_object(name));
+  pick("source", String(SOURCES.indexOf(PARTS)));
+  expect(note()).toBe(m.chart_refresh_does_folder(name));
+  pick("refresh", String(BY_HAND));
+  expect(note()).toBe(m.chart_form_hint());
+});
+
+test("a carried source, or one whose files the open did not find, turns Refresh off and says why", () => {
+  const off = (source: ChartSource): Array<string | boolean | null> => {
+    const { box } = form(undefined, { t: "insert", col: REGION }, source);
+    return [
+      select("refresh").disabled,
+      select("refresh").title,
+      box.querySelector(".note")!.textContent,
+    ];
+  };
+  const name = { name: SALES.name };
+  const carried = [m.chart_refresh_carried(name), m.chart_refresh_note_carried(name)];
+  expect(off(CARRIED)).toStrictEqual([true, ...carried]);
+  const lost = [m.chart_refresh_lost(name), m.chart_refresh_note_lost(name)];
+  expect(off(LOST)).toStrictEqual([true, ...lost]);
+  expect(off(SALES)).toStrictEqual([false, "", m.chart_form_hint()]);
 });
 
 test("Esc closes it and inserts nothing", () => {
@@ -443,4 +486,20 @@ test("a chart's form opens on the chart's own columns where two share a header",
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(twinned, "", TWINS.id), "closed"]);
+});
+
+test("a source with nothing to read again is checked by hand, whatever was chosen", async () => {
+  const { asked } = form();
+  pick("refresh", EVERY);
+  pick("source", String(SOURCES.indexOf(CARRIED)));
+  const off = [chosen("refresh"), count().hidden, count().disabled, select("unit").disabled];
+  expect(off).toStrictEqual([[String(BY_HAND)], true, true, true]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "", CARRIED.id), "closed"]);
+  const { asked: applied } = changing(REGION_BARS, "", LOST, QUARTER_HOUR);
+  expect(chosen("refresh")).toStrictEqual([String(BY_HAND)]);
+  press("Enter");
+  await settle();
+  expect(applied).toStrictEqual([inserting(REGION_BARS, "", LOST.id), "closed"]);
 });
