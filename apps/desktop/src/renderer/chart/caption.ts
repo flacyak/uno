@@ -5,7 +5,7 @@
  * left out. The track under the head shows the same share while the chart
  * reads, and the plot says why it draws nothing while it has nothing to draw.
  * At its right end it says how often its source is checked, and when it was,
- * or what held its newer data back.
+ * or what held its newer data back or failed its check.
  */
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
@@ -14,9 +14,14 @@ import type { Coverage, GroupsTally, SampleTally, Skipped, Tally } from "@engine
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
-import { clock, list, num, percent } from "@renderer/locale";
+import { MS_PER_SECOND, clock, list, num, percent } from "@renderer/locale";
+import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
-import { say } from "@renderer/said";
+import { said, say } from "@renderer/said";
+import { CHECK_TIMEOUT_MS } from "@renderer/timing";
+
+/** What parts the caption's words. */
+export const SEP = " · ";
 
 /** What a chart's plot says in place of what it cannot draw, and the action it offers. */
 export interface Body {
@@ -178,10 +183,21 @@ export function checked(checks: Checks | undefined): string {
 /**
  * trouble gives what the caption says, in --flag, of a check that could not
  * draw its source's newer data: unsaved cell edits hold it back for a refresh
- * by hand. It is nothing after any other check.
+ * by hand, or the check failed, with when the next try is, once one is due,
+ * then what failed it, which a narrow window cuts first. It is nothing after
+ * any other check.
  */
 export function trouble(checks: Checks | undefined): string {
-  const found = checks?.found;
-  if (found?.t !== "held") return "";
-  return m.chart_held({ edits: m.edits_count({ count: found.edits }) });
+  if (checks === undefined) return "";
+  const { at, found, next } = checks;
+  if (found.t === "held") return m.chart_held({ edits: m.edits_count({ count: found.edits }) });
+  if (found.t !== "failed") return "";
+  const nextTry = next === undefined ? [] : [m.chart_next_try({ time: clock(next) })];
+  return [m.chart_check_failed({ time: clock(at) }), ...nextTry, failure(found.error)].join(SEP);
+}
+
+/** failure gives what failed a check: the engine's words, or that its source gave no answer in time. */
+function failure(error: unknown): string {
+  if (!(error instanceof NoAnswer)) return said(error);
+  return m.chart_check_no_answer({ seconds: num(CHECK_TIMEOUT_MS / MS_PER_SECOND) });
 }
