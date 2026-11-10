@@ -8,10 +8,11 @@
  * open did not find, is off and says why. On a schedule, the first check
  * opens nothing over the file as it was read, one that came due while the
  * page was hidden or offline runs once it is back, over the rewritten file
- * drawing its new row and saying nothing, r or Reload starts the schedule
- * over, one over several files appends the new one alone, another
- * workspace's open stops the schedule, and one over a file still indexing
- * checks it once its index completes.
+ * drawing its new row and saying nothing, its caption naming the schedule
+ * and when the source was read, r or Reload starts the schedule over, one
+ * over several files appends the new one alone, another workspace's open
+ * stops the schedule, and one over a file still indexing checks it once its
+ * index completes.
  *
  * @vitest-environment happy-dom
  */
@@ -26,6 +27,7 @@ import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import type { Provider } from "@plugin";
 import { Charts } from "@renderer/charts";
+import { clock } from "@renderer/locale";
 import { Refresher } from "@renderer/refresh";
 import type { Shell } from "@renderer/shell/shell";
 import { MINUTE_MS } from "@renderer/timing";
@@ -41,6 +43,12 @@ const ADDED_ROW = "2026-10-01,West,Ada Okafor,direct,1,1.00\r\n";
 
 /** The shortest schedule a chart keeps: a check every minute. */
 const EVERY_MINUTE = 1;
+
+/** Date counts months from 0. */
+const OCTOBER = 9;
+
+/** When a test reads a chart's source by hand: 29 October 2026 at 14:32 where it runs. */
+const CHECKED_AT = new Date(2026, OCTOBER, 29, 14, 32).getTime();
 
 /** How many files core's testdata cuts the sales export into, beside it. */
 const PART_COUNT = 3;
@@ -86,6 +94,7 @@ let dir: string;
 const box = (): HTMLElement => document.querySelector<HTMLElement>(".chart")!;
 const said = (): string => document.querySelector(".chart .chart-said")?.textContent ?? "";
 const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
+const checks = (): string => document.querySelector(".chart .chart-checks")?.textContent ?? "";
 const r = (): boolean =>
   box().dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true, cancelable: true }));
 /** Waits for the chart's caption to count `rows` rows, its tally complete. */
@@ -137,8 +146,10 @@ test("r draws the last picture faint over an empty track before the file read ag
   const plot = box().querySelector<HTMLElement>(".chart-plot")!;
   const track = box().querySelector<HTMLElement>(".chart-coverage")!;
   expect([plot.classList.contains("chart-stale"), track.hidden]).toStrictEqual([true, false]);
-  // The caption still counts the rows of the last read.
-  expect(said()).toBe(m.rows_count({ count: ROWS + 2 }));
+  // The caption still counts the rows of the last read, and says no time of a check.
+  expect([said(), checks()]).toStrictEqual([m.rows_count({ count: ROWS + 2 }), ""]);
+  // Saying nothing, its right end takes no room.
+  expect(box().querySelector<HTMLElement>(".chart-checks")!.hidden).toBe(true);
   expect(track.style.getPropertyValue("--read")).toBe("0");
   hear.mockRestore();
   relink.mockRestore();
@@ -257,6 +268,15 @@ test("a schedule opens nothing over the file as it was read, and draws the rewri
   expect(paths()).toStrictEqual([csv]);
   expect([message(), shell.unsaved]).toStrictEqual([before, false]);
   refresh.mockRestore();
+});
+
+test("a scheduled chart's caption names its schedule, and says when its source was read by hand once the read ends", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: CHECKED_AT });
+  r();
+  vi.useRealTimers();
+  const every = m.chart_every_minutes({ count: `${EVERY_MINUTE}` });
+  const said = `${every} · ${m.chart_checked({ time: clock(CHECKED_AT) })}`;
+  expect(await until(page, () => checks() === said)).toBe(true);
 });
 
 test("r on a scheduled chart, or Reload on its source's line, starts its schedule over", async () => {

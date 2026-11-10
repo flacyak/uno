@@ -910,7 +910,12 @@ export class Shell {
       this.refresher?.dispose();
       this.workspace = w;
       w.onTally = (chart) => this.layer?.tallied(chart);
-      const refresher = new Refresher((id) => this.scheduled(w, id));
+      const refresher = new Refresher(
+        (id) => this.scheduled(w, id),
+        (id) => {
+          if (this.workspace === w) this.layer?.checked(id);
+        },
+      );
       this.refresher = refresher;
       w.onIndexed = (id) => refresher.ready(id);
       // Close any menu or form open for the replaced workspace.
@@ -970,6 +975,7 @@ export class Shell {
           refresh: (source) => this.withTab(source, (tab) => void this.refresh(tab)),
           remove: (id, title) => void this.unchart(id, title),
           say: (text) => this.say(text),
+          checks: (source) => this.refresher?.checks(source),
         });
         return this.layer;
       },

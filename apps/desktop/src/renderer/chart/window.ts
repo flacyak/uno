@@ -24,7 +24,8 @@
  * its place, and back. The pointer over a mark shows what it is worth in a
  * box beside it, and the arrows step the box through the marks while the
  * plot has the keys. The caption's count of the cells that were not numbers
- * is a button that finds them in the sheet.
+ * is a button that finds them in the sheet. Its right end names the chart's
+ * schedule and says when its source was last checked, once a read ends.
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
@@ -35,10 +36,11 @@ import { wheelWay } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
+import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { Words, button, el } from "@renderer/shell/util";
 import { bars, fitTips } from "./bars.ts";
-import { blank, body, coverage, drawable, notNumbers, reading } from "./caption.ts";
+import { blank, body, checked, coverage, drawable, every, notNumbers, reading } from "./caption.ts";
 import { belowZero, fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
@@ -128,6 +130,8 @@ export interface Stage {
   wheelBy(dx: number, dy: number, deltaMode: number): void;
   /** What chart `id` last heard from its source. */
   heard(id: string): Heard | undefined;
+  /** When `source` was last checked and what came of it, once it has been. */
+  checks(source: string): Checks | undefined;
   /** Opens the sources panel on `source`, to point it at a file or connect its bucket. */
   repoint(source: string): void;
   /**
@@ -290,6 +294,8 @@ export class ChartWindow {
   private readonly before = el("span", "chart-said-before");
   private readonly dot = el("span", "chart-said-dot");
   private readonly after = el("span", "chart-said-after");
+  /** What the caption says of the source's checks, at its right end. */
+  private readonly checking = el("span", "chart-checks");
   /** The count of the cells that were not numbers, the button that finds them in the sheet. */
   private readonly find = button("chart-find", "", () =>
     this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
@@ -356,7 +362,7 @@ export class ChartWindow {
     // The button shows once a tally counts cells that were not numbers.
     this.find.hidden = true;
     this.said.append(this.before, this.dot, this.find, this.after);
-    caption.append(this.said, grip);
+    caption.append(this.said, this.checking, grip);
 
     const right = el("div", "chart-edge chart-edge-right");
     right.addEventListener("pointerdown", (e) => {
@@ -448,9 +454,10 @@ export class ChartWindow {
    * place. A complete tally stays drawn, faint, while the next one is read,
    * and a first one draws as it comes. The caption says how much of its
    * source the chart has read and what the tally left out, then what the
-   * plot's kind says. The track under the head shows how far the chart has
-   * read, while it reads, and a chart with nothing to draw says why in the
-   * plot's place.
+   * plot's kind says, and at its right end the chart's schedule and when its
+   * source was last checked. The track under the head shows how far the
+   * chart has read, while it reads, and a chart with nothing to draw says why
+   * in the plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -467,6 +474,12 @@ export class ChartWindow {
     this.again.disabled = why !== undefined;
     this.again.title = why ?? "";
     const read = reading(heard);
+    // A read says when its check was once it ends.
+    const when = read === undefined ? checked(this.stage.checks(this.chart.source)) : "";
+    this.checking.textContent = [every(this.chart.refresh), when].filter((w) => w !== "").join(SEP);
+    this.checking.title = this.checking.textContent;
+    // A right end that says nothing leaves its room to the plot's words.
+    this.checking.hidden = this.checking.textContent === "";
     this.track.hidden = read === undefined;
     this.plot.classList.toggle("chart-stale", read !== undefined && heard?.complete !== undefined);
     this.track.style.setProperty("--read", `${read ?? 0}`);

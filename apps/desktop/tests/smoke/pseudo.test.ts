@@ -73,6 +73,10 @@ const SPOKEN = ["title", "aria-label", "aria-roledescription", "placeholder"];
 const EVERY = "every";
 const QUARTER_HOUR = 15;
 
+/** The messages a scheduled chart's caption wraps once checked: its schedule
+ * and when its check was. */
+const SCHEDULE_AND_CHECK = 2;
+
 /**
  * Patterns for text that is the same in every language, removed from a text
  * once its messages are taken out.
@@ -234,7 +238,8 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   // Two charts name a column the second export has not, so they draw nothing.
   const titled = { ...BARS, id: "c2", source: ADS, title: "From the file" };
   const overAds = { ...BARS, id: "c3", source: ADS };
-  const readable = [BARS, SCATTER, DEVICES];
+  // The last checks its source on a schedule, which its caption names.
+  const readable = [BARS, SCATTER, { ...DEVICES, refresh: QUARTER_HOUR }];
   const path = join(mkdtempSync(join(tmpdir(), "uno-pseudo-")), "charted.uno");
   await writeFile(path, unoOf([...readable, titled, overAds]));
   await shell.openRef({ name: "charted.uno", path });
@@ -247,6 +252,8 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
     [...document.querySelectorAll(".chart-said")].map((at) => at.textContent).join("");
   const labelled = (): boolean =>
     document.querySelectorAll(".chart-pie .chart-slice-label").length > 0;
+  const checks = (): string[] =>
+    [...document.querySelectorAll(".chart-checks")].map((at) => at.textContent ?? "");
   const drawn = (): boolean =>
     plot.querySelector(".chart-bars-line") !== null && said() !== "" && labelled();
   expect(await until(domPage(), drawn)).toBe(true);
@@ -255,6 +262,10 @@ test("a chart's window drawn in English is rewritten in the language chosen", as
   const head = document.querySelector(".chart-title")?.textContent;
   expect(head).toBe(`${SALES} · ${madeTitle(BARS.plot)}`);
   expect(said()).toContain(PSEUDO_OPEN);
+  // A schedule, and when its first check was, once it has been.
+  const wrapped = (text: string): number => text.split(PSEUDO_OPEN).length - 1;
+  const scheduled = (): boolean => checks().some((text) => wrapped(text) >= SCHEDULE_AND_CHECK);
+  expect(await until(domPage(), scheduled)).toBe(true);
   // What each drawing says it shows is written once its tally completes, in the
   // language chosen by then, its values from the file apart.
   const summaries = (): string[] =>
