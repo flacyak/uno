@@ -8,7 +8,8 @@
  * open did not find, is off and says why. On a schedule, the first check
  * opens nothing over the file as it was read, one that comes due over the
  * rewritten file draws its new row and says nothing, r or Reload starts the
- * schedule over, and another workspace's open stops the schedule.
+ * schedule over, one over several files appends the new one alone, and
+ * another workspace's open stops the schedule.
  *
  * @vitest-environment happy-dom
  */
@@ -235,6 +236,30 @@ test("r on a scheduled chart, or Reload on its source's line, starts its schedul
   shell.togglePanel();
   expect(refreshed.mock.calls).toStrictEqual([[SALES], [SALES]]);
   refreshed.mockRestore();
+});
+
+test("a schedule over several files appends the new one alone, saying nothing", async () => {
+  const folder = join(dir, "scheduled-parts");
+  await mkdir(folder);
+  const copies = PART_FIXTURES.map((part) => join(folder, basename(part)));
+  await Promise.all(copies.slice(0, -1).map((to, i) => copyFile(PART_FIXTURES[i]!, to)));
+  const uno = join(dir, "scheduled-parts.uno");
+  await writeFile(uno, partsUnoOf([{ ...BARS, refresh: EVERY_MINUTE }], copies.slice(0, -1)));
+  await shell.openRef({ name: basename(uno), path: uno }, uno);
+  expect(await counts(PART_ROWS * (copies.length - 1))).toBe(true);
+
+  await copyFile(PART_FIXTURES.at(-1)!, copies.at(-1)!);
+  const append = vi.spyOn(Engine.prototype, "append");
+  const before = message();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.now() + MINUTE_MS);
+  shell.wake();
+  vi.useRealTimers();
+  expect(await counts(PART_ROWS * copies.length)).toBe(true);
+  const added = { name: basename(copies.at(-1)!), path: copies.at(-1) };
+  expect(append.mock.calls.map(([, files]) => files)).toStrictEqual([[added]]);
+  expect(message()).toBe(before);
+  append.mockRestore();
 });
 
 test("another workspace's open stops the schedule", async () => {

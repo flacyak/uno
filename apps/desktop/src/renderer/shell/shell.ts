@@ -1282,11 +1282,33 @@ export class Shell {
    */
   private async scheduled(w: Workspace, id: string): Promise<Refreshed> {
     const tab = w.sources.find((t) => t.id === id);
+    if (tab?.parts !== undefined) return this.grownOn(w, tab);
     if (tab !== undefined) this.keepSelection(w, tab);
     const done = await w.refresh(id);
     // A tab whose file was missing showed no rows, so it comes back on its own cell.
     if (done.t === "read" && this.workspace === w) this.shown(w.active.id === id, !tab?.missing);
     return done;
+  }
+
+  /**
+   * grownOn appends the files a source of several files now holds after its
+   * last part, for its charts' schedule. Rows keep their numbers, so cell
+   * edits hold nothing back.
+   */
+  private async grownOn(w: Workspace, tab: Tab): Promise<Refreshed> {
+    if (tab.state === "unconnected") return { t: "waiting", why: "unconnected" };
+    if (!tab.source.progress.complete) return { t: "waiting", why: "indexing" };
+    await this.sources.askGrownOf(tab);
+    // An append answered while the folder was listed has replaced the tab.
+    const now = w.sources.find((t) => t.id === tab.id);
+    const grown = now === undefined ? undefined : this.sources.grown(now);
+    if (now === undefined || grown === undefined || this.workspace !== w) return { t: "same" };
+    this.keepSelection(w, now);
+    await w.append(now, grown.files);
+    if (this.workspace === w) this.shown(w.active.id === now.id, true);
+    // Ask the folders again: what was offered is now appended.
+    void this.sources.askGrown();
+    return { t: "read" };
   }
 
   /**
