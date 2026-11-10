@@ -27,11 +27,17 @@ const DOUBLE = 2;
 /** What the status line says of Ctrl+Z on a chart. */
 const UNDO_HINT = "Ctrl+Z undoes edits in the grid · Esc goes back to it";
 
-/** Helpers: the chart form, the last window, and the windows left. */
+/**
+ * Helpers: the chart form, the last window, the windows left, and whether
+ * `windows` stand with a removal ended. A window goes before the engine
+ * answers, and the status line says so after, so the checks that follow
+ * start once it has.
+ */
 const FORM = `
   const form = () => document.querySelector(".chart-form");
   const last = () => document.querySelector(${JSON.stringify(LAST)});
   const count = () => document.querySelectorAll(".chart").length;
+  const removed = (windows) => count() === windows && text("#status-msg").startsWith("removed ");
   const keyed = () => document.activeElement === last() ? "" : "the keys are in " + document.activeElement?.className;
 `;
 
@@ -125,7 +131,7 @@ export const CHART_EDITS: Check[] = [
     click: { selector: LAST_X },
     script: `
       ${FORM}
-      if (!(await until(() => count() === ${STATE_WINDOWS - 1}))) return count() + " windows stand";
+      if (!(await until(() => removed(${STATE_WINDOWS - 1})))) return count() + " windows stand · " + text("#status-msg");
       return document.activeElement?.closest("#content") !== null ? "" : "the keys are in " + document.activeElement?.className;
     `,
   },
@@ -144,7 +150,7 @@ export const CHART_EDITS: Check[] = [
     input: { events: [...pressing("Delete"), ...pressing("Delete")], through: true },
     script: `
       ${FORM}
-      return (await until(() => count() === ${STATE_WINDOWS - 2})) ? "" : count() + " windows stand";
+      return (await until(() => removed(${STATE_WINDOWS - 2}))) ? "" : count() + " windows stand · " + text("#status-msg");
     `,
   },
 ];

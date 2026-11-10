@@ -167,7 +167,8 @@ export const CHART_REFRESH: Check[] = [
       // The first Delete arms the ×, and the second removes the chart.
       del();
       del();
-      if (!(await until(() => document.querySelector(".chart") === null))) return "the chart stayed";
+      if (!(await until(() => text("#status-msg").startsWith("removed ")))) return "the status bar says " + JSON.stringify(text("#status-msg"));
+      if (document.querySelector(".chart") !== null) return "the chart stayed";
       return (await until(() => document.querySelector(".ws.open .dirty") === null)) ? "" : "the workspace has a dot";
     `,
   },
