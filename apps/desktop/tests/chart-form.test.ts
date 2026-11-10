@@ -8,7 +8,7 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { BY_HAND, CHARTS_AT_MOST } from "@document";
+import { BY_HAND, CHARTS_AT_MOST, REFRESH_MINUTES_AT_MOST } from "@document";
 import type { Plot } from "@document";
 import { Refusal } from "@engine";
 import { m } from "@paraglide/messages";
@@ -65,6 +65,15 @@ const inserting = (plot: Plot, title = "", source = SALES.id, refresh = BY_HAND)
 /** The schedules under an hour the form offers, in minutes between checks. */
 const EVERY_FEW_MINUTES = [5, 15, 30];
 const QUARTER_HOUR = 15;
+/** The Refresh option that shows a number and a unit, and the minutes in an
+ * hour, one of those units. Two hours are on no other option, and a minute is
+ * the least Every… takes. */
+const EVERY = "every";
+const HOUR_MINUTES = 60;
+const TWO = 2;
+const ONE_MINUTE = 1;
+/** The open form's number of minutes or hours. */
+const count = (): HTMLInputElement => document.querySelector<HTMLInputElement>(".count")!;
 
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
@@ -253,12 +262,67 @@ test("Refresh opens by hand, offers every 5, 15 or 30 min, hour or day, and Ente
     ...EVERY_FEW_MINUTES.map((count) => m.chart_refresh_every_minutes({ count: num(count) })),
     m.chart_refresh_every_hour(),
     m.chart_refresh_every_day(),
+    m.chart_refresh_every_other(),
   ]);
   expect(select("refresh").value).toBe(String(BY_HAND));
   pick("refresh", String(QUARTER_HOUR));
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(REGION_BARS, "", SALES.id, QUARTER_HOUR), "closed"]);
+});
+
+test("Every… shows a number and a unit, and Enter sends the minutes they make", async () => {
+  const { asked } = form();
+  expect([count().hidden, select("unit").hidden]).toStrictEqual([true, true]);
+  pick("refresh", EVERY);
+  expect([count().hidden, select("unit").hidden]).toStrictEqual([false, false]);
+  const units = [m.chart_refresh_unit_minutes(), m.chart_refresh_unit_hours()];
+  expect([...select("unit").options].map((o) => o.textContent)).toStrictEqual(units);
+  count().value = String(TWO);
+  pick("unit", String(HOUR_MINUTES));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "", SALES.id, TWO * HOUR_MINUTES), "closed"]);
+});
+
+/** The least gap between a form and the window's edge, as shell/form.ts keeps it. */
+const FORM_EDGE = 8;
+
+test("a refusal that makes the form taller hangs it again inside the window", async () => {
+  const { box } = form();
+  const height = window.innerHeight / 2;
+  // The form grows past the window's foot, as a note of two lines makes it.
+  box.getBoundingClientRect = () => new DOMRect(0, window.innerHeight - height / 2, 0, height);
+  pick("refresh", EVERY);
+  press("Enter");
+  await settle();
+  expect(box.style.top).toBe(`${window.innerHeight - height - FORM_EDGE}px`);
+});
+
+test("Every… refuses none, 0, a number that is not whole and more than a week, in the note", async () => {
+  const { asked, box } = form();
+  pick("refresh", EVERY);
+  pick("unit", String(HOUR_MINUTES));
+  const week = REFRESH_MINUTES_AT_MOST / HOUR_MINUTES;
+  const range = m.chart_refresh_range({ least: num(ONE_MINUTE), most: num(week) });
+  const note = box.querySelector(".note")!;
+  for (const typed of ["", "0", "1.5", "1e2", String(week + 1)]) {
+    count().value = typed;
+    press("Enter");
+    await settle();
+    expect([note.textContent, note.className, document.activeElement]).toStrictEqual([
+      range,
+      "note err",
+      count(),
+    ]);
+  }
+  count().value = String(week);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([
+    inserting(REGION_BARS, "", SALES.id, REFRESH_MINUTES_AT_MOST),
+    "closed",
+  ]);
 });
 
 test("Esc closes it and inserts nothing", () => {

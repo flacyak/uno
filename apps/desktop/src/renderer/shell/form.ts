@@ -95,6 +95,8 @@ export class PopForm {
     this.note.textContent = text;
     this.note.title = text;
     this.note.className = isError ? "note err" : "note";
+    // A note of more lines makes the form taller, so it is hung again inside the window.
+    if (this.box.isConnected) hang(this.box, this.box.getBoundingClientRect(), EDGE);
   }
 
   /** Every focusable control outside a hidden field, in document order. */
