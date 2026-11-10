@@ -980,6 +980,7 @@ export class Shell {
           remove: (id, title) => void this.unchart(id, title),
           say: (text) => this.say(text),
           checks: (source) => this.refresher?.checks(source),
+          selected: () => this.grid?.cellRect(),
         });
         return this.layer;
       },
@@ -994,6 +995,7 @@ export class Shell {
   private gridEvents(): GridEvents {
     return {
       onSelect: () => this.paintStatus(),
+      onDrawn: () => this.layer?.aside(),
       onEdit: (row, col, value) => this.edit(row, col, value),
       onSay: (text, isError) => this.say(text, isError),
       onMode: (to) => {

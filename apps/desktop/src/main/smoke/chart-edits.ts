@@ -10,7 +10,7 @@
  */
 
 import { pressing } from "./chart-moves.ts";
-import { STATE_WINDOWS } from "./charts.ts";
+import { CLICK_AND_ARROW, STATE_WINDOWS } from "./charts.ts";
 import type { Check } from "./check.ts";
 
 /** The last window, its head and its ×. */
@@ -130,7 +130,9 @@ export const CHART_EDITS: Check[] = [
     `,
   },
   {
+    // The selection goes below the windows first, so none steps aside from the pointer.
     name: "a click on a head gives its window the keys",
+    input: { events: CLICK_AND_ARROW, through: true },
     click: { selector: LAST_HEAD },
     script: `
       ${FORM}

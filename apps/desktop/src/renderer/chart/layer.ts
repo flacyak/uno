@@ -28,11 +28,11 @@ import type { Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
 
-/** What a window asks of the shell, which the layer hands on. */
+/** What a window asks of the shell, which the layer hands on, and the selected cell's box. */
 export type Asks = Pick<
   Stage,
   "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "refresh" | "remove" | "say" | "checks"
->;
+> & { selected(): DOMRect | undefined };
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
 type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
@@ -46,6 +46,14 @@ const THINNEST_BORDER = 1;
  */
 function borderWidth(): number {
   return Math.max(Math.floor(devicePixelRatio), THINNEST_BORDER) / devicePixelRatio;
+}
+
+/** covers says whether `box` stands over `cell`, if there is one, by more than its border. */
+function covers(box: DOMRect, cell: DOMRect | undefined): boolean {
+  if (cell === undefined) return false;
+  const edge = borderWidth();
+  const across = box.left + edge < cell.right && cell.left + edge < box.right;
+  return across && box.top + edge < cell.bottom && cell.top + edge < box.bottom;
 }
 
 export class ChartLayer implements Stage {
@@ -87,6 +95,8 @@ export class ChartLayer implements Stage {
     root.addEventListener("focusin", () => {
       if (root.classList.contains("overfull")) this.draw();
     });
+    // The grid's keys coming or going decide whether a window steps aside.
+    for (const type of ["focusin", "focusout"]) content.addEventListener(type, () => this.aside());
     this.tomorrow();
   }
 
@@ -278,6 +288,17 @@ export class ChartLayer implements Stage {
     this.root.classList.toggle("tucked", tucking && charts.length > 0);
     this.root.classList.toggle("overfull", spills);
     this.root.classList.toggle("thin", thin(room));
+    this.aside();
+  }
+
+  /** aside steps aside each window over the grid's selected cell while the
+   * grid has the keys, so the cell shows through, and brings back the rest. */
+  aside(): void {
+    const keyed = this.content.contains(document.activeElement);
+    const cell = keyed ? this.asks.selected() : undefined;
+    for (const held of this.windows.values()) {
+      held.aside(covers(held.box.getBoundingClientRect(), cell));
+    }
   }
 
   /**

@@ -165,8 +165,12 @@ const TO_MIDNIGHT_MS = new Date(2026, OCTOBER, 30).getTime() - LATE;
 /** How long the machine sleeps from LATE: until five minutes to midnight. */
 const SLEPT_MS = new Date(2026, OCTOBER, 29, 23, 55).getTime() - LATE;
 
+/** Where the grid's selected cell stands on the screen, as the layer reads it. */
+let cell: DOMRect | undefined;
+const selected = (): DOMRect | undefined => cell;
+
 /** Everything the layer asks of the shell. */
-const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say, checks };
+const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say, checks, selected };
 
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {
@@ -341,6 +345,7 @@ beforeEach(() => {
   grid.className = "grid-scroll";
   content().append(grid);
   vi.stubGlobal("ResizeObserver", HeldObserver);
+  cell = undefined;
   leave.mockClear();
   wheelBy.mockClear();
   repoint.mockClear();
@@ -1104,6 +1109,56 @@ test("a button in a window raises it as well", () => {
   over.focus();
   under.querySelector<HTMLElement>(".round-x")!.focus();
   expect(Number(under.style.zIndex)).toBeGreaterThan(Number(over.style.zIndex));
+});
+
+/** Says each window stands on the screen where it is drawn, as the room's box starts at 0, 0. */
+function standing(): void {
+  for (const box of windows()) {
+    const { x, y, width, height } = drawn(box);
+    vi.spyOn(box, "getBoundingClientRect").mockReturnValue(new DOMRect(x, y, width, height));
+  }
+}
+
+/** A cell a row high and wide at the top left of `box`, or `by` px left of there. */
+const cellAt = (box: HTMLElement, by = 0): DOMRect =>
+  new DOMRect(drawn(box).x - by, drawn(box).y, HEAD, HEAD);
+
+/** The windows stepped aside. */
+const aside = (): HTMLElement[] => windows().filter((box) => box.classList.contains("aside"));
+
+test("only a window over the selected cell steps aside, and it comes back as the selection leaves for the cell under its border", () => {
+  const { layer } = shown(FLUSH, INSIDE);
+  standing();
+  const inside = windows()[1]!;
+  cell = cellAt(inside);
+  content().focus();
+  expect(aside()).toStrictEqual([inside]);
+  cell = cellAt(inside, HEAD - BORDER);
+  layer.draw();
+  expect(aside()).toStrictEqual([]);
+});
+
+test("a window steps aside only while the grid has the keys, and comes back as F6 takes them", () => {
+  const { layer } = shown(INSIDE);
+  standing();
+  cell = cellAt(first());
+  layer.aside();
+  expect(aside()).toStrictEqual([]);
+  content().focus();
+  expect(aside()).toStrictEqual([first()]);
+  expect(layer.step(1)).toBe(true);
+  expect(aside()).toStrictEqual([]);
+});
+
+test("a window a pointer holds stays held when the selection reaches it", () => {
+  shown(INSIDE);
+  standing();
+  cell = cellAt(first());
+  carry(head());
+  content().focus();
+  expect(aside()).toStrictEqual([]);
+  pointer("pointermove", head(), STEP.x, 0);
+  expect(drawn(first())).toStrictEqual(dragged(placed(MOVED, ROOM), STEP.x, 0, ROOM));
 });
 
 test("a wheel on any part of a window goes to the sheet, and leaves the window and the keys", () => {
