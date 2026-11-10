@@ -70,13 +70,20 @@ export class Engine {
   private readonly sources = new Map<string, SourceHandle>();
   /** Set once closed or the connection is lost. Every later request rejects with it. */
   private gone: Error | undefined;
+  /** Set once the far end closed first. */
+  private closedUnder = false;
 
   constructor(port: Port<Reply, Request>) {
     this.port = port;
     port.listen(
       (msg) => this.receive(msg),
-      () => this.lost(),
+      () => this.farClosed(),
     );
+  }
+
+  /** Whether the connection was lost under this engine, so nothing it opened is held any more. */
+  get lost(): boolean {
+    return this.closedUnder;
   }
 
   /**
@@ -229,15 +236,16 @@ export class Engine {
   }
 
   /**
-   * lost runs when the far end closes first. It rejects every pending
+   * farClosed runs when the far end closes first. It rejects every pending
    * request and reports the loss once through `onError`.
    */
-  private lost(): void {
+  private farClosed(): void {
     if (this.gone !== undefined) return;
     const said: Said = {
       t: 'text',
       text: 'the connection to the engine closed',
     };
+    this.closedUnder = true;
     this.gone = new Refusal(said);
     this.port.close();
     this.refuse(this.gone);

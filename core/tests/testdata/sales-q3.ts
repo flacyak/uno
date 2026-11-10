@@ -3,6 +3,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // date,region,rep,channel,units,revenue
@@ -23,9 +24,12 @@ export const LAST_ROW = ROWS - 1;
 export const COMMAS_LEFT = 3149;
 
 // Path and bytes of the file. This module is also loaded by the stand-in S3
-// under plain node, so it must stay free of TypeScript-only syntax.
-export const FIXTURE = fileURLToPath(
-  new URL('./sales-q3.csv', import.meta.url),
+// under plain node, so it must stay free of TypeScript-only syntax, and by
+// a page's test under happy-dom, whose URL resolves a relative address
+// against the page, so the path is joined to this file's own.
+export const FIXTURE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'sales-q3.csv',
 );
 export const bytes = new Uint8Array(readFileSync(FIXTURE));
 

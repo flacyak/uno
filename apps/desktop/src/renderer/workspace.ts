@@ -545,6 +545,23 @@ export class Workspace {
     return this.showing;
   }
 
+  /**
+   * Takes the view of `lost`, the workspace this one opens again, where this
+   * one holds the same: the showing tab, each tab's cell and each window's
+   * place. Returns whether it shows the same tab.
+   */
+  keepView(lost: Workspace): boolean {
+    for (const tab of this.tabs) {
+      const was = lost.tabs.find((t) => t.id === tab.id);
+      if (was !== undefined) tab.cell = was.cell;
+    }
+    const ids = new Set(this.charts.all.map((chart) => chart.id));
+    for (const { id, place } of lost.charts.places) if (ids.has(id)) this.charts.move(id, place);
+    const showing = this.tabs.find((t) => t.id === lost.active.id);
+    if (showing !== undefined) this.showing = showing;
+    return showing !== undefined;
+  }
+
   /** Makes a tab the showing one, if it belongs to this workspace. */
   show(tab: Tab): void {
     if (this.tabs.includes(tab)) this.showing = tab;
