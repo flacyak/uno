@@ -327,6 +327,22 @@ export class View {
     return { left, top: Math.round((cell?.bottom ?? 0) - RULE_PX) };
   }
 
+  /** Gives the part of cell `row`, `col` the sheet shows on the screen: under
+   * its column's header cell by the rows above it, less how far the sheet has
+   * scrolled, inside the scroller and below the header, or undefined for none. */
+  cellRect(row: number, col: number): DOMRect | undefined {
+    const cell = this.headCell(col);
+    if (cell === undefined) return undefined;
+    const shown = this.scroller.getBoundingClientRect();
+    const near = cell.bottom + row * this.rowHeight - this.top;
+    const top = Math.max(near, cell.bottom);
+    const bottom = Math.min(near + this.rowHeight, shown.bottom);
+    const left = Math.max(cell.left, shown.left);
+    const right = Math.min(cell.right, shown.right);
+    if (bottom <= top || right <= left) return undefined;
+    return new DOMRect(left, top, right - left, bottom - top);
+  }
+
   /** Gives the box of column `col`'s header cell. */
   private headCell(col: number): DOMRect | undefined {
     return this.head.firstElementChild?.children[col + 1]?.getBoundingClientRect();

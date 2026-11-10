@@ -163,6 +163,11 @@ export class Grid {
     return this.view.underHead(col);
   }
 
+  /** Gives the part of the selected cell the sheet shows on the screen. */
+  cellRect(): DOMRect | undefined {
+    return this.view.cellRect(this.selRow, this.selCol);
+  }
+
   /** Scrolls the selected cell into view. */
   reveal(): void {
     this.view.scrollIntoView(this.selRow, this.selCol);
