@@ -206,6 +206,15 @@ export class Tab {
     this.savedEdits = this.edits.slice();
   }
 
+  /** The cell edits in the log since the last save. Column edits are row-free,
+   * so they are not counted. */
+  get unsavedCells(): number {
+    const saved = this.savedEdits;
+    const first = this.edits.findIndex((e, i) => i >= saved.length || !editEquals(e, saved[i]!));
+    if (first < 0) return 0;
+    return this.edits.slice(first).filter((e) => e.op === Op.Set || e.op === Op.Note).length;
+  }
+
   /** Notes where the grid stands after moving to this tab's cell. */
   shownAt(at: Cell): void {
     this.short = sameCell(at, this.cell) ? undefined : at;
@@ -482,7 +491,11 @@ export class Workspace {
   /**
    * Checks a source of one file for its charts' schedule with one stat, and
    * reads the file again only when it changed, with Reload's ref so the two
-   * join in flight. One still indexing, or with no file of its own, waits.
+   * join in flight. Cell edits no save has recorded hold a changed file for a
+   * refresh by hand, since a rewritten file can put their rows elsewhere.
+   * Saved edits replay over it as they do on Reload: the hold is for work the
+   * person has not kept yet. One still indexing, waiting on its bucket, which
+   * it asks nothing, or with no file of its own, waits.
    */
   async refresh(id: string): Promise<Refreshed> {
     const tab = this.tabs.find((t) => t.id === id);
@@ -490,8 +503,11 @@ export class Workspace {
     if (tab === undefined || link === undefined || link.path === "") {
       return { t: "waiting", why: "nothing" };
     }
+    if (tab.state === "unconnected") return { t: "waiting", why: "unconnected" };
     if (!tab.missing && !tab.source.progress.complete) return { t: "waiting", why: "indexing" };
     if (unchanged(link, tab.bytes, await this.engine.stat(link.path))) return { t: "same" };
+    const edits = tab.unsavedCells;
+    if (edits > 0) return { t: "held", edits };
     await this.relink(tab, { name: baseOf(link.path), path: link.path });
     return { t: "read" };
   }
