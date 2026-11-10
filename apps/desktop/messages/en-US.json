@@ -515,6 +515,11 @@
     }
   ],
   "chart_partial": "partial · {read} read",
+  "chart_every_minutes": "every {count} min",
+  "chart_every_hours": "every {count} h",
+  "chart_every_hour": "every hour",
+  "chart_every_day": "every day",
+  "chart_checked": "checked {time}",
   "chart_reading": "reading {name}…",
   "chart_no_values_yet": "no values in {columns} yet",
   "chart_source_missing": "{name} is missing",
