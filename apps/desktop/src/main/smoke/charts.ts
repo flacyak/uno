@@ -455,6 +455,36 @@ export const CHARTS: Check[] = [
     `,
   },
   {
+    // The cells are picked by script, as the zoomed page's column widths put them,
+    // and the keys and the sheet's scroll go back to where the reshapes left them.
+    name: "the grid's selection under a tucked head fades the stack's shadow with it, until the selection leaves",
+    script: `
+      ${GEOMETRY}
+      const grid = document.querySelector("#content");
+      const sheet = document.querySelector(".grid-scroll");
+      const scrolled = [sheet.scrollLeft, sheet.scrollTop];
+      grid.focus();
+      const [top] = windows();
+      const over = (td) => {
+        const at = td.getBoundingClientRect();
+        return within({ left: at.left, right: at.right, top: (at.top + at.bottom) / 2, bottom: (at.top + at.bottom) / 2 }, top);
+      };
+      const was = document.querySelector("td.sel");
+      const under = [...document.querySelectorAll("tbody td:not(.gutter)")].find(over);
+      if (was === null || under === undefined) return "no cell stands under the head at " + edges(top);
+      const charts = document.querySelector("#charts");
+      const stack = () => Number(getComputedStyle(charts, "::before").opacity);
+      under.click();
+      const faded = await until(() => stack() === Number(getComputedStyle(charts).getPropertyValue("--ghost-opacity")));
+      was.click();
+      const back = await until(() => stack() === 1);
+      grid.blur();
+      sheet.scrollTo(...scrolled);
+      if (!faded) return "the stack's shadow stands at opacity " + stack() + " over the selection";
+      return back ? "" : "the stack's shadow stays at opacity " + stack();
+    `,
+  },
+  {
     name: "with room again, each window goes back to its place",
     window: {},
     script: `
