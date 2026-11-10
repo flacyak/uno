@@ -32,8 +32,8 @@ export interface Failed {
   error: unknown;
 }
 
-/** When a source's last check ended, or its read by hand began, what came of
- * it, and when the next check is due, while one is. */
+/** When a source's last check or read by hand ended, what came of it, and
+ * when the next check is due, while one is. */
 export interface Checks {
   at: number;
   found: Refreshed | Failed;
@@ -63,7 +63,8 @@ export class Refresher {
   private readonly run: (source: string) => Promise<Refreshed>;
   /** The shortest interval among each scheduled source's charts. */
   private readonly every = new Map<string, number>();
-  /** When each source's last check ended, in ms since 1970. One not here is due now. */
+  /** When each source's last check ended, or its read by hand began or ended,
+   * in ms since 1970. One not here is due now. */
   private readonly checked = new Map<string, number>();
   /** The sources with a check out. */
   private readonly running = new Set<string>();
@@ -71,8 +72,8 @@ export class Refresher {
   private readonly waiting = new Set<string>();
   /** The checks of each source that failed in a row. */
   private readonly failures = new Map<string, number>();
-  /** What each source's last check found, or how it failed. */
-  private readonly found = new Map<string, Refreshed | Failed>();
+  /** What each source's last check or read by hand found, or how it failed, and when. */
+  private readonly found = new Map<string, Pick<Checks, "at" | "found">>();
   /** Hears which source's checks changed. */
   private readonly told: (source: string) => void;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -87,12 +88,13 @@ export class Refresher {
   /** Says when `source` was last checked, what came of it and when the next
    * check is due, or nothing where it has not been checked. */
   checks(source: string): Checks | undefined {
+    const last = this.found.get(source);
+    if (last === undefined) return undefined;
     const at = this.checked.get(source);
-    const found = this.found.get(source);
-    if (at === undefined || found === undefined) return undefined;
     const everyMs = this.every.get(source);
     const due = everyMs !== undefined && !this.running.has(source) && !this.waiting.has(source);
-    return { at, found, next: due ? at + this.wait(source, everyMs) : undefined };
+    const next = due && at !== undefined ? at + this.wait(source, everyMs) : undefined;
+    return { ...last, next };
   }
 
   /** Takes the charts' schedules, after every change to the charts. */
@@ -122,7 +124,17 @@ export class Refresher {
     this.failures.delete(source);
     this.waiting.delete(source);
     this.checked.set(source, Date.now());
-    this.found.set(source, { t: "read" });
+    this.tick();
+    this.told(source);
+  }
+
+  /** Says what a read by hand of a source found once it ended, or how it
+   * failed, which puts its next check an interval from then, backed off for a
+   * failure as a check's is. */
+  readEnded(source: string, found: Refreshed | Failed): void {
+    if (found.t === "failed") this.failures.set(source, (this.failures.get(source) ?? 0) + 1);
+    this.checked.set(source, Date.now());
+    this.found.set(source, { at: Date.now(), found });
     this.tick();
     this.told(source);
   }
@@ -169,8 +181,7 @@ export class Refresher {
       this.failures.set(source, (this.failures.get(source) ?? 0) + 1);
       if (error instanceof NoAnswer) {
         // A check given up on stays out until it ends, so no second one starts beside it.
-        this.checked.set(source, Date.now());
-        this.found.set(source, found);
+        this.found.set(source, { at: Date.now(), found });
         this.told(source);
         found = await run.catch((late: unknown): Failed => ({ t: "failed", error: late }));
       }
@@ -178,7 +189,7 @@ export class Refresher {
     if (found.t === "waiting") this.waiting.add(source);
     this.running.delete(source);
     this.checked.set(source, Date.now());
-    this.found.set(source, found);
+    this.found.set(source, { at: Date.now(), found });
     this.tick();
     this.told(source);
   }

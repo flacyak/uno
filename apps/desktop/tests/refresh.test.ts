@@ -8,7 +8,7 @@
  * until a refresh by hand, which also ends a wait on the source's bucket.
  * Each source's checks say when the last ended, what it found and when the
  * next is due, and one with no answer in time says it failed until its answer
- * comes.
+ * comes, and a read by hand says what came of it once it ends.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -209,14 +209,17 @@ test("a failed check says what failed it, and its next try waits out the backoff
   expect(refresher.checks("a")).toStrictEqual({ at, found, next: at + BACKED_OFF * EVERY_MS });
 });
 
-test("a read by hand of a source no chart schedules says it read, with no next check", () => {
+test("a read by hand of a source no chart schedules says what came of it once it ends, with no next check", async () => {
   const told: string[] = [];
   refresher = new Refresher(
     () => Promise.resolve(SAME),
     (source) => told.push(source),
   );
   refresher.refreshed("a");
-  const found = { t: "read" };
+  expect(refresher.checks("a"), "nothing found while it reads").toBeUndefined();
+  await vi.advanceTimersByTimeAsync(EVERY_MS);
+  const found = { t: "failed", error: new Error("refused") } as const;
+  refresher.readEnded("a", found);
   expect(refresher.checks("a")).toStrictEqual({ at: Date.now(), found, next: undefined });
-  expect(told).toStrictEqual(["a"]);
+  expect(told).toStrictEqual(["a", "a"]);
 });

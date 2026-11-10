@@ -1263,7 +1263,8 @@ export class Shell {
    * refresh reads a tab's source again by hand: Reload for one file, or an
    * append of the files its folder now holds after its last part. A tab
    * waiting on its bucket opens the connect form, as its ! mark does, and a
-   * folder that cannot be listed says why. Its schedule starts over.
+   * folder that cannot be listed says why. Its schedule starts over, and its
+   * charts say what the read came to once it ends.
    */
   private async refresh(tab: Tab): Promise<void> {
     if (tab.state === "unconnected") return this.repoint(tab);
@@ -1273,16 +1274,18 @@ export class Shell {
     try {
       await this.sources.askGrownOf(tab);
     } catch (err) {
-      if (this.workspace === w) this.say(message(err), true);
-      return;
+      if (this.workspace !== w) return;
+      this.say(message(err), true);
+      return this.refresher?.readEnded(tab.id, { t: "failed", error: err });
     }
     // A refresh whose workspace another open replaced ends quietly, and an
     // append answered while the folder was listed has replaced the tab.
     const now = w?.sources.find((t) => t.id === tab.id);
     if (this.workspace !== w || now === undefined) return;
     const grown = this.sources.grown(now);
-    if (grown === undefined) this.say(m.refresh_no_new_files({ name: now.name }));
-    else await this.append(now, grown.files);
+    if (grown !== undefined) return this.append(now, grown.files);
+    this.say(m.refresh_no_new_files({ name: now.name }));
+    this.refresher?.readEnded(now.id, { t: "same" });
   }
 
   /**
@@ -1334,6 +1337,7 @@ export class Shell {
     try {
       const fresh = await w.relink(tab, ref);
       if (this.workspace !== w) return;
+      this.refresher?.readEnded(tab.id, { t: "read" });
 
       // A tab still missing its file says why on its own line, so the message
       // here is empty.
@@ -1350,6 +1354,7 @@ export class Shell {
       // A relink whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
       this.say(message(err), true);
+      this.refresher?.readEnded(tab.id, { t: "failed", error: err });
     }
   }
 
@@ -1375,12 +1380,14 @@ export class Shell {
     try {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;
+      this.refresher?.readEnded(tab.id, { t: "read" });
       this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
       this.shown(w.active === fresh, true);
     } catch (err) {
       // An append whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
       this.say(message(err), true);
+      this.refresher?.readEnded(tab.id, { t: "failed", error: err });
     }
     // Ask the folders again: what was offered is now appended or refused.
     void this.sources.askGrown();
