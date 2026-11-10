@@ -1,6 +1,7 @@
 /**
  * @fileoverview A .uno of the sales export and a second one beside it, holding
- * charts, for the tests of a workspace's charts.
+ * charts, and one carrying the sales export inside it, for the tests of a
+ * workspace's charts.
  */
 
 import { basename } from "node:path";
@@ -78,15 +79,53 @@ export const holding = (rows: number): number =>
 /** A short plot's rows: a bar in each but the last, which holds the line of the rest. */
 export const SHORT_ROWS = 3;
 
+/** What a .uno holds of each export's shape and selected cell. */
+const HELD = { rows: ROWS, cols: COLS, state: { active: { row: 0, col: 0 } } };
+
+/** The bytes of a .uno of the sales export alone, `raw` carried inside it,
+ * holding `charts`. */
+export function carriedUnoOf(charts: Chart[], raw: Uint8Array): Uint8Array {
+  return writeDocument({
+    manifest: newManifest(),
+    sources: [{ ...HELD, id: SALES, name: basename(FIXTURE), raw }],
+    active: SALES,
+    log: [],
+    charts,
+    extra: new Map(),
+    at: "",
+  });
+}
+
+/** The bytes of a .uno of the sales export read as one from `parts`, holding
+ * `charts`. */
+export function partsUnoOf(charts: Chart[], parts: readonly string[]): Uint8Array {
+  const held = parts.map((path) => ({
+    name: basename(path),
+    path,
+    bytes: 0,
+    skip: 0,
+    unterminated: false,
+  }));
+  const sales = { ...HELD, id: SALES, name: SALES, parts: held, header: "first" as const };
+  return writeDocument({
+    manifest: newManifest(),
+    sources: [sales],
+    active: SALES,
+    log: [],
+    charts,
+    extra: new Map(),
+    at: "",
+  });
+}
+
 /** The bytes of a .uno of both exports, holding `charts` and carrying
  * `carried`, with the sales export at `sales`. */
 export function unoOf(charts: Chart[], carried: CarriedChart[] = [], sales = FIXTURE): Uint8Array {
-  const held = { rows: ROWS, cols: COLS, state: { active: { row: 0, col: 0 } } };
   return writeDocument({
     manifest: newManifest(),
     sources: [
-      { ...held, id: SALES, name: basename(FIXTURE), path: sales },
-      { ...held, id: ADS, name: basename(SECOND), path: SECOND },
+      { ...HELD, id: SALES, name: basename(FIXTURE), path: sales },
+      { ...HELD, id: ADS, name: basename(SECOND), path: SECOND },
     ],
     active: SALES,
     log: [],

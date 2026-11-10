@@ -543,6 +543,8 @@
   "chart_table_share": "proporção",
   "chart_table_aria": "Tabela",
   "chart_refresh_aria": "Atualizar",
+  "chart_refresh_carried": "{name} vai dentro do espaço de trabalho, então não há nada para ler de novo",
+  "chart_refresh_lost": "os arquivos de {name} não foram encontrados ao abrir o espaço de trabalho, então não há nada para ler de novo",
   "refused_only_source": "{name} é a única fonte aqui, e um espaço de trabalho precisa de uma",
   "refused_append_to_absent": "{name} não tem um arquivo por trás, então nada pode ser anexado a ele",
   "refused_append_to_one_file": "{name} é um só arquivo · arquivos só são anexados a vários lidos como um",

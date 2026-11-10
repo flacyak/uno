@@ -35,6 +35,11 @@ export interface SourceState {
   name: string;
   /** The bucket the source waits on, while it is unconnected. */
   bucket?: string;
+  /** Whether the source's file is carried inside the workspace, with none to read again. */
+  carried?: boolean;
+  /** Whether the source's files were not found when the workspace opened, with
+   * no path to read again. */
+  lost?: boolean;
 }
 
 /** What a chart's window draws from. */
