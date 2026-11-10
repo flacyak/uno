@@ -14,11 +14,14 @@
  * `--dialog-radius` and `--dialog-shadow` are the dialogs' (form.css,
  * settings.css). It clips no closer than `--shadow-reach`, that shadow's 10 px
  * offset plus its 28 px blur, so a window's shadow falls over the scrollbars and
- * the rules around it in place of stopping in a hard line. */
+ * the rules around it in place of stopping in a hard line. `--ghost-opacity` is
+ * how faint a window over the grid's selected cell stands, the design's
+ * GHOST_OPACITY, and the tucked stack's shadow reads it too. */
 .charts {
   --dialog-radius: 8px;
   --dialog-shadow: 0 10px 28px rgb(0 0 0 / 0.18);
   --shadow-reach: 38px;
+  --ghost-opacity: 0.2;
   position: absolute;
   left: calc(-1 * var(--window-border));
   right: var(--bar-right, var(--bar));
@@ -85,7 +88,6 @@
 /* A window over the grid's selected cell, from layer.ts, while the grid has the
  * keys: faint, at once, so the cell shows through it and takes the pointer. */
 .chart.aside {
-  --ghost-opacity: 0.2;
   opacity: var(--ghost-opacity);
   pointer-events: none;
 }
@@ -100,6 +102,11 @@
   height: var(--stack-height);
   border-radius: var(--dialog-radius);
   box-shadow: var(--dialog-shadow);
+}
+
+/* A tucked head stepping aside fades the stack's shadow with it. */
+.charts.tucked:has(> .chart.aside)::before {
+  opacity: var(--ghost-opacity);
 }
 
 /* A tucked window has no zones, so it clips inside its border, and its head stays
