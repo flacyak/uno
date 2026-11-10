@@ -51,6 +51,11 @@ export interface Host {
 
   /** Closes the window. The app quits with its last window. */
   quit(): void;
+
+  /** Returns the saved copy of the workspace saved at `path`, for a chart's
+   * schedule to open again once its engine is lost, or undefined where none is
+   * kept. Absent where an engine lasts as long as its window, as on the desktop. */
+  reopen?(path: string): Promise<SourceRef | undefined>;
 }
 
 /**

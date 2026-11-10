@@ -99,6 +99,8 @@ export class Shell {
   private layerLoading: Promise<ChartLayer> | undefined;
   /** The open workspace's chart schedules. */
   private refresher: Refresher | undefined;
+  /** The open of a lost workspace's saved copy, while one is out. */
+  private reopening: Promise<void> | undefined;
   /**
    * Counts opens, so the latest wins over an earlier one that finishes later.
    */
@@ -915,7 +917,7 @@ export class Shell {
       this.workspace = w;
       w.onTally = (chart) => this.layer?.tallied(chart);
       const refresher = new Refresher(
-        (id) => this.scheduled(w, id),
+        (id) => this.scheduled(w, id).catch((err: unknown) => this.reopened(w, err)),
         (id) => {
           if (this.workspace === w) this.layer?.checked(id);
         },
@@ -1307,6 +1309,27 @@ export class Shell {
     // A tab whose file was missing showed no rows, so it comes back on its own cell.
     if (done.t === "read" && this.workspace === w) this.shown(w.active.id === id, !tab?.missing);
     return done;
+  }
+
+  /**
+   * reopened opens again the saved copy of a workspace whose engine was lost,
+   * for a scheduled check that failed on the loss: a new engine reads its
+   * sources as they are now, so its charts draw the newer data. Its sources'
+   * checks share one open. Unsaved edits hold it, and a host that keeps no
+   * copy leaves it; either way the check fails with what failed it.
+   */
+  private async reopened(w: Workspace, err: unknown): Promise<Refreshed> {
+    if (this.workspace !== w || !w.engine.lost || w.dirty || this.host.reopen === undefined) {
+      throw err;
+    }
+    this.reopening ??= this.host
+      .reopen(w.path)
+      .then((ref) => (ref === undefined ? undefined : this.load(ref, w.path)))
+      .finally(() => (this.reopening = undefined));
+    await this.reopening;
+    // An open that failed has said why, and leaves the lost workspace open.
+    if (this.workspace === w) throw err;
+    return { t: "read" };
   }
 
   /**
