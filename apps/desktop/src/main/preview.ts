@@ -335,6 +335,17 @@ const FOCUS = { cell: 400, first: 3_200, step: 1_600, hold: 1_800 };
 const FOCUS_FRONT = FOCUS.first + FOCUS_KEYS.length * FOCUS.step;
 const FOCUS_END = FOCUS_FRONT + FOCUS.hold;
 
+/** The arrows the aside story presses from rep under the top window, and back out of it. */
+const ASIDE_IN = ["Right", "Right", "Right", "Down", "Down"];
+const ASIDE_OUT = ["Left", "Left"];
+
+/**
+ * The aside story's beats: a cell of rep pressed, the first arrow in once the
+ * pointer rests, each after it a step later, the press through the faded
+ * window, the first arrow out once the pointer rests again, and its end.
+ */
+const ASIDE = { cell: 400, first: 3_200, step: 1_000, through: 8_400, out: 11_200, end: 14_000 };
+
 /** How long a Down holds each kind, and how long the last holds before Enter. */
 const KIND_STEP_MS = 1_000;
 const KIND_HOLD_MS = 1_000;
@@ -826,6 +837,7 @@ const STORIES: Record<string, Story> = {
   schedule: { end: SCHEDULE.end, script: playSchedule },
   reread: { end: REREAD.end, script: playReread },
   focus: { end: FOCUS_END, script: playFocus },
+  aside: { end: ASIDE.end, script: playAside },
   chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
   command: {
     end: KEYED.end,
@@ -1112,6 +1124,32 @@ async function playFocus(win: BrowserWindow, at: Clock): Promise<void> {
   await at(FOCUS_FRONT);
   press(win, "F", ["control", "shift"]);
   await at(FOCUS_END);
+}
+
+/**
+ * playAside performs the aside story: a cell of rep pressed, then Right into
+ * channel, units and revenue under the top window, which fades, and Down twice
+ * under it, a press through it on a cell of units, then Left into channel and
+ * out to rep, which brings the window back.
+ */
+async function playAside(win: BrowserWindow, at: Clock): Promise<void> {
+  const pointer = await glider(win);
+  await at(ASIDE.cell);
+  // The gutter comes first, so rep is a row's fourth cell, and units its sixth.
+  await pointer.pressOn("tbody tr:nth-child(4) td:nth-child(4)");
+  await pointer.glideTo(KEYED_REST);
+  for (const [i, key] of ASIDE_IN.entries()) {
+    await at(ASIDE.first + i * ASIDE.step);
+    press(win, key);
+  }
+  await at(ASIDE.through);
+  await pointer.pressOn("tbody tr:nth-child(3) td:nth-child(6)");
+  await pointer.glideTo(KEYED_REST);
+  for (const [i, key] of ASIDE_OUT.entries()) {
+    await at(ASIDE.out + i * ASIDE.step);
+    press(win, key);
+  }
+  await at(ASIDE.end);
 }
 
 /**
