@@ -50,7 +50,7 @@ export interface ChartAsks {
  * of it, or a chart over the active source, to change it. */
 export type Opening =
   | { t: "insert"; col: number }
-  | { t: "change"; chart: Pick<Chart, "plot" | "title"> };
+  | { t: "change"; chart: Pick<Chart, "plot" | "title" | "refresh"> };
 
 /** The kinds of chart, in the order the form offers them. */
 const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
@@ -175,7 +175,7 @@ export class ChartForm {
     this.count.maxLength = String(EVERY_AT_MOST).length;
     this.count.autocomplete = "off";
     this.unit.append(...UNITS.map(([minutes, words]) => option(words(), String(minutes))));
-    this.reveal();
+    this.every(opening.t === "change" ? opening.chart.refresh : BY_HAND);
     const schedule = el("span", "schedule");
     schedule.append(this.refresh, this.count, this.unit);
 
@@ -185,7 +185,7 @@ export class ChartForm {
       ...this.grouped,
       ...this.paired,
       field(m.chart_form_title_field(), this.title),
-      ...(changes ? [] : [field(m.chart_form_refresh(), schedule)]),
+      field(m.chart_form_refresh(), schedule),
     ];
     this.form.open(fields, place);
     this.form.say(changes ? m.chart_form_hint_change() : m.chart_form_hint(), false);
@@ -296,6 +296,19 @@ export class ChartForm {
   /** name shows the title the chart makes, which an empty title keeps. */
   private name(): void {
     this.title.placeholder = madeTitle(this.plot());
+  }
+
+  /** every chooses the Refresh option of `minutes`, or else Every… with the
+   * hours they make where those are whole, or the minutes. */
+  private every(minutes: number): void {
+    const offered = SCHEDULES.some(([each]) => each === minutes);
+    this.refresh.value = offered ? String(minutes) : EVERY;
+    if (!offered) {
+      const unit = minutes % HOUR_MINUTES === 0 ? HOUR_MINUTES : ONE_MINUTE;
+      this.count.value = String(minutes / unit);
+      this.unit.value = String(unit);
+    }
+    this.reveal();
   }
 
   /** reveal shows Every…'s number and unit while it is chosen. */

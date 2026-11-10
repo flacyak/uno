@@ -632,8 +632,8 @@ export class Shell {
     const opening: Opening = { t: "change", chart };
     this.closePopups();
     this.chartForm = new ChartForm(place, w.sources, tab, opening, {
-      send: (source, plot, title) =>
-        this.told(w, this.drawn(w.charts.change(id, { source: source.id, plot, title }))),
+      send: (source, plot, title, refresh) =>
+        this.told(w, this.drawn(w.charts.change(id, { source: source.id, plot, title, refresh }))),
       closed: () => {
         this.chartForm = undefined;
         this.layer?.focus(id);

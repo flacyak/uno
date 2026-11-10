@@ -294,6 +294,28 @@ const KINDS = [
 const CHANGE = { edit: 800, by: 3_200, apply: 4_600, arm: 7_400, remove: 9_800, end: 12_000 };
 
 /**
+ * The schedule story's beats: the edit button pressed on a window of region's
+ * bars, Tab to the form's checks, Down to Every 15 min and on to Every…, a
+ * number of minutes typed, Enter to apply it, and the form opened on it again.
+ */
+const SCHEDULE = {
+  edit: 800,
+  checks: 2_800,
+  quarter: 4_000,
+  every: 7_000,
+  count: 10_200,
+  apply: 12_400,
+  again: 13_600,
+  end: 16_400,
+};
+/** The Tabs from By to checks, past Sum of and the title, the Downs from By
+ * hand to Every 15 min and on to Every…, and the minutes typed in its number. */
+const CHECKS_TABS = 3;
+const QUARTER_DOWNS = 2;
+const EVERY_DOWNS = 4;
+const EVERY_MINUTES = "10";
+
+/**
  * The reread story's beats: the export on disk gains North's rows again, the
  * head's refresh button reads it, the export gains South's rows, and r in the
  * window reads it again.
@@ -801,6 +823,7 @@ const STORIES: Record<string, Story> = {
   insert: { end: INSERT.end, script: playInsert },
   kinds: { end: KINDS_END, script: playKinds },
   change: { end: CHANGE.end, script: playChange },
+  schedule: { end: SCHEDULE.end, script: playSchedule },
   reread: { end: REREAD.end, script: playReread },
   focus: { end: FOCUS_END, script: playFocus },
   chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
@@ -1020,6 +1043,35 @@ async function playChange(win: BrowserWindow, at: Clock): Promise<void> {
   await at(CHANGE.remove);
   await pressOn(".chart .chart-close");
   await at(CHANGE.end);
+}
+
+/**
+ * playSchedule performs the schedule story: the chart form opened on a window
+ * from its edit button, checks stepped through Every 15 min to Every…, a
+ * number of minutes typed and applied, and the form opened on it again.
+ */
+async function playSchedule(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(SCHEDULE.edit);
+  await pressOn(".chart .chart-edit");
+  // The first form waits for its module, so the keys wait for the form.
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  // The pointer rests on the label, clear of what the keys change.
+  await glideTo(".chart-form .field:has(.schedule) .what");
+  await at(SCHEDULE.checks);
+  await presses(win, "Tab", CHECKS_TABS, KIND_STEP_MS / CHECKS_TABS);
+  await at(SCHEDULE.quarter);
+  await presses(win, "Down", QUARTER_DOWNS, KIND_STEP_MS);
+  await at(SCHEDULE.every);
+  await presses(win, "Down", EVERY_DOWNS, KIND_STEP_MS);
+  await at(SCHEDULE.count);
+  press(win, "Tab");
+  await type(win, EVERY_MINUTES);
+  await at(SCHEDULE.apply);
+  press(win, "Return");
+  await at(SCHEDULE.again);
+  await pressOn(".chart .chart-edit");
+  await at(SCHEDULE.end);
 }
 
 /**

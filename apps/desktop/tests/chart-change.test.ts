@@ -3,7 +3,8 @@
  * and engine: the edit button opens the chart form on the chart, Apply on
  * another column refolds and redraws it, and a new title reads no bytes. Enter,
  * F2 and a double-click on the head open the form too, and Ctrl+Z on a chart
- * undoes no edit in the grid.
+ * undoes no edit in the grid. A schedule applied from the form is planned at
+ * once.
  *
  * @vitest-environment happy-dom
  */
@@ -19,8 +20,10 @@ import { REGION, REP, UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import type { Provider } from "@plugin";
 import { madeTitle } from "@renderer/chart/window";
+import { Refresher } from "@renderer/refresh";
 import type { Shell } from "@renderer/shell/shell";
 import { message } from "@renderer/shell/util";
+import { MINUTE_MS } from "@renderer/timing";
 import { diskProvider } from "@store/node";
 import { BARS, SALES, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, bootShell } from "./smoke/dom-harness.ts";
@@ -32,6 +35,9 @@ const REPS = ["Ada Okafor", "Ben Iyer", "Cai Moreau", "Dara Nkemi"];
 
 /** A row of the sales export, whose units an edit changes. */
 const EDITED_ROW = 5;
+
+/** The schedule the form applies: a check every 15 minutes. */
+const QUARTER_HOUR = 15;
 
 const page = domPage();
 let shell: Shell;
@@ -154,4 +160,15 @@ test("Ctrl+Z on a chart undoes no edit in the grid, and says what it would undo"
   expect(document.querySelector("#status-msg")!.textContent).toBe(m.chart_undo_hint());
   await page.settle(1);
   expect(await page.until(edited)).toBe(true);
+});
+
+test("a schedule applied from the form checks the chart's source on it from then on", async () => {
+  const plan = vi.spyOn(Refresher.prototype, "plan");
+  const by = await edit();
+  const refresh = document.querySelector<HTMLSelectElement>('.chart-form select[name="refresh"]')!;
+  refresh.value = String(QUARTER_HOUR);
+  await apply(by);
+  expect(shell.charts?.all.map((c) => c.refresh)).toStrictEqual([QUARTER_HOUR]);
+  expect(plan).toHaveBeenLastCalledWith([{ source: SALES, everyMs: QUARTER_HOUR * MINUTE_MS }]);
+  plan.mockRestore();
 });
