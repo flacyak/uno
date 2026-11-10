@@ -2,7 +2,8 @@
  * @fileoverview Checks that a source in a bucket knows when it is out of date:
  * a workspace whose export was rewritten since it was saved opens saying so,
  * one rewritten while it is open is marked when the window gets the focus back,
- * and Reload reads the newer one with the edits replayed over it.
+ * Reload reads the newer one with the edits replayed over it, and so does r on
+ * a chart over it at the end of the run.
  *
  * They run after meets.ts, with acme-exports/2025/ connected, so the saved
  * workspace opens its object at once. smoke.js rewrites the object when a
@@ -12,7 +13,7 @@
 import { join } from "node:path";
 
 import { NEWER_AFTER_MS } from "@renderer/timing";
-import type { Check } from "./check.ts";
+import type { Check, Input } from "./check.ts";
 
 /** The workspace sources.ts saved, with the object in it. */
 const SAVED = join(process.env["UNO_SMOKE"] ?? "", "sales-q3.uno");
@@ -25,6 +26,12 @@ const ASKED_MS = NEWER_AFTER_MS * 2;
 
 /** The object the saved workspace points at, by its key in the stand-in. */
 const KEY = "2025/ads-q3.csv";
+
+/** A person's press of r, which refreshes the chart that has the keys. */
+const PRESS_R: readonly Input[] = [
+  { type: "keyDown", keyCode: "r" },
+  { type: "keyUp", keyCode: "r" },
+];
 
 const LINE = `
   const line = (name) => [...document.querySelectorAll("#panel .panel-row")].find((r) => r.children[0]?.textContent === name);
@@ -103,6 +110,60 @@ export const REFRESH: Check[] = [
       await new Promise((r) => setTimeout(r, ${ASKED_MS}));
       const words = line("ads-q3.csv")?.children[1]?.textContent ?? "";
       return /KB$/.test(words) ? "" : "after another focus the line says " + JSON.stringify(words);
+    `,
+  },
+];
+
+/**
+ * Checks that r on a chart reads the object's newer version. They run last,
+ * since the first chart a run makes loads the chart layer, which the chart
+ * checks find waiting unloaded. The chart checks leave their workspace
+ * unsaved, so the first open of the saved one says so, and the second opens it.
+ */
+export const CHART_REFRESH: Check[] = [
+  {
+    name: "an open of the saved workspace over unsaved charts says so first",
+    send: ["menu:open-path", SAVED],
+    script: `
+      const want = "unsaved edits · Ctrl+S first, or open it again to drop them";
+      return (await until(() => text("#status-msg") === want)) ? "" : "the status bar says " + JSON.stringify(text("#status-msg"));
+    `,
+  },
+  {
+    name: "the second open shows the saved workspace, and a chart inserted over the object takes the keys",
+    send: ["menu:open-path", SAVED],
+    script: `
+      ${LINE}
+      if (!(await arrives(() => tab("ads-q3.csv") !== undefined))) return "no tab for the object";
+      tab("ads-q3.csv").click();
+      if (!(await arrives(() => document.querySelector("tbody tr:not(.pending)") !== null))) return "no rows came";
+      const content = document.querySelector("#content");
+      content.focus();
+      content.dispatchEvent(new KeyboardEvent("keydown", { key: "G", ctrlKey: true, shiftKey: true, bubbles: true }));
+      if (!(await arrives(() => document.querySelector(".chart-form") !== null))) return "no chart form opened";
+      document.querySelector(".chart-form select").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      const chart = () => document.querySelector(".chart");
+      if (!(await arrives(() => / rows/.test(chart()?.querySelector(".chart-said")?.textContent ?? "")))) return "the chart never completed";
+      return document.activeElement === chart() ? "" : "the keys are in " + document.activeElement?.className;
+    `,
+  },
+  {
+    // The digit smoke.js changed twice above changes a third time, read by r
+    // alone. The chart then goes, and the workspace is as it opened.
+    name: "r on the chart reads the object's newer version, and its removal leaves the workspace clean",
+    ask: `rewrite ${KEY}`,
+    input: { events: PRESS_R, through: true },
+    script: `
+      const said = /^reloaded ads-q3.csv · a new version, the same size( · \\d+ edits? replayed)?$/;
+      if (!(await arrives(() => said.test(text("#status-msg"))))) return "the status bar says " + JSON.stringify(text("#status-msg"));
+      const first = () => document.querySelector("tbody tr:not(.pending) td:nth-child(2)")?.textContent;
+      if (!(await arrives(() => first() === "A4000"))) return "the first cell reads " + JSON.stringify(first());
+      const del = () => document.querySelector(".chart").dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+      // The first Delete arms the ×, and the second removes the chart.
+      del();
+      del();
+      if (!(await until(() => document.querySelector(".chart") === null))) return "the chart stayed";
+      return (await until(() => document.querySelector(".ws.open .dirty") === null)) ? "" : "the workspace has a dot";
     `,
   },
 ];

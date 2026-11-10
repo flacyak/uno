@@ -39,6 +39,9 @@
  * - `change`: opens the chart form from a chart window's edit button, steps By
  *   from region to rep and applies it, then presses the × once to arm it and
  *   again to remove the chart. Goes to out/change.gif.
+ * - `reread`: the export under a window of region's bars gains North's rows
+ *   again on disk, read by the head's refresh button, then South's, read by r.
+ *   Goes to out/reread.gif.
  * - `focus`: presses a cell of region, then F6 three times from the grid,
  *   through both chart windows and back, Shift+F6 three times the other way,
  *   then Ctrl+Shift+F. Goes to out/focus.gif.
@@ -47,12 +50,21 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|focus|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|reread|focus|chord|command|menu]
  * (after node scripts/build.js)
  */
 
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  copyFile,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,13 +86,15 @@ const pkg = join(here, "..");
 const root = resolve(pkg, "../../..");
 const testdata = join(pkg, "../../core/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
+/** How the fixture ends each line. */
+const CRLF = "\r\n";
 
 /** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
 /** The stories that open the chart form by its keys or the View menu. */
 const KEYED = ["chord", "command", "menu"];
 /** The other stories that film charts. */
-const CHARTED = ["moves", "wheel", "table", "tip", "insert", "kinds", "change", "focus"];
+const CHARTED = ["moves", "wheel", "table", "tip", "insert", "kinds", "change", "reread", "focus"];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
 const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
@@ -366,6 +380,7 @@ const staged = {
   insert: () => stageCharts("insert", []),
   kinds: () => stageCharts("kinds", []),
   change: () => stageCharts("change", [REGION_BARS]),
+  reread: () => stageCharts("reread", [REGION_BARS]),
   focus: () => stageCharts("focus", [REGION_BARS, AGAINST]),
   chord: () => stageCharts("chord", []),
   command: () => stageCharts("command", []),
@@ -417,11 +432,18 @@ const scene =
 
 /**
  * answer handles what the story asks of this script: `rewrite <key>` rewrites
- * the object, and `latency <ms>` sets how long the stand-in delays each
- * answer from here on.
+ * the object, `latency <ms>` sets how long the stand-in delays each answer
+ * from here on, and `grow <region>` adds the fixture's rows of that region to
+ * the end of the staged export once more.
  */
-function answer(what) {
+async function answer(what) {
   const [verb, key] = what.split(" ");
+  if (verb === "grow" && story === "reread") {
+    const lines = (await readFile(fixture, "utf8")).split(CRLF);
+    const grown = lines.filter((line) => line.includes(`,${key},`)).map((line) => line + CRLF);
+    await appendFile(join(dirname(opened[0]), "sales-q3.csv"), grown.join(""));
+    return true;
+  }
   if (verb === "rewrite" && remote?.standin.objects.has(key)) {
     rewrite(remote.standin.objects, key);
     return true;

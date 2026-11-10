@@ -293,6 +293,13 @@ const KINDS = [
  */
 const CHANGE = { edit: 800, by: 3_200, apply: 4_600, arm: 7_400, remove: 9_800, end: 12_000 };
 
+/**
+ * The reread story's beats: the export on disk gains North's rows again, the
+ * head's refresh button reads it, the export gains South's rows, and r in the
+ * window reads it again.
+ */
+const REREAD = { grow: 800, button: 2_000, again: 5_600, key: 6_800, end: 10_400 };
+
 /** What the focus story holds as it presses F6: nothing three times, then Shift three times. */
 const FOCUS_KEYS: Modifier[][] = [[], [], [], ["shift"], ["shift"], ["shift"]];
 
@@ -794,6 +801,7 @@ const STORIES: Record<string, Story> = {
   insert: { end: INSERT.end, script: playInsert },
   kinds: { end: KINDS_END, script: playKinds },
   change: { end: CHANGE.end, script: playChange },
+  reread: { end: REREAD.end, script: playReread },
   focus: { end: FOCUS_END, script: playFocus },
   chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
   command: {
@@ -1012,6 +1020,25 @@ async function playChange(win: BrowserWindow, at: Clock): Promise<void> {
   await at(CHANGE.remove);
   await pressOn(".chart .chart-close");
   await at(CHANGE.end);
+}
+
+/**
+ * playReread performs the reread story: the export grows on disk twice, and
+ * is read again by the head's refresh button the first time and by r the
+ * second.
+ */
+async function playReread(win: BrowserWindow, at: Clock): Promise<void> {
+  const { pressOn } = await glider(win);
+  await at(REREAD.grow);
+  await ask("preview", "grow North");
+  await at(REREAD.button);
+  await pressOn(".chart .chart-refresh");
+  await at(REREAD.again);
+  await ask("preview", "grow South");
+  // The button keeps the keys, so r goes to its window.
+  await at(REREAD.key);
+  press(win, "r");
+  await at(REREAD.end);
 }
 
 /**
