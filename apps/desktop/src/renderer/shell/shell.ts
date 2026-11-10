@@ -878,10 +878,21 @@ export class Shell {
   /**
    * load starts an engine for the file and shows it. A file that fails to
    * open leaves the open workspace alone, and its engine is closed. Aborting
-   * `signal` stops the open; one that opened anyway is closed, unsaid.
+   * `signal` stops the open; one that opened anyway is closed, unsaid. An
+   * open again of `lost`, a workspace whose engine was lost, stands where it
+   * stood and counts as no open, so the person's own wins over it.
    */
-  private async load(ref: SourceRef, savePath: string, signal?: AbortSignal): Promise<void> {
-    const open = ++this.opens;
+  private async load(
+    ref: SourceRef,
+    savePath: string,
+    signal?: AbortSignal,
+    lost?: Workspace,
+  ): Promise<void> {
+    const open = lost === undefined ? ++this.opens : this.opens;
+    const superseded = (): boolean =>
+      open !== this.opens ||
+      signal?.aborted === true ||
+      (lost !== undefined && this.workspace !== lost);
     let engine: Engine | undefined;
 
     try {
@@ -906,11 +917,12 @@ export class Shell {
       // Load the layer before the check below, so no open takes over after it.
       if (w.charts.all.length > 0) await this.loadLayer();
       // A later open finished first, or this one was stopped as it opened.
-      if (open !== this.opens || signal?.aborted === true) {
+      if (superseded()) {
         w.close();
         return;
       }
       opened = w;
+      const kept = lost !== undefined && w.keepView(lost);
 
       this.workspace?.close();
       this.refresher?.dispose();
@@ -924,25 +936,30 @@ export class Shell {
       );
       this.refresher = refresher;
       w.onIndexed = (id) => refresher.ready(id);
-      // Close any menu or form open for the replaced workspace.
-      this.closePopups();
+      // Close any menu or form open for the replaced workspace. One opened
+      // again leaves them, and the focus, to the person.
+      if (!kept) this.closePopups();
       if (w.path !== "") this.recents.opened(w.path);
       // The workspace's engine serves the panel from here on.
       this.closeSpare();
       void this.refreshConnections();
       this.dismissed = "";
-      grid.show(w.rows, w.editable);
+      // The grid keeps its selection and scroll for one opened again, as for a read.
+      if (kept) grid.refreshed(w.rows, w.editable);
+      else grid.show(w.rows, w.editable);
       this.empty.hidden = true;
       this.content.hidden = false;
       this.layer?.show(w.charts);
-      this.restore(w, grid);
-      grid.focus();
+      if (!kept) {
+        this.restore(w, grid);
+        grid.focus();
+      }
       this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
       this.plan();
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.
-      if (open === this.opens && signal?.aborted !== true) this.say(message(err), true);
+      if (!superseded()) this.say(message(err), true);
     }
     this.paintAll();
   }
@@ -1324,8 +1341,10 @@ export class Shell {
     }
     this.reopening ??= this.host
       .reopen(w.path)
-      .then((ref) => (ref === undefined ? undefined : this.load(ref, w.path)))
-      .finally(() => (this.reopening = undefined));
+      .then((ref) => (ref === undefined ? undefined : this.load(ref, w.path, undefined, w)))
+      .finally(() => {
+        this.reopening = undefined;
+      });
     await this.reopening;
     // An open that failed has said why, and leaves the lost workspace open.
     if (this.workspace === w) throw err;
