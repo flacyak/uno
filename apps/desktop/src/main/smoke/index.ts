@@ -14,6 +14,7 @@ import type { BrowserWindow } from "electron";
 import { ask } from "@main/ask";
 import { pick, through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
+import { CHART_ASIDE } from "./chart-aside.ts";
 import { CHART_EDITS } from "./chart-edits.ts";
 import { CHART_FORM } from "./chart-form.ts";
 import { CHART_KEYS } from "./chart-keys.ts";
@@ -82,6 +83,7 @@ const CHECKS: Check[] = [
   ...AGAIN,
   ...CHARTS,
   ...CHART_KEYS,
+  ...CHART_ASIDE,
   ...CHART_MOVES,
   ...CHART_WHEEL,
   ...CHART_TIP,

@@ -48,12 +48,15 @@
  * - `focus`: presses a cell of region, then F6 three times from the grid,
  *   through both chart windows and back, Shift+F6 three times the other way,
  *   then Ctrl+Shift+F. Goes to out/focus.gif.
+ * - `aside`: arrows the selection from rep under the top chart window, which
+ *   fades, presses a cell through it, and arrows back out, which brings it
+ *   back. Goes to out/aside.gif.
  * - `chord`, `command` and `menu`: select region, open the chart form under its
  *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|schedule|reread|focus|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -108,6 +111,7 @@ const CHARTED = [
   "schedule",
   "reread",
   "focus",
+  "aside",
 ];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
@@ -397,6 +401,7 @@ const staged = {
   schedule: () => stageCharts("schedule", [REGION_BARS]),
   reread: () => stageCharts("reread", [REGION_BARS]),
   focus: () => stageCharts("focus", [REGION_BARS, AGAINST]),
+  aside: () => stageCharts("aside", [REGION_BARS, AGAINST]),
   chord: () => stageCharts("chord", []),
   command: () => stageCharts("command", []),
   menu: () => stageCharts("menu", []),

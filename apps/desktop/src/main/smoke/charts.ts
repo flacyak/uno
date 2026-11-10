@@ -103,7 +103,7 @@ const BESIDE = { x: 400, y: 300 };
 const OVER_WINDOW = { x: 900, y: 150 };
 
 /** The row the selection reaches: the one clicked, then the one below it. */
-const ROW_BELOW = 11;
+export const ROW_BELOW = 11;
 
 /** A person's click on the grid, and the arrow they press after it. */
 export const CLICK_AND_ARROW: readonly Input[] = [
