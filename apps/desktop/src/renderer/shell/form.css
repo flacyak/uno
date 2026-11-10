@@ -21,13 +21,16 @@
   color: var(--ink);
 }
 
-/* The labels stand in a column as wide as the longest, and at least 48 px, so
- * a language with longer words keeps them whole and a form's controls line
- * up. The column holds the field's 8 px inset too. The note stands under the
- * controls. */
+/* The labels stand in a column as wide as the longest label of every pop-up
+ * form, --label-width from form.ts, and at least 48 px, so a language with
+ * longer words keeps them whole and the forms' controls line up in each. The
+ * column holds the field's 8 px inset too, and rounds up to a whole pixel,
+ * which takes in the fraction a label's laid-out letters run past its ch. The
+ * note stands under the controls. */
 .pop-form {
+  --label-column: round(up, calc(8px + max(48px, var(--label-width))), 1px);
   display: grid;
-  grid-template-columns: minmax(calc(8px + 48px), max-content) minmax(0, 1fr);
+  grid-template-columns: minmax(var(--label-column), max-content) minmax(0, 1fr);
   column-gap: 8px;
 }
 

@@ -313,7 +313,7 @@
   "formula_title_source": "Insertar fórmula · {source}",
   "formula_column": "columna",
   "formula_expression_aria": "expresión",
-  "formula_hint": "columnas por su nombre · + - * / ( )",
+  "formula_hint": "columnas por nombre · + - * / ( )",
   "formula_needs_expression": "falta una expresión con la que calcular la columna",
   "section_workspace": "En este espacio de trabajo",
   "section_connections": "Conexiones",
