@@ -1,8 +1,8 @@
 /**
- * @fileoverview A relink or append marks the workspace unsaved when the tab it
- * brings reads the file other than as the last save recorded it, and a reload
- * that finds the file as recorded leaves the workspace clean. Runs over the
- * real engine and the disk.
+ * @fileoverview A re-point at another file or an append marks the workspace
+ * unsaved, and a reload of the tab's own file leaves it clean, however the
+ * file changed: the next save records what it read. Runs over the real engine
+ * and the disk.
  */
 
 import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -71,7 +71,7 @@ test("an append marks the workspace unsaved", async () => {
   });
 });
 
-test("a reload marks the workspace unsaved only when the file grew since the last save", async () => {
+test("a reload of the tab's own file leaves the workspace clean, however the file changed", async () => {
   const csv = join(dir, "grown.csv");
   const uno = join(dir, "grown.uno");
   await writeFile(csv, SAVED);
@@ -80,20 +80,16 @@ test("a reload marks the workspace unsaved only when the file grew since the las
   await opened(at(uno), async (w) => {
     expect(await reload(w), "reopened as saved").toBe(false);
     await writeFile(csv, GROWN);
-    expect(await reload(w), "grown while open").toBe(true);
+    expect(await reload(w), "grown while open").toBe(false);
   });
 
-  // Reopened, the tab already reads the grown file, so the reload finds the
-  // same size. The file changed since the save, and the tab says so.
+  // Reopened, the tab reads the grown file, which changed since the save, and
+  // the tab says so until a reload. The next save records what the reload read.
   await opened(at(uno), async (w) => {
     expect(w.active.trouble).toBeDefined();
-    expect(await reload(w), "grown since the save").toBe(true);
-  });
-
-  // A save records the file as it is now, and a reload after it finds that.
-  await opened(at(uno), async (w) => {
+    expect(await reload(w), "grown since the save").toBe(false);
+    expect(w.active.trouble).toBeUndefined();
     await writeFile(uno, await w.bytes({ row: 0, col: 0 }, uno));
-    w.saved(uno);
-    expect(await reload(w), "after a save").toBe(false);
   });
+  await opened(at(uno), async (w) => expect(w.active.trouble, "after a save").toBeUndefined());
 });
