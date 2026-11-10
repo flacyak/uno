@@ -135,7 +135,7 @@ export interface Stage {
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
   /** Opens the chart form on chart `id`, hung at `place`. */
   edit(id: string, place: MenuPlace): void;
-  /** Reads `source` again by hand, as Reload does. */
+  /** Reads `source` again by hand: Reload for one file, an append of new files for several. */
   refresh(source: string): void;
   /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
   remove(id: string, title: string): void;

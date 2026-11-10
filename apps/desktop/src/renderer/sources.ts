@@ -552,8 +552,22 @@ export class Sources {
     for (const id of this.gained.keys()) {
       if (!tabs.some((t) => t.id === id)) this.gained.delete(id);
     }
-    await Promise.all([...tabs.map((tab) => this.askAfter(tab)), this.again()]);
+    const asked = tabs.map((tab) => this.askAfter(tab).catch(() => undefined));
+    await Promise.all([...asked, this.again()]);
     this.changed();
+  }
+
+  /**
+   * Lists the folder of one multi-file tab and records its new files, as
+   * askGrown does for each. A folder that fails to list drops the tab's
+   * record and throws why.
+   */
+  async askGrownOf(tab: Open): Promise<void> {
+    try {
+      await this.askAfter(tab);
+    } finally {
+      this.changed();
+    }
   }
 
   /**
@@ -603,7 +617,10 @@ export class Sources {
     } while (cursor !== undefined);
   }
 
-  /** Finds new files for one multi-file tab and records them in `gained`. */
+  /**
+   * Finds new files for one multi-file tab and records them in `gained`. A
+   * folder that fails to list drops the tab's record and throws why.
+   */
   private async askAfter(tab: Open): Promise<void> {
     const last = tab.parts?.at(-1);
     const folder = last === undefined ? undefined : folderOf(last.path);
@@ -620,9 +637,9 @@ export class Sources {
           }
         }
       }
-    } catch {
+    } catch (err) {
       this.gained.delete(tab.id);
-      return;
+      throw err;
     }
     if (files.length === 0) this.gained.delete(tab.id);
     else this.gained.set(tab.id, { after: last.path, grown: { folder: folder.said, files } });

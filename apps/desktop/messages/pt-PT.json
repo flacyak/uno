@@ -253,6 +253,7 @@
   "removed_name": "{name} removido",
   "stopped_opening": "a abertura de {name} foi interrompida",
   "appended_to": "{files} anexado a {name}",
+  "refresh_no_new_files": "{name} · nenhum ficheiro novo na pasta",
   "indexing_g_again": "a indexar {percent}% · G outra vez quando terminar",
   "row_not_indexed": "a linha {row} ainda não foi indexada",
   "nothing_to_apply": "nada a aplicar",
