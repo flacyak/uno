@@ -49,6 +49,7 @@ import { MULTI } from "./multi.ts";
 import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
 import { CHART_REFRESH, REFRESH } from "./refresh.ts";
+import { CHART_SCHEDULE } from "./schedule.ts";
 import { SETTINGS } from "./settings.ts";
 import { SIDEBAR } from "./sidebar.ts";
 import { SOURCES } from "./sources.ts";
@@ -92,6 +93,7 @@ const CHECKS: Check[] = [
   ...CHART_STATES,
   ...CHART_EDITS,
   ...CHART_REFRESH,
+  ...CHART_SCHEDULE,
 ];
 
 /**
