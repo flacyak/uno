@@ -113,7 +113,7 @@ export const MOVED: Misdirect = {
 
 export interface Bucket {
   endpoint: string;
-  /** Every request that reached it, with the raw path and query as sent. */
+  /** Every request to a bucket, with the raw path and query as sent. */
   seen: Array<{
     method: string;
     path: string;
@@ -193,15 +193,19 @@ export async function bucket(
     const auth = req.headers['authorization'] ?? '';
     const region = /Credential=[^/]+\/\d{8}\/([^/]+)\//.exec(auth)?.[1];
     const key = /Credential=([^/]+)\//.exec(auth)?.[1] ?? '';
-    seen.push({
-      method: req.method!,
-      path: raw,
-      query: req.url!.split('?')[1],
-      range,
-      region: region ?? '',
-      key,
-    });
     const [, name, ...rest] = raw.split('/');
+    // A path-style request names its bucket first. One that names none is
+    // ListBuckets, which the stand-in does not serve.
+    if (name !== '') {
+      seen.push({
+        method: req.method!,
+        path: raw,
+        query: req.url!.split('?')[1],
+        range,
+        region: region ?? '',
+        key,
+      });
+    }
     const held = buckets.get(name ?? '');
     if (held !== undefined) remember(name!, held);
 
