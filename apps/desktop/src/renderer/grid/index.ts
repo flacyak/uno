@@ -42,6 +42,8 @@ export class Grid {
   private selRow = 0;
   private selCol = 0;
   private editor: HTMLInputElement | undefined;
+  /** Rows read again while the editor was open, shown once it closes. */
+  private waiting: { source: Rows; editable: boolean } | undefined;
   private pending: Pending = NOTHING;
 
   /** Marks of the current source. Marks are per source and live for the
@@ -80,21 +82,44 @@ export class Grid {
   /**
    * Shows `source`, or clears the grid. `keep` preserves the selection,
    * scroll position and marks, for the same data arriving as a new Rows
-   * object (a band replaced by a sheet when entering transform).
+   * object (a band replaced by a sheet when entering transform, or a file
+   * read again).
    */
   show(source: Rows | undefined, editable: boolean, keep = false): void {
+    // Cleared first, so closing the editor does not show rows this replaces.
+    this.waiting = undefined;
     this.cancelEdit();
+    this.put(source, editable, keep);
+  }
+
+  /** Shows `source` as show does, under the editor if it is open. */
+  private put(source: Rows | undefined, editable: boolean, keep: boolean): void {
+    this.waiting = undefined;
     this.editable = editable;
     this.wait(NOTHING);
     if (keep) {
-      // Carry the current marks over to the new Rows object.
-      if (source !== undefined) this.marked.set(source, this.marks);
+      // Carry the current marks over to the new Rows object. A file read
+      // again can be shorter, so the selection stays inside it.
+      if (source !== undefined) {
+        this.marked.set(source, this.marks);
+        this.selRow = clamp(this.selRow, source.rows() - 1);
+        this.selCol = clamp(this.selCol, source.cols() - 1);
+      }
     } else {
       this.marks = this.marksOf(source);
       this.selRow = 0;
       this.selCol = 0;
     }
     this.view.show(source, keep);
+  }
+
+  /**
+   * Shows `source`, the showing file read again, where the grid stands. Rows
+   * read while the cell editor is open wait for it, so what is typed stays.
+   */
+  refreshed(source: Rows, editable: boolean): void {
+    if (this.editor === undefined) this.show(source, editable, true);
+    else this.waiting = { source, editable };
   }
 
   /** Shows `why` as an error when it is non-empty. Returns whether it was. */
@@ -177,10 +202,11 @@ export class Grid {
   }
 
   private select(row: number, col: number): void {
+    // Closing the editor can show rows that waited for it.
+    this.cancelEdit();
     const source = this.source;
     if (source === undefined) return;
 
-    this.cancelEdit();
     this.selRow = clamp(row, source.rows() - 1);
     this.selCol = clamp(col, source.cols() - 1);
     this.view.scrollIntoView(this.selRow, this.selCol);
@@ -412,6 +438,16 @@ export class Grid {
     const source = this.source;
     if (input === undefined || source === undefined) return;
 
+    // The file was read again while the editor was open, so the cell may now
+    // hold another record. Nothing is written: the new rows show under the
+    // editor, which keeps the keys unless focus moved to a control.
+    if (this.waiting !== undefined) {
+      this.events.onSay(m.typed_before_reread(), true);
+      this.putWaiting();
+      if (refocus) input.focus();
+      else this.cancelEdit();
+      return;
+    }
     const value = input.value;
     this.cancelEdit();
 
@@ -431,7 +467,16 @@ export class Grid {
     // the editor already gone.
     this.editor = undefined;
     input.remove();
+    this.putWaiting();
     this.events.onEditor(false);
+  }
+
+  /** Shows the rows that waited for the editor, and the selection they clamp. */
+  private putWaiting(): void {
+    const waiting = this.waiting;
+    if (waiting === undefined) return;
+    this.put(waiting.source, waiting.editable, true);
+    this.events.onSelect(this.selRow, this.selCol);
   }
 }
 
