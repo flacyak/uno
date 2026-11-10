@@ -35,10 +35,12 @@ import { Language, offered } from "@renderer/language";
 import type { Command } from "@renderer/keys";
 import { list, num } from "@renderer/locale";
 import { Recents } from "@renderer/recents";
+import { Refresher } from "@renderer/refresh";
+import type { Refreshed } from "@renderer/refresh";
 import { say } from "@renderer/said";
 import { Sources, connectionLine } from "@renderer/sources";
 import type { Arriving } from "@renderer/sources";
-import { NEWER_AFTER_MS } from "@renderer/timing";
+import { MINUTE_MS, NEWER_AFTER_MS } from "@renderer/timing";
 import { Workspace, reloaded } from "@renderer/workspace";
 import type { Tab } from "@renderer/workspace";
 import { bannerParts, offerKey } from "./banner.ts";
@@ -98,6 +100,8 @@ export class Shell {
   /** The chart layer, loaded with the first workspace that has charts. */
   private layer: ChartLayer | undefined;
   private layerLoading: Promise<ChartLayer> | undefined;
+  /** The open workspace's chart schedules. */
+  private refresher: Refresher | undefined;
   /**
    * Counts opens, so the latest wins over an earlier one that finishes later.
    */
@@ -701,12 +705,31 @@ export class Shell {
    */
   private async drawn<T>(request: Promise<T>): Promise<T> {
     this.layer?.draw();
+    this.plan();
     try {
       return await request;
     } finally {
       this.layer?.draw();
+      this.plan();
       this.paintTabs();
     }
+  }
+
+  /** plan hands the open workspace's chart schedules to its Refresher. */
+  private plan(): void {
+    const charts = this.workspace?.charts.all ?? [];
+    const scheduled = charts.filter((c) => c.refresh !== BY_HAND);
+    this.refresher?.plan(
+      scheduled.map((c) => ({ source: c.source, everyMs: c.refresh * MINUTE_MS })),
+    );
+  }
+
+  /**
+   * wake checks each chart's source whose schedule came due while the machine
+   * slept, the page was hidden or the network was down.
+   */
+  wake(): void {
+    this.refresher?.wake();
   }
 
   /**
@@ -882,8 +905,10 @@ export class Shell {
       opened = w;
 
       this.workspace?.close();
+      this.refresher?.dispose();
       this.workspace = w;
       w.onTally = (chart) => this.layer?.tallied(chart);
+      this.refresher = new Refresher((id) => this.scheduled(w, id));
       // Close any menu or form open for the replaced workspace.
       this.closePopups();
       if (w.path !== "") this.recents.opened(w.path);
@@ -898,6 +923,7 @@ export class Shell {
       this.restore(w, grid);
       grid.focus();
       this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
+      this.plan();
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.
@@ -1227,11 +1253,12 @@ export class Shell {
    * refresh reads a tab's source again by hand: Reload for one file, or an
    * append of the files its folder now holds after its last part. A tab
    * waiting on its bucket opens the connect form, as its ! mark does, and a
-   * folder that cannot be listed says why.
+   * folder that cannot be listed says why. Its schedule starts over.
    */
   private async refresh(tab: Tab): Promise<void> {
     if (tab.state === "unconnected") return this.repoint(tab);
     if (tab.parts === undefined) return this.reload(tab);
+    this.refresher?.refreshed(tab.id);
     const w = this.workspace;
     try {
       await this.sources.askGrownOf(tab);
@@ -1249,12 +1276,28 @@ export class Shell {
   }
 
   /**
+   * scheduled checks a chart's source when its schedule comes due, and shows
+   * what it read where the source shows. It writes nothing on the status line,
+   * so a schedule never talks over the person's own messages.
+   */
+  private async scheduled(w: Workspace, id: string): Promise<Refreshed> {
+    const tab = w.sources.find((t) => t.id === id);
+    if (tab !== undefined) this.keepSelection(w, tab);
+    const done = await w.refresh(id);
+    // A tab whose file was missing showed no rows, so it comes back on its own cell.
+    if (done.t === "read" && this.workspace === w) this.shown(w.active.id === id, !tab?.missing);
+    return done;
+  }
+
+  /**
    * pointAt points a tab at a file. The edits replay over the file. A file
-   * that fails to take them is refused and the tab is left as it was.
+   * that fails to take them is refused and the tab is left as it was. Its
+   * schedule starts over.
    */
   private async pointAt(tab: Tab, ref: SourceRef, said?: (fresh: Tab) => string): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.refresher?.refreshed(tab.id);
     this.keepSelection(w, tab);
     try {
       const fresh = await w.relink(tab, ref);
@@ -1289,11 +1332,13 @@ export class Shell {
 
   /**
    * append adds files to the end of a multi-file tab. Files that read
-   * differently from the tab's first are refused and the tab is left as it was.
+   * differently from the tab's first are refused and the tab is left as it
+   * was. Its schedule starts over.
    */
   private async append(tab: Tab, files: readonly SingleRef[]): Promise<void> {
     const w = this.workspace;
     if (w === undefined) return;
+    this.refresher?.refreshed(tab.id);
     this.keepSelection(w, tab);
     try {
       const fresh = await w.append(tab, files);
