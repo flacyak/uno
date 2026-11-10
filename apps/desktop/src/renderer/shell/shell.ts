@@ -880,7 +880,7 @@ export class Shell {
    * open leaves the open workspace alone, and its engine is closed. Aborting
    * `signal` stops the open; one that opened anyway is closed, unsaid. An
    * open again of `lost`, a workspace whose engine was lost, stands where it
-   * stood.
+   * stood and counts as no open, so the person's own wins over it.
    */
   private async load(
     ref: SourceRef,
@@ -888,7 +888,11 @@ export class Shell {
     signal?: AbortSignal,
     lost?: Workspace,
   ): Promise<void> {
-    const open = ++this.opens;
+    const open = lost === undefined ? ++this.opens : this.opens;
+    const superseded = (): boolean =>
+      open !== this.opens ||
+      signal?.aborted === true ||
+      (lost !== undefined && this.workspace !== lost);
     let engine: Engine | undefined;
 
     try {
@@ -913,7 +917,7 @@ export class Shell {
       // Load the layer before the check below, so no open takes over after it.
       if (w.charts.all.length > 0) await this.loadLayer();
       // A later open finished first, or this one was stopped as it opened.
-      if (open !== this.opens || signal?.aborted === true) {
+      if (superseded()) {
         w.close();
         return;
       }
@@ -955,7 +959,7 @@ export class Shell {
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.
-      if (open === this.opens && signal?.aborted !== true) this.say(message(err), true);
+      if (!superseded()) this.say(message(err), true);
     }
     this.paintAll();
   }

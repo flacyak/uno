@@ -17,7 +17,8 @@
  * hand the edit refuses says it failed. One due over an engine lost under
  * the workspace opens the copy the host saved on a new engine and draws the
  * newer row, keeping the selected cell and a moved window, in one open for
- * its two sources, unless a cell edit is unsaved.
+ * its two sources, unless a cell edit is unsaved; an open the person starts
+ * meanwhile shows over it.
  *
  * @vitest-environment happy-dom
  */
@@ -499,4 +500,25 @@ test("a workspace opened again keeps its selected cell and a moved window, in on
   expect(await counts(ROWS + 1)).toBe(true);
   expect([cell(), shell.charts?.all[0]?.place]).toStrictEqual([picked, MOVED]);
   expect(reopen).toHaveBeenCalledOnce();
+});
+
+test("an open the person starts while a lost workspace opens again shows over it", async () => {
+  await scheduledOver("superseded");
+  await lose();
+  let release = (): void => undefined;
+  const asked = new Promise<void>((resolve) => (release = resolve));
+  reopen.mockClear().mockImplementationOnce(async (path) => {
+    await asked;
+    return { name: basename(path), path };
+  });
+  const opens = vi.spyOn(Workspace, "open");
+  due();
+  expect(await until(page, () => reopen.mock.calls.length > 0)).toBe(true);
+  const mine = shell.openRef({ name: basename(FIXTURE), path: FIXTURE });
+  release();
+  await mine;
+  await Promise.allSettled(opens.mock.results.map((r) => r.value));
+  await frame();
+  expect(shell.charts?.all).toStrictEqual([]);
+  opens.mockRestore();
 });
