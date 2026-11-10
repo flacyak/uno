@@ -428,9 +428,10 @@ export class Workspace {
   /**
    * Replaces the tab for `tab`'s source with a new tab for `source` at the
    * same position, with the same selected cell and saved log, and marks it
-   * relinked unless it reads the same file again. The tab is found by id,
-   * since a relink or append answered first may have replaced `tab`, and
-   * only the newest handle hears the engine.
+   * relinked unless it reads the same file again. Its charts read it from the
+   * start until its first tally comes. The tab is found by id, since a
+   * relink or append answered first may have replaced `tab`, and only the
+   * newest handle hears the engine.
    */
   private replace(tab: Tab, source: SourceHandle): Tab {
     const i = this.tabs.findIndex((t) => t.id === tab.id);
@@ -441,6 +442,7 @@ export class Workspace {
     this.tabs[i] = fresh;
     if (!samePath(was, fresh)) this.relinked.add(fresh.id);
     if (this.showing === was) this.showing = fresh;
+    this.charts.reread(fresh.id);
     return fresh;
   }
 

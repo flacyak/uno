@@ -445,11 +445,12 @@ export class ChartWindow {
 
   /**
    * paint draws what the chart last heard, or puts its table in the plot's
-   * place. A complete tally stays drawn while the next one is read, and a
-   * first one draws as it comes. The caption says how much of its source the
-   * chart has read and what the tally left out, then what the plot's kind
-   * says. The track under the head shows how far the chart has read, while it
-   * reads, and a chart with nothing to draw says why in the plot's place.
+   * place. A complete tally stays drawn, faint, while the next one is read,
+   * and a first one draws as it comes. The caption says how much of its
+   * source the chart has read and what the tally left out, then what the
+   * plot's kind says. The track under the head shows how far the chart has
+   * read, while it reads, and a chart with nothing to draw says why in the
+   * plot's place.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -467,6 +468,7 @@ export class ChartWindow {
     this.again.title = why ?? "";
     const read = reading(heard);
     this.track.hidden = read === undefined;
+    this.plot.classList.toggle("chart-stale", read !== undefined && heard?.complete !== undefined);
     this.track.style.setProperty("--read", `${read ?? 0}`);
   }
 

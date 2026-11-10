@@ -23,6 +23,8 @@ interface Tallied {
   source: string;
   latest: Tally;
   complete: GroupsTally | SampleTally | undefined;
+  /** Whether the source is being read again, with no tally of it heard yet. */
+  rereading?: boolean;
 }
 
 /** A chart's source, as its window says it when it has nothing of it to draw. */
@@ -48,6 +50,8 @@ export interface Heard extends SourceState {
   latest: Tally | undefined;
   /** The last complete one, which stays until the next one completes. */
   complete: GroupsTally | SampleTally | undefined;
+  /** Whether the source is being read again, with no tally of it heard yet. */
+  rereading?: boolean;
 }
 
 /** The columns a plot reads, in the order its kind names them. */
@@ -207,7 +211,16 @@ export class Charts {
       ...this.sourceState(chart.source),
       latest: current ? held.latest : undefined,
       complete: current ? held.complete : undefined,
+      rereading: current && held.rereading === true,
     };
+  }
+
+  /** Notes that `source` is being read again: each chart over it is reading
+   * from the start until the first tally of the new read comes. */
+  reread(source: string): void {
+    for (const [id, held] of this.tallied) {
+      if (held.source === source) this.tallied.set(id, { ...held, rereading: true });
+    }
   }
 
   /** Forgets the charts over a source, which left the engine with it, and
