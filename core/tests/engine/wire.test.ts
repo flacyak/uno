@@ -387,3 +387,13 @@ test('a socket that closes with a request out refuses it, and every request afte
   ).rejects.toThrow('the connection to the engine closed');
   expect(said).toEqual(['the connection to the engine closed']);
 });
+
+test('an engine says it was lost once its socket closes under it, and not once closed here', async () => {
+  const under = overSockets();
+  expect(under.engine.lost).toBe(false);
+  under.far.close();
+  await expect.poll(() => under.engine.lost).toBe(true);
+  const here = overSockets();
+  here.engine.close();
+  expect(here.engine.lost).toBe(false);
+});
