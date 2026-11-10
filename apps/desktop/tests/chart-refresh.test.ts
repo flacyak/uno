@@ -16,7 +16,8 @@
  * index completes, and one a cell edit holds back says so, until a read by
  * hand the edit refuses says it failed. One due over an engine lost under
  * the workspace opens the copy the host saved on a new engine and draws the
- * newer row, unless a cell edit is unsaved.
+ * newer row, keeping the selected cell and a moved window, in one open for
+ * its two sources, unless a cell edit is unsaved.
  *
  * @vitest-environment happy-dom
  */
@@ -34,6 +35,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
 
+import type { Chart } from "@document";
 import { Engine, Refusal, TUNING } from "@engine";
 import { ROWS, UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
@@ -48,7 +50,7 @@ import { MINUTE_MS } from "@renderer/timing";
 import { Workspace } from "@renderer/workspace";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
-import { BARS, SALES, carriedUnoOf, partsUnoOf, unoOf } from "./charted.ts";
+import { BARS, DEVICES, MOVED, SALES, carriedUnoOf, partsUnoOf, unoOf } from "./charted.ts";
 import { FIRST_ROWS_MS, FIXTURE, bootShell, engineEnds } from "./smoke/dom-harness.ts";
 import { domPage, frame, until } from "./smoke/dom-page.ts";
 
@@ -66,6 +68,9 @@ const CHECKED_AT = new Date(2026, OCTOBER, 29, 14, 32).getTime();
 
 /** What the engine says once its connection is lost. */
 const LOST = "the connection to the engine closed";
+
+/** A row down the sheet the person selects, which an open again keeps. */
+const PICKED_ROW = 7;
 
 /** The wait after one failed check, in intervals: the interval doubled. */
 const BACKED_OFF = 2;
@@ -117,6 +122,7 @@ const box = (): HTMLElement => document.querySelector<HTMLElement>(".chart")!;
 const said = (): string => document.querySelector(".chart .chart-said")?.textContent ?? "";
 const message = (): string => document.querySelector("#status-msg")?.textContent ?? "";
 const checks = (): string => document.querySelector(".chart .chart-checks")?.textContent ?? "";
+const cell = (): string => document.querySelector("#status-cell")?.textContent ?? "";
 const r = (): boolean =>
   box().dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true, cancelable: true }));
 /** Waits for the chart's caption to count `rows` rows, its tally complete. */
@@ -426,12 +432,16 @@ test("a scheduled check held back by a cell edit says so, and a read by hand the
   told.mockRestore();
 });
 
-/** Opens a chart checked every minute over a copy of the sales export, once its first check ends. */
-async function scheduledOver(name: string): Promise<{ csv: string; uno: string }> {
+/** Opens a chart checked every minute over a copy of the sales export, and
+ * `others`, once its first check ends. */
+async function scheduledOver(
+  name: string,
+  others: Chart[] = [],
+): Promise<{ csv: string; uno: string }> {
   const csv = join(dir, `${name}.csv`);
   await copyFile(FIXTURE, csv);
   const uno = join(dir, `${name}.uno`);
-  await writeFile(uno, unoOf([{ ...BARS, refresh: EVERY_MINUTE }], [], csv));
+  await writeFile(uno, unoOf([{ ...BARS, refresh: EVERY_MINUTE }, ...others], [], csv));
   await shell.openRef({ name: basename(uno), path: uno }, uno);
   expect(await counts(ROWS)).toBe(true);
   expect(await until(page, () => checks().includes(" · "))).toBe(true);
@@ -475,4 +485,18 @@ test("a check due over a lost engine with a cell edit unsaved opens nothing, and
   due();
   expect(await until(page, () => checks().startsWith("!"))).toBe(true);
   expect(reopen).not.toHaveBeenCalled();
+});
+
+test("a workspace opened again keeps its selected cell and a moved window, in one open for both sources", async () => {
+  const { csv } = await scheduledOver("kept", [{ ...DEVICES, refresh: EVERY_MINUTE }]);
+  await page.clickCell(PICKED_ROW, UNITS);
+  shell.charts?.move(BARS.id, MOVED);
+  const picked = cell();
+  await lose();
+  reopen.mockClear();
+  await appendFile(csv, ADDED_ROW);
+  due();
+  expect(await counts(ROWS + 1)).toBe(true);
+  expect([cell(), shell.charts?.all[0]?.place]).toStrictEqual([picked, MOVED]);
+  expect(reopen).toHaveBeenCalledOnce();
 });
