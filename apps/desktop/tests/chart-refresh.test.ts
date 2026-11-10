@@ -14,7 +14,9 @@
  * over several files appends the new one alone, another workspace's open
  * stops the schedule, one over a file still indexing checks it once its
  * index completes, and one a cell edit holds back says so, until a read by
- * hand the edit refuses says it failed.
+ * hand the edit refuses says it failed. One due over an engine lost under
+ * the workspace opens the copy the host saved on a new engine and draws the
+ * newer row, unless a cell edit is unsaved.
  *
  * @vitest-environment happy-dom
  */
@@ -47,7 +49,7 @@ import { Workspace } from "@renderer/workspace";
 import { multiProvider } from "@store";
 import { diskProvider } from "@store/node";
 import { BARS, SALES, carriedUnoOf, partsUnoOf, unoOf } from "./charted.ts";
-import { FIRST_ROWS_MS, FIXTURE, bootShell } from "./smoke/dom-harness.ts";
+import { FIRST_ROWS_MS, FIXTURE, bootShell, engineEnds } from "./smoke/dom-harness.ts";
 import { domPage, frame, until } from "./smoke/dom-page.ts";
 
 /** A row of the sales export's shape, which a rewrite adds at its end. */
@@ -62,6 +64,9 @@ const OCTOBER = 9;
 /** When a test reads a chart's source by hand: 29 October 2026 at 14:32 where it runs. */
 const CHECKED_AT = new Date(2026, OCTOBER, 29, 14, 32).getTime();
 
+/** What the engine says once its connection is lost. */
+const LOST = "the connection to the engine closed";
+
 /** The wait after one failed check, in intervals: the interval doubled. */
 const BACKED_OFF = 2;
 
@@ -75,6 +80,8 @@ const PART_ROWS = ROWS / PART_COUNT;
 const page = domPage();
 const disk = diskProvider();
 const opened = vi.spyOn(disk.files, "open");
+/** The host's saved copy of a workspace: the .uno at its path. */
+const reopen = vi.fn((path: string) => Promise.resolve({ name: basename(path), path }));
 /** While set, the disk's reads past a file's first chunk wait for it, so a
  * file longer than one chunk opens with its index still running. */
 let held: Promise<void> | undefined;
@@ -120,7 +127,7 @@ const paths = (): string[] =>
   opened.mock.calls.flatMap(([ref]) => ("path" in ref ? [ref.path] : []));
 
 beforeAll(async () => {
-  shell = await bootShell({}, [holding(disk), multiProvider([disk])]);
+  shell = await bootShell({ reopen }, [holding(disk), multiProvider([disk])]);
   dir = await mkdtemp(join(tmpdir(), "uno-chart-refresh-"));
 }, FIRST_ROWS_MS);
 
@@ -417,4 +424,55 @@ test("a scheduled check held back by a cell edit says so, and a read by hand the
   const failed = told.mock.results.at(-1)!.value as Checks;
   expect([failed.found.t, checks()]).toStrictEqual(["failed", trouble(failed)]);
   told.mockRestore();
+});
+
+/** Opens a chart checked every minute over a copy of the sales export, once its first check ends. */
+async function scheduledOver(name: string): Promise<{ csv: string; uno: string }> {
+  const csv = join(dir, `${name}.csv`);
+  await copyFile(FIXTURE, csv);
+  const uno = join(dir, `${name}.uno`);
+  await writeFile(uno, unoOf([{ ...BARS, refresh: EVERY_MINUTE }], [], csv));
+  await shell.openRef({ name: basename(uno), path: uno }, uno);
+  expect(await counts(ROWS)).toBe(true);
+  expect(await until(page, () => checks().includes(" · "))).toBe(true);
+  return { csv, uno };
+}
+
+/** Closes the open workspace's engine from its far end, as a session that ended does. */
+async function lose(): Promise<void> {
+  engineEnds.at(-1)!.close();
+  expect(await until(page, () => message() === LOST)).toBe(true);
+}
+
+/** Moves the wall clock past the next check, as a sleep does, and wakes the page. */
+function due(): void {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.now() + MINUTE_MS);
+  document.dispatchEvent(new Event("visibilitychange"));
+  vi.useRealTimers();
+}
+
+test("a check due over a lost engine opens the saved copy on a new engine, and draws the newer row", async () => {
+  const { csv, uno } = await scheduledOver("woken");
+  await lose();
+  await appendFile(csv, ADDED_ROW);
+  due();
+  expect(await counts(ROWS + 1)).toBe(true);
+  expect([reopen.mock.calls, shell.unsaved]).toStrictEqual([[[uno]], false]);
+});
+
+test("a check due over a lost engine with a cell edit unsaved opens nothing, and fails", async () => {
+  await scheduledOver("edited");
+  await page.press("e", { ctrlKey: true });
+  await page.clickCell(0, UNITS);
+  await page.settle(1);
+  await page.press("Enter");
+  await page.setEditorValue("8");
+  await page.press("Enter");
+  expect(await until(page, () => shell.unsaved)).toBe(true);
+  await lose();
+  reopen.mockClear();
+  due();
+  expect(await until(page, () => checks().startsWith("!"))).toBe(true);
+  expect(reopen).not.toHaveBeenCalled();
 });

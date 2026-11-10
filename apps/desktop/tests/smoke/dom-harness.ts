@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MessageChannel } from "node:worker_threads";
+import type { MessagePort } from "node:worker_threads";
 
 import { messagePort, serve } from "@engine";
 import type { MessagePortLike, Reply, Request } from "@engine";
@@ -40,6 +41,9 @@ export const SECOND = join(TESTDATA, "google-ads-sales.csv");
 /** How long the first rows get to arrive from the engine, and how often the
  * DOM is polled, matching index.ts's FIRST_ROWS_MS and POLL_MS. */
 export const FIRST_ROWS_MS = 20_000;
+
+/** The engine's end of each channel the shell connected over, in order, for a check that closes one. */
+export const engineEnds: MessagePort[] = [];
 const POLL_MS = 50;
 
 /** A chart window's head, its caption and its two 1px borders, in px, which chart.css draws. */
@@ -112,6 +116,7 @@ export async function bootShell(
           Promise.resolve({ modes: ["machine", "profile", "public"], profiles: ["default"] }),
       },
     );
+    engineEnds.push(port2);
     return port1 as unknown as MessagePortLike;
   };
 
