@@ -68,7 +68,10 @@ export class Grid {
     this.view = new View(
       host,
       () => ({ row: this.selRow, col: this.selCol }),
-      () => this.placeEditor(),
+      () => {
+        this.placeEditor();
+        this.events.onDrawn();
+      },
     );
     this.view.scroller.addEventListener("click", (e) => this.onClick(e));
     this.view.scroller.addEventListener("dblclick", () => this.beginEdit("all"));

@@ -82,6 +82,14 @@
   }
 }
 
+/* A window over the grid's selected cell, from layer.ts, while the grid has the
+ * keys: faint, at once, so the cell shows through it and takes the pointer. */
+.chart.aside {
+  --ghost-opacity: 0.2;
+  opacity: var(--ghost-opacity);
+  pointer-events: none;
+}
+
 /* Tucked heads read as one stack. They are square where they meet, so their rule
  * runs from border to border. One box behind them throws the shadow, so no head
  * darkens another, and layer.ts sets its `--stack-height`. */

@@ -43,6 +43,8 @@ export interface Rows {
 export interface GridEvents {
   /** The selection moved. */
   onSelect(row: number, col: number): void;
+  /** The rows were drawn again, so the selected cell may stand elsewhere on the screen. */
+  onDrawn(): void;
   /** A cell value was committed. */
   onEdit(row: number, col: number, value: string): void;
   /** Show a message in the status line. Empty text clears it. */

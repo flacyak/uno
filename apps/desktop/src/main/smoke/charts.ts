@@ -106,7 +106,7 @@ const OVER_WINDOW = { x: 900, y: 150 };
 const ROW_BELOW = 11;
 
 /** A person's click on the grid, and the arrow they press after it. */
-const CLICK_AND_ARROW: readonly Input[] = [
+export const CLICK_AND_ARROW: readonly Input[] = [
   { type: "mouseDown", ...BESIDE, button: "left", clickCount: 1 },
   { type: "mouseUp", ...BESIDE, button: "left", clickCount: 1 },
   { type: "keyDown", keyCode: "Down" },
@@ -711,6 +711,8 @@ export const CHART_SIGNED: Check[] = [
     script: `
       const said = document.querySelector(".chart-said");
       const find = said.querySelector(".chart-find");
+      // The keys leave the grid, as each cell this short sheet shows by the windows is under one.
+      said.closest(".chart").focus();
       const words = counted(${SIGNED_ROWS}) + " rows · 1 not a number";
       if (said.textContent !== words || find.hidden) return "the caption says " + said.textContent + (find.hidden ? " with no button" : "");
       const [box, line, foot] = [find, said, document.querySelector(".chart-edge-foot")].map((at) => at.getBoundingClientRect());
@@ -731,6 +733,8 @@ export const CHART_SIGNED: Check[] = [
     name: "a window too narrow for its caption cuts the words after the button first, and never the button or the words before it",
     script: `
       const said = document.querySelectorAll(".chart-said")[1];
+      // The grid landed on a cell under this window, so the keys leave it.
+      said.closest(".chart").focus();
       const words = counted(${SIGNED_ROWS}) + " rows · 1 not a number · 1 value at or below zero left out";
       if (!(await arrives(() => said.textContent === words))) return "the pie's caption says " + said.textContent;
       if (said.title !== words) return "the caption's title says " + said.title;

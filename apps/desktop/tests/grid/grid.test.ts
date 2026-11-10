@@ -56,6 +56,7 @@ function make(input: InputStrategy): Driven {
   const edits: Driven["edits"] = [];
   const events: GridEvents = {
     onSelect: () => undefined,
+    onDrawn: () => undefined,
     onEdit: (row, col, value) => {
       edits.push([row, col, value]);
     },
