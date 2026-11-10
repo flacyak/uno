@@ -9,7 +9,7 @@
  * This file is plain logic, so tests run it directly.
  */
 
-import { BACKOFF_CAP_MS } from "./timing.ts";
+import { BACKOFF_CAP_MS, CHECK_TIMEOUT_MS } from "./timing.ts";
 
 /** What a scheduled check of a source did. A check that fails rejects. */
 export type Refreshed =
@@ -28,6 +28,18 @@ export type Refreshed =
 export interface Due {
   source: string;
   everyMs: number;
+}
+
+/** Resolves as `check` does, or rejects once CHECK_TIMEOUT_MS passes with no answer. */
+function answered<T>(check: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`no answer in ${CHECK_TIMEOUT_MS} ms`)),
+      CHECK_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([check, late]).finally(() => clearTimeout(timer));
 }
 
 /** Checks a workspace's scheduled sources on time, with one timer. */
@@ -110,12 +122,15 @@ export class Refresher {
   /** Checks one source, and sets the timer again once it ends or fails. */
   private async check(source: string): Promise<void> {
     this.running.add(source);
+    const run = this.run(source);
     try {
-      const done = await this.run(source);
+      const done = await answered(run);
       if (done.t === "waiting") this.waiting.add(source);
       this.failures.delete(source);
     } catch {
       this.failures.set(source, (this.failures.get(source) ?? 0) + 1);
+      // A check given up on stays out until it ends, so no second one starts beside it.
+      await run.catch(() => undefined);
     }
     this.running.delete(source);
     this.checked.set(source, Date.now());

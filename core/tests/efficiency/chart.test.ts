@@ -1,12 +1,13 @@
 /**
  * @fileoverview Measures the bytes fetched to tally charts over an object,
- * beside the index and after it, and what an edit fetches once they are.
+ * beside the index and after it, what an edit fetches once they are, and
+ * what a scheduled check of the object as it was read sends.
  */
 
 import { afterEach, expect, test } from 'vite-plus/test';
 
 import type { Chart, Plot } from '@document';
-import { TUNING } from '@engine';
+import { TUNING, unchanged } from '@engine';
 import type { EditRequest, SourceHandle, Tally, Tuning } from '@engine';
 import { Tallies } from '@engine/tally';
 import { NO_ROW, Op } from '@sheet';
@@ -235,4 +236,17 @@ test('an edit of a cell fetches the block of its row at most, charted column or 
     expect(edit.bytes).toBeLessThanOrEqual(EDIT_AT_MOST.bytes);
   }
   expect(applied).toEqual(NOTHING);
+}, 60_000);
+
+test('a scheduled check of an object as it was read is one request, and fetches no bytes', async () => {
+  r = await remote(OBJECT, SMALL);
+  const src = await r.door.during(r.open());
+  await r.door.during(indexed(src));
+  await r.door.quiet();
+
+  const from = r.door.asked.length;
+  const link = src.opened.link!;
+  const entry = await r.engine.stat(link.path);
+  expect(unchanged(link, src.opened.size, entry)).toBe(true);
+  expect(r.door.since(from)).toStrictEqual({ requests: 1, bytes: 0 });
 }, 60_000);

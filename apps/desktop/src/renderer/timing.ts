@@ -13,6 +13,12 @@ export const NEWER_AFTER_MS = 400;
 export const MINUTE_MS = 60_000;
 
 /**
+ * How long a scheduled check waits for its source before it counts as failed.
+ * A bucket's answer has no time limit of its own.
+ */
+export const CHECK_TIMEOUT_MS = 30_000;
+
+/**
  * An hour, the longest a source whose checks keep failing waits for its next,
  * unless its own interval is longer.
  */
