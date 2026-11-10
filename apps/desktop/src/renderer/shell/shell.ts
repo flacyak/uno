@@ -273,6 +273,10 @@ export class Shell {
         await Promise.all([this.askNewer(), this.sources.askGrown()]);
       }),
     );
+    // A schedule that came due while the page was away, or offline, runs once
+    // it is back.
+    document.addEventListener("visibilitychange", () => this.wake());
+    window.addEventListener("online", () => this.wake());
     this.paintTabs();
     this.paintStatus();
   }
@@ -908,7 +912,9 @@ export class Shell {
       this.refresher?.dispose();
       this.workspace = w;
       w.onTally = (chart) => this.layer?.tallied(chart);
-      this.refresher = new Refresher((id) => this.scheduled(w, id));
+      const refresher = new Refresher((id) => this.scheduled(w, id));
+      this.refresher = refresher;
+      w.onIndexed = (id) => refresher.ready(id);
       // Close any menu or form open for the replaced workspace.
       this.closePopups();
       if (w.path !== "") this.recents.opened(w.path);

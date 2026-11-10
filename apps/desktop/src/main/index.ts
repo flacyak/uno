@@ -17,6 +17,7 @@ import {
   app,
   dialog,
   ipcMain,
+  powerMonitor,
   shell,
   utilityProcess,
 } from "electron";
@@ -406,6 +407,12 @@ async function start(): Promise<void> {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow([]);
   });
+
+  // A timer counts only the time the machine is awake, so the page checks
+  // what came due while it slept once it wakes or is unlocked.
+  const wake = (): void => current?.webContents.send("power:wake");
+  powerMonitor.on("resume", wake);
+  powerMonitor.on("unlock-screen", wake);
 
   // The smoke test (UNO_SMOKE) and the preview (UNO_PREVIEW) run inside the
   // app. Both drive the window, so input from the desktop is shut out before

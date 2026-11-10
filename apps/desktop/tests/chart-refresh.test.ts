@@ -6,10 +6,12 @@
  * folder cannot be listed, and says nothing once another workspace has
  * opened, and the refresh of a carried source, or of one whose files the
  * open did not find, is off and says why. On a schedule, the first check
- * opens nothing over the file as it was read, one that comes due over the
- * rewritten file draws its new row and says nothing, r or Reload starts the
- * schedule over, one over several files appends the new one alone, and
- * another workspace's open stops the schedule.
+ * opens nothing over the file as it was read, one that came due while the
+ * page was hidden or offline runs once it is back, over the rewritten file
+ * drawing its new row and saying nothing, r or Reload starts the schedule
+ * over, one over several files appends the new one alone, another
+ * workspace's open stops the schedule, and one over a file still indexing
+ * checks it once its index completes.
  *
  * @vitest-environment happy-dom
  */
@@ -19,9 +21,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { beforeAll, expect, test, vi } from "vite-plus/test";
 
-import { Engine, Refusal } from "@engine";
+import { Engine, Refusal, TUNING } from "@engine";
 import { ROWS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
+import type { Provider } from "@plugin";
 import { Charts } from "@renderer/charts";
 import { Refresher } from "@renderer/refresh";
 import type { Shell } from "@renderer/shell/shell";
@@ -49,6 +52,34 @@ const PART_ROWS = ROWS / PART_COUNT;
 const page = domPage();
 const disk = diskProvider();
 const opened = vi.spyOn(disk.files, "open");
+/** While set, the disk's reads past a file's first chunk wait for it, so a
+ * file longer than one chunk opens with its index still running. */
+let held: Promise<void> | undefined;
+
+/** `provider`, with its reads past the first chunk waiting for `held`. */
+function holding(provider: Provider): Provider {
+  const { files } = provider;
+  return {
+    ...provider,
+    files: {
+      label: files.label,
+      handles: (ref) => files.handles(ref),
+      async open(ref) {
+        const file = await files.open(ref);
+        return {
+          size: file.size,
+          version: file.version,
+          modified: file.modified,
+          async read(offset, length) {
+            if (offset >= TUNING.chunkBytes) await held;
+            return file.read(offset, length);
+          },
+          close: () => file.close(),
+        };
+      },
+    },
+  };
+}
 let shell: Shell;
 let dir: string;
 
@@ -65,7 +96,7 @@ const paths = (): string[] =>
   opened.mock.calls.flatMap(([ref]) => ("path" in ref ? [ref.path] : []));
 
 beforeAll(async () => {
-  shell = await bootShell({}, [disk, multiProvider([disk])]);
+  shell = await bootShell({}, [holding(disk), multiProvider([disk])]);
   dir = await mkdtemp(join(tmpdir(), "uno-chart-refresh-"));
 }, FIRST_ROWS_MS);
 
@@ -216,10 +247,11 @@ test("a schedule opens nothing over the file as it was read, and draws the rewri
 
   await appendFile(csv, ADDED_ROW);
   const before = message();
-  // A sleep moves the wall clock past the next check, and fires no timer.
+  // A sleep, or a page held back while hidden, moves the wall clock past the
+  // next check before its timer fires.
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(Date.now() + MINUTE_MS);
-  shell.wake();
+  document.dispatchEvent(new Event("visibilitychange"));
   vi.useRealTimers();
   expect(await counts(ROWS + 1)).toBe(true);
   expect(paths()).toStrictEqual([csv]);
@@ -253,7 +285,7 @@ test("a schedule over several files appends the new one alone, saying nothing", 
   const before = message();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(Date.now() + MINUTE_MS);
-  shell.wake();
+  window.dispatchEvent(new Event("online"));
   vi.useRealTimers();
   expect(await counts(PART_ROWS * copies.length)).toBe(true);
   const added = { name: basename(copies.at(-1)!), path: copies.at(-1) };
@@ -268,3 +300,29 @@ test("another workspace's open stops the schedule", async () => {
   expect(dispose).toHaveBeenCalledOnce();
   dispose.mockRestore();
 });
+
+test(
+  "a schedule checks a file still indexing once its index completes",
+  async () => {
+    const csv = join(dir, "indexing.csv");
+    await copyFile(FIXTURE, csv);
+    await appendFile(csv, ADDED_ROW.repeat(Math.ceil(TUNING.chunkBytes / ADDED_ROW.length)));
+    const uno = join(dir, "indexing.uno");
+    await writeFile(uno, unoOf([{ ...BARS, refresh: EVERY_MINUTE }], [], csv));
+    const refresh = vi.spyOn(Workspace.prototype, "refresh");
+    const answers = (): Promise<unknown[]> =>
+      Promise.all(refresh.mock.results.map((result) => result.value));
+    let release = (): void => {};
+    held = new Promise((resolve) => (release = resolve));
+    await shell.openRef({ name: basename(uno), path: uno }, uno);
+    await vi.waitUntil(() => refresh.mock.calls.length > 0);
+    expect(await answers()).toStrictEqual([{ t: "waiting", why: "indexing" }]);
+
+    held = undefined;
+    release();
+    await vi.waitUntil(() => refresh.mock.calls.length > 1, { timeout: FIRST_ROWS_MS });
+    expect(await answers()).toStrictEqual([{ t: "waiting", why: "indexing" }, { t: "same" }]);
+    refresh.mockRestore();
+  },
+  FIRST_ROWS_MS,
+);

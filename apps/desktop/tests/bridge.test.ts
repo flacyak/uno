@@ -90,9 +90,9 @@ const PRELOAD_LISTENS = new Set([
   ...PRELOAD_MENU_UNION,
 ]);
 
-test("the main -> renderer extraction found the eleven channels this file assumes", () => {
-  expect(MAIN_SENDS.size).toBe(11);
-  expect(PRELOAD_LISTENS.size).toBe(11);
+test("the main -> renderer extraction found the twelve channels this file assumes", () => {
+  expect(MAIN_SENDS.size).toBe(12);
+  expect(PRELOAD_LISTENS.size).toBe(12);
 });
 
 test("every channel main sends is listened for in preload", () => {

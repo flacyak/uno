@@ -86,6 +86,11 @@ contextBridge.exposeInMainWorld("unoMenu", {
     ipcRenderer.send("input:chosen", name);
   },
 
+  /** The machine woke from sleep, or its screen was unlocked. */
+  onWake(fn: () => void): void {
+    ipcRenderer.on("power:wake", () => fn());
+  },
+
   /** Tells main the renderer's locale, for the menu and dialogs. */
   languageChosen(locale: string): void {
     ipcRenderer.send("language:chosen", locale);
