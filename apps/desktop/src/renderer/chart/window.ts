@@ -443,6 +443,11 @@ export class ChartWindow {
     if (this.hold === undefined) standAt(this.box, rect);
   }
 
+  /** aside fades the window and lets the pointer through it while `on`, unless a pointer holds it. */
+  aside(on: boolean): void {
+    this.box.classList.toggle("aside", on && this.hold === undefined);
+  }
+
   /**
    * relabel writes the window's own words in the current language, and draws
    * the plot again, whose words, table and summary follow the language too.

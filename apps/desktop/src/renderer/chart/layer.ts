@@ -296,8 +296,8 @@ export class ChartLayer implements Stage {
   aside(): void {
     const keyed = this.content.contains(document.activeElement);
     const cell = keyed ? this.asks.selected() : undefined;
-    for (const { box } of this.windows.values()) {
-      box.classList.toggle("aside", covers(box.getBoundingClientRect(), cell));
+    for (const held of this.windows.values()) {
+      held.aside(covers(held.box.getBoundingClientRect(), cell));
     }
   }
 

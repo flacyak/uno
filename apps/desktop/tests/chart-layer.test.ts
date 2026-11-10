@@ -1150,6 +1150,17 @@ test("a window steps aside only while the grid has the keys, and comes back as F
   expect(aside()).toStrictEqual([]);
 });
 
+test("a window a pointer holds stays held when the selection reaches it", () => {
+  shown(INSIDE);
+  standing();
+  cell = cellAt(first());
+  carry(head());
+  content().focus();
+  expect(aside()).toStrictEqual([]);
+  pointer("pointermove", head(), STEP.x, 0);
+  expect(drawn(first())).toStrictEqual(dragged(placed(MOVED, ROOM), STEP.x, 0, ROOM));
+});
+
 test("a wheel on any part of a window goes to the sheet, and leaves the window and the keys", () => {
   const { model } = shown(INSIDE);
   const stood = drawn(first());
