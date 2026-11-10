@@ -23,7 +23,7 @@ import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
 import { LABEL_GAP, PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { POINT_OPACITY, TICK_GAP } from "@renderer/chart/scatter";
-import { DEFAULT_THEME } from "@renderer/theme";
+import { DEFAULT_THEME, THEMES } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote. */
@@ -219,19 +219,30 @@ const COPIES = [
 ];
 
 /**
- * One check per appearance, in the theme a person starts on: each part reads as
- * what it copies. The menu has to be open to be read.
+ * The themes the windows are worn in, with the one a person starts on last,
+ * so the checks after them run in it.
  */
-const WORN: Check[] = (["dark", "light"] as const).map((mode) => ({
-  name: `in ${mode} a window wears the dialogs' box, the sidebar's band and the window's ×`,
-  shot: `chart-${mode}`,
-  script: `
+const WORN_THEMES = [
+  ...THEMES.filter((t) => t.id !== DEFAULT_THEME),
+  ...THEMES.filter((t) => t.id === DEFAULT_THEME),
+];
+
+/**
+ * One check per theme and mode, each with a shot for the pixel review, ending
+ * in light: each part reads as what it copies. The menu has to be open to be
+ * read.
+ */
+const WORN: Check[] = WORN_THEMES.flatMap((t) =>
+  (["dark", "light"] as const).map((mode): Check => ({
+    name: `in ${t.name} ${mode} a window wears the dialogs' box, the sidebar's band and the window's ×`,
+    shot: `chart-${t.id}-${mode}`,
+    script: `
     ${CHROME}
     const gear = document.querySelector("#settings");
     const menu = document.querySelector(".settings");
     gear.click();
     menu.querySelector('[data-appearance="${mode}"]').click();
-    menu.querySelector('[data-theme="${DEFAULT_THEME}"]').click();
+    menu.querySelector('[data-theme="${t.id}"]').click();
     await frame();
     const off = ${JSON.stringify(COPIES)}.flatMap(({ of, copy, from, names }) => names.flatMap((name) => {
       const [worn, want] = [copy, from].map((at) => style(document.querySelector(at)).getPropertyValue(name));
@@ -240,7 +251,8 @@ const WORN: Check[] = (["dark", "light"] as const).map((mode) => ({
     gear.click();
     return off.join(" · ");
   `,
-}));
+  })),
+);
 
 export const CHARTS: Check[] = [
   {
