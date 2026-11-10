@@ -12,6 +12,9 @@ export const CHARTS_AT_MOST = 16;
 /** The longest title: a long sentence, counted as an input's maxlength does. */
 export const TITLE_AT_MOST = 200;
 
+/** A chart's refresh when its source is read again by hand only. */
+export const BY_HAND = 0;
+
 /** The longest wait between scheduled checks of a source: one week. */
 export const REFRESH_MINUTES_AT_MOST = 7 * 24 * 60;
 

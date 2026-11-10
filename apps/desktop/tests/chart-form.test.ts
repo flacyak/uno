@@ -1,14 +1,14 @@
 /**
- * @fileoverview The chart form: what it opens on, what Enter inserts, and how
- * Esc, Tab and a refusal behave in it. Opened on a chart, it shows what the
- * chart shows, and Apply sends what it holds.
+ * @fileoverview The chart form: what it opens on, what Enter inserts, the
+ * schedules it offers, and how Esc, Tab and a refusal behave in it. Opened on
+ * a chart, it shows what the chart shows, and Apply sends what it holds.
  *
  * @vitest-environment happy-dom
  */
 
 import { expect, test } from "vite-plus/test";
 
-import { CHARTS_AT_MOST } from "@document";
+import { BY_HAND, CHARTS_AT_MOST } from "@document";
 import type { Plot } from "@document";
 import { Refusal } from "@engine";
 import { m } from "@paraglide/messages";
@@ -59,8 +59,12 @@ const UNITS_TWIN = 1;
 const REGION_TWIN = 3;
 
 /** What the form asks of the shell to insert `plot` over `source`. */
-const inserting = (plot: Plot, title = "", source = SALES.id): string =>
-  `send ${source} ${JSON.stringify(plot)} ${JSON.stringify(title)}`;
+const inserting = (plot: Plot, title = "", source = SALES.id, refresh = BY_HAND): string =>
+  `send ${source} ${JSON.stringify(plot)} ${JSON.stringify(title)} every ${refresh}`;
+
+/** The schedules under an hour the form offers, in minutes between checks. */
+const EVERY_FEW_MINUTES = [5, 15, 30];
+const QUARTER_HOUR = 15;
 
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
@@ -77,8 +81,8 @@ function form(
   document.body.innerHTML = `<div id="app" tabindex="0"></div>`;
   const asked: string[] = [];
   new ChartForm({ left: 0, top: 0 }, [SALES, ADS, GONE, SUMS, TAKINGS, TWINS], active, opening, {
-    send: (source, plot, title) => {
-      asked.push(`send ${source.id} ${JSON.stringify(plot)} ${JSON.stringify(title)}`);
+    send: (source, plot, title, refresh) => {
+      asked.push(inserting(plot, title, source.id, refresh));
       return insert();
     },
     closed: () => asked.push("closed"),
@@ -151,7 +155,7 @@ test("a scatter asks for X and Y of the number columns, the first two to begin",
   const { asked, box } = form();
   pick("kind", "scatter");
   const words = [m.chart_form_source(), m.chart_form_kind(), m.chart_form_x(), m.chart_form_y()];
-  expect(shown(box)).toStrictEqual([...words, m.chart_form_title_field()]);
+  expect(shown(box)).toStrictEqual([...words, m.chart_form_title_field(), m.chart_form_refresh()]);
   expect([...select("x").options].map((o) => o.textContent)).toStrictEqual(["units", "revenue"]);
   const x = { col: UNITS, header: "units" };
   const scatter: Plot = { t: "scatter", x, y: { col: REVENUE, header: "revenue" } };
@@ -242,6 +246,21 @@ test("a source whose file is missing is offered, and cannot be chosen", () => {
   );
 });
 
+test("Refresh opens by hand, offers every 5, 15 or 30 min, hour or day, and Enter sends it", async () => {
+  const { asked } = form();
+  expect([...select("refresh").options].map((o) => o.textContent)).toStrictEqual([
+    m.chart_refresh_by_hand(),
+    ...EVERY_FEW_MINUTES.map((count) => m.chart_refresh_every_minutes({ count: num(count) })),
+    m.chart_refresh_every_hour(),
+    m.chart_refresh_every_day(),
+  ]);
+  expect(select("refresh").value).toBe(String(BY_HAND));
+  pick("refresh", String(QUARTER_HOUR));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(REGION_BARS, "", SALES.id, QUARTER_HOUR), "closed"]);
+});
+
 test("Esc closes it and inserts nothing", () => {
   const { asked } = form();
   press("Escape");
@@ -299,6 +318,7 @@ test("a chart's form opens on what it shows, over its source", () => {
   expect(chosen("kind", "by", "sum")).toStrictEqual(["bars", String(REGION), String(REVENUE)]);
   expect(document.querySelector<HTMLInputElement>(".chart-form input")!.value).toBe("Takings");
   expect(document.activeElement).toBe(select("by"));
+  expect(document.querySelector('select[name="refresh"]')).toBeNull();
 
   // The ads export has region second.
   changing({ t: "pie", by: { col: REGION, header: "region" } }, "", ADS);
