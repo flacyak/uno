@@ -51,12 +51,6 @@ The column stops storing values of its own and shows what the expression compute
 Inserting one switches to transform, since it changes the file, and it is one edit that Ctrl+Z takes back.
 An expression the engine cannot read is refused in the form, in the engine's words, and the form stays open on what was typed.
 
-Ctrl+Shift+G, `:chart` and the View menu's `Insert chart…` open the chart form the right click's `Insert chart…` opens, on the open workspace, under the selected column's header.
-
-F6 moves the keys from the grid through the chart windows, front to back, and on to the grid, and Shift+F6 goes the other way.
-Ctrl+Shift+F gives the keys to the window on top, for a browser that keeps F6 for itself, and Escape gives them back to the grid.
-F6 in the cell editor does nothing.
-
 The three columns, the sidebar, the sheet and the sources panel, each begin with a head one row high.
 Together they make one line across the top of the window, and the round `×` at its right end closes the window.
 Over unsaved edits the first `×` says so and the second closes.
@@ -69,6 +63,34 @@ At its right are View / Transform and the switch for the sources panel, which Ct
 
 The menu still exists, for its keys: Ctrl+O, Ctrl+S, Ctrl+Q and the rest are accelerators on its items.
 Its bar is hidden on Windows and Linux, and macOS shows it at the top of the screen as it does for every app.
+
+## Charts
+
+![uno making a chart of rows per region from the form Ctrl+Shift+G opens, carrying it by its head, resizing it by its grip, and giving it a check every 15 minutes, whose first reads the rows the file gained](../../docs/chart.gif)
+
+A chart stands over the sheet in a window of its own, and the workspace keeps it where it was left.
+Ctrl+Shift+G, `:chart` and the View menu's `Insert chart…` open the chart form the right click's `Insert chart…` opens, on the open workspace, under the selected column's header.
+The form offers bars or a pie of the selected column's values, counting rows or summing another column, or a scatter of one column against another.
+Enter inserts the chart and Esc closes the form.
+
+A window is carried by its head and resized by its grip, its right edge or its foot.
+With the keys, the arrows step it and Shift and the arrows resize it.
+The wheel over a window scrolls the sheet behind it, once a table or a pie's list in the window has no further to go.
+
+The buttons on its head read the source again, put a table of the plot's values in its place, open the form on the chart, and remove it.
+With the keys, `r`, `t`, and Enter or F2 do the first three, and Delete, as the `×` does, asks once and removes the chart the second time.
+Pointing at a mark says what it is worth, and once the plot has the keys the arrows step through its marks.
+
+The form's `checks` read the source again on a schedule, from every 5 minutes to every day, or every so many minutes or hours with `Every…`.
+A file is read again when its size or date changes, an export in a bucket when it has a newer version, and a folder when it gains files.
+A source is first checked as its schedule begins, when the workspace opens or the form sets it, and then an interval after each check ends.
+The caption says the schedule and when the last check was.
+While the tab holds edits, newer data waits for a refresh by hand, and the caption says so.
+Each failed check in a row doubles the wait for the next, up to an hour, or the interval where that is longer.
+
+F6 moves the keys from the grid through the chart windows, front to back, and on to the grid, and Shift+F6 goes the other way.
+Ctrl+Shift+F gives the keys to the window on top, for a browser that keeps F6 for itself, and Esc gives them back to the grid.
+F6 in the cell editor does nothing.
 
 ## Opening a file
 

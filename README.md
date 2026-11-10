@@ -29,4 +29,5 @@ vp run test       # every package's suite
 vp run smoke      # build, then drive the real desktop app and assert
 vp run preview    # film docs/preview.gif: the browse story
                   # `vp run preview sidebar` films docs/sidebar.gif
+                  # `vp run preview chart` films docs/chart.gif
 ```

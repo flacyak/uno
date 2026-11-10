@@ -9,6 +9,9 @@
  *   sources panel, then tries the themes in settings.
  * - `sidebar`: moves between workspaces in the sidebar, inserts a formula from
  *   a right click, and opens a new one from the +. Goes to docs/sidebar.gif.
+ * - `chart`: makes a chart of region from the form by Ctrl+Shift+G, carries it
+ *   by its head, resizes it by its grip, and gives it a schedule whose first
+ *   check reads the export grown on disk. Goes to docs/chart.gif.
  * - `edit`: fixes three cells of the fixture and applies the offer to fix the
  *   rest.
  * - `refresh`: reopens a workspace whose export in the bucket was rewritten,
@@ -56,7 +59,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -89,7 +92,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
-const root = resolve(pkg, "../../..");
+const root = resolve(pkg, "../..");
 const testdata = join(pkg, "../../core/tests/testdata");
 const fixture = join(testdata, "sales-q3.csv");
 /** How the fixture ends each line. */
@@ -97,6 +100,8 @@ const CRLF = "\r\n";
 
 /** The stories filmed against the stand-in bucket. */
 const AGAINST_BUCKET = ["refresh", "opening", "connecting", "refused"];
+/** The stories whose export grows on disk while they are filmed. */
+const GROWN = ["reread", "chart"];
 /** The stories that open the chart form by its keys or the View menu. */
 const KEYED = ["chord", "command", "menu"];
 /** The other stories that film charts. */
@@ -115,7 +120,12 @@ const CHARTED = [
 ];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
-const STORIES = ["browse", "sidebar", "edit", ...TO_OUT];
+/**
+ * The stories whose GIFs docs/ shows under a file of their own. browse and
+ * edit go to docs/preview.gif.
+ */
+const IN_DOCS = { sidebar: "sidebar.gif", chart: "chart.gif" };
+const STORIES = ["browse", ...Object.keys(IN_DOCS), "edit", ...TO_OUT];
 const story = process.argv[2] ?? "browse";
 if (!STORIES.includes(story)) {
   console.error(`preview: no story called ${story} · ${STORIES.join(", ")}`);
@@ -128,7 +138,7 @@ const frames = join(pkg, "out/preview");
 const takes = join(root, "docs");
 const gif = TO_OUT.includes(story)
   ? join(pkg, `out/${story}.gif`)
-  : join(takes, story === "sidebar" ? "sidebar.gif" : "preview.gif");
+  : join(takes, IN_DOCS[story] ?? "preview.gif");
 
 /** The frame rate the GIF is resampled to. */
 const FPS = 12;
@@ -400,6 +410,7 @@ const staged = {
   change: () => stageCharts("change", [REGION_BARS]),
   schedule: () => stageCharts("schedule", [REGION_BARS]),
   reread: () => stageCharts("reread", [REGION_BARS]),
+  chart: () => stageCharts("chart", []),
   focus: () => stageCharts("focus", [REGION_BARS, AGAINST]),
   aside: () => stageCharts("aside", [REGION_BARS, AGAINST]),
   chord: () => stageCharts("chord", []),
@@ -458,7 +469,7 @@ const scene =
  */
 async function answer(what) {
   const [verb, key] = what.split(" ");
-  if (verb === "grow" && story === "reread") {
+  if (verb === "grow" && GROWN.includes(story)) {
     const lines = (await readFile(fixture, "utf8")).split(CRLF);
     const grown = lines.filter((line) => line.includes(`,${key},`)).map((line) => line + CRLF);
     await appendFile(join(dirname(opened[0]), "sales-q3.csv"), grown.join(""));

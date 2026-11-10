@@ -196,7 +196,7 @@ const MOVES = {
   end: 7_400,
 };
 
-/** How far the moves story carries the window, and how far it resizes it. */
+/** How far the moves and chart stories carry a window, and how far they resize it. */
 const CARRY = { x: -320, y: 150 };
 const STRETCH = { x: 110, y: 90 };
 
@@ -321,6 +321,26 @@ const EVERY_MINUTES = "10";
  * window reads it again.
  */
 const REREAD = { grow: 800, button: 2_000, again: 5_600, key: 6_800, end: 10_400 };
+
+/**
+ * The chart story's beats, for the README: a cell of region pressed, the chart
+ * form opened under its header by Ctrl+Shift+G, Enter for a window of its
+ * bars, the window carried by its head and resized by its grip, the export
+ * grown on disk, the edit button pressed, Every 15 min chosen in the form's
+ * checks, and Enter to apply it, which checks the export at once.
+ */
+const CHART = {
+  column: 500,
+  open: 3_400,
+  enter: 5_600,
+  carry: 7_000,
+  stretch: 9_800,
+  edit: 12_600,
+  checks: 15_800,
+  quarter: 17_000,
+  apply: 19_600,
+  end: 23_000,
+};
 
 /** What the focus story holds as it presses F6: nothing three times, then Shift three times. */
 const FOCUS_KEYS: Modifier[][] = [[], [], [], ["shift"], ["shift"], ["shift"]];
@@ -874,6 +894,7 @@ const STORIES: Record<string, Story> = {
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
   reread: { end: REREAD.end, script: playReread },
+  chart: { end: CHART.end, script: playChart },
   focus: { end: FOCUS_END, script: playFocus },
   aside: { end: ASIDE.end, script: playAside },
   chord: { end: KEYED.end, script: playKeyed((win) => press(win, "G", ["control", "shift"])) },
@@ -1146,6 +1167,40 @@ async function playReread(win: BrowserWindow, at: Clock): Promise<void> {
 }
 
 /**
+ * playChart performs the chart story: a chart of region made from the form,
+ * carried, resized, and given a schedule whose first check reads the export
+ * grown on disk.
+ */
+async function playChart(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn, carryBy } = await glider(win);
+  await at(CHART.column);
+  // The gutter comes first, so region is a row's third cell.
+  await pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+  await glideTo(KEYED_REST);
+  await at(CHART.open);
+  press(win, "G", ["control", "shift"]);
+  await at(CHART.enter);
+  press(win, "Return");
+  await at(CHART.carry);
+  await carryBy(".chart .chart-title", CARRY);
+  await at(CHART.stretch);
+  await carryBy(".chart .chart-grip", STRETCH);
+  await ask("preview", "grow North");
+  await at(CHART.edit);
+  await pressOn(".chart .chart-edit");
+  // The keys wait for the form, and the pointer rests clear of what they change.
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .field:has(.schedule) .what");
+  await at(CHART.checks);
+  await presses(win, "Tab", CHECKS_TABS, KIND_STEP_MS / CHECKS_TABS);
+  await at(CHART.quarter);
+  await presses(win, "Down", QUARTER_DOWNS, KIND_STEP_MS);
+  await at(CHART.apply);
+  press(win, "Return");
+  await at(CHART.end);
+}
+
+/**
  * playFocus performs the focus story: a cell of region pressed, then F6 from
  * the grid to the window at the foot, the one at the top and the grid again,
  * Shift+F6 back through them, then Ctrl+Shift+F to the window on top. The
@@ -1214,10 +1269,14 @@ function playKeyed(
   };
 }
 
-/** What the stand-in pointer does: glides to a thing, or glides to it and presses it. */
+/**
+ * What the stand-in pointer does: glides to a thing, glides to it and presses
+ * it, or glides to it and carries it `by` px.
+ */
 interface Glider {
   glideTo: (selector: string) => Promise<void>;
   pressOn: (selector: string, button?: "left" | "right") => Promise<void>;
+  carryBy: (selector: string, by: { x: number; y: number }) => Promise<void>;
 }
 
 /** glider shows the stand-in pointer, which glides from wherever it last went. */
@@ -1234,6 +1293,10 @@ async function glider(win: BrowserWindow): Promise<Glider> {
     pressOn: async (selector, button = "left") => {
       await glideTo(selector);
       await click(win, selector, button);
+    },
+    carryBy: async (selector, by) => {
+      await glideTo(selector);
+      from = await carry(win, selector, by);
     },
   };
 }
