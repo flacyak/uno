@@ -37,20 +37,18 @@ const OBJECT = repeated(REPEATS);
 
 /**
  * The most charts beside the index may fetch, index included, as a multiple
- * of the object. Of it, 0.1 is AHEAD - 1 chunks of SMALL.chunkBytes fetched
- * twice: the open's reads of SAMPLE_ROWS, four blocks of SMALL.blockRows,
- * push the index's stream out of the store's last REMEMBERED reads
- * (core/src/store/ahead.ts), and topUp drops the chunks held for it. A store
- * that keeps a reader while its held chunks are still wanted brings this to
- * about 1.08, and lowers the budget to 1.1 with it.
+ * of the object: the object once, and the blocks complete before the charts
+ * came, 1.07 measured.
  */
-const BESIDE_BUDGET = 1.2;
+const BESIDE_BUDGET = 1.1;
 /**
  * The most charts made after the index may fetch, as a multiple of the
  * object: each block once, and the chunks the read-ahead asks behind RUN
  * blocks of one byte length in a row (core/src/store/ahead.ts).
  */
 const AFTER_BUDGET = 1.05;
+/** How far through the object the index is when charts are made partway. */
+const PARTWAY = 1 / 3;
 /**
  * The most one edit of a cell may fetch, charts or none: the block of its
  * row, read once, 3,161 to 3,212 bytes measured for the three below. A
@@ -112,9 +110,14 @@ function pure(over: readonly Chart[]): Tally[] {
 
 /**
  * charted puts the charts over `src`, lets their reads through as they
- * come, and resolves with their complete tallies once every one is heard.
+ * come, or by `step` each time the engine goes quiet, and resolves with
+ * their complete tallies once every one is heard.
  */
-async function charted(r: Remote, src: SourceHandle): Promise<Tally[]> {
+async function charted(
+  r: Remote,
+  src: SourceHandle,
+  step?: () => void,
+): Promise<Tally[]> {
   const over = charts(src.id);
   const last = new Map<string, Tally>();
   const heard = new Promise<void>((resolve) => {
@@ -125,7 +128,7 @@ async function charted(r: Remote, src: SourceHandle): Promise<Tally[]> {
     };
   });
   for (const chart of over) await r.engine.chart(chart);
-  await r.door.during(heard);
+  await r.door.during(heard, step);
   await r.door.quiet();
   return over.map((c) => last.get(c.id)!);
 }
@@ -138,7 +141,7 @@ afterEach(async () => {
 
 const metrics: Metric[] = [];
 
-test('charts attached as the open answers fetch the object once, the blocks complete before they came and the chunks the read-ahead drops', async () => {
+test('charts attached as the open answers fetch the object once and the blocks complete before they came', async () => {
   r = await remote(OBJECT, SMALL);
   const door = r.door;
   // Reads are let through one at a time, lowest first, so the index is no
@@ -161,6 +164,26 @@ test('charts attached as the open answers fetch the object once, the blocks comp
     },
   );
   expect(times).toBeLessThanOrEqual(BESIDE_BUDGET);
+}, 60_000);
+
+test('charts made partway through the index leave it the chunks asked ahead of it', async () => {
+  r = await remote(OBJECT, SMALL);
+  const door = r.door;
+  const lowest = () => door.letLowest();
+  const src = await door.during(r.open(), lowest);
+  // The index alone, a read at a time, until it is PARTWAY through with
+  // chunks asked ahead of it. Then the charts' blocks, lowest first, go
+  // before the index's next chunk.
+  while (src.progress.done < PARTWAY * src.progress.total) {
+    lowest();
+    await door.quiet();
+  }
+  const tallies = await charted(r, src, lowest);
+  expect(tallies).toStrictEqual(pure(charts(src.id)));
+  const chunks = door.asked
+    .filter((a) => a.length === SMALL.chunkBytes)
+    .map((a) => a.offset);
+  expect(new Set(chunks).size, 'every chunk fetched once').toBe(chunks.length);
 }, 60_000);
 
 test('charts made after the index fetch the object once more', async () => {
