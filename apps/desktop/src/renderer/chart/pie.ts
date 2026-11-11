@@ -59,11 +59,12 @@ export function slices(plot: Pie, groups: Groups): Slice[] {
  * unsent gives what Other takes of the values a tally sent none of, as `plot`
  * measures them: those above zero as they are, and the values past those a
  * tally keeps apart, which sum together whatever their sign, only where they
- * come to more than zero.
+ * come to more than zero. A sum that is no number comes to nothing.
  */
 export function unsent(plot: Pie, groups: Groups): number {
   const measure = measureOf(plot);
-  return measure(groups.others) + Math.max(measure(groups.rest), 0);
+  const rest = measure(groups.rest);
+  return measure(groups.others) + (rest > 0 ? rest : 0);
 }
 
 /** wholeOf gives what `drawn` adds up to, or 0 for a whole no double holds, which no share is of. */

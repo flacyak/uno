@@ -114,6 +114,16 @@ test("Other leaves out the values at or below zero, and takes those past a tally
   expect(other(-15)).toBeUndefined();
 });
 
+test("Other keeps the values after the sixth where those past a tally's own sum to no number", () => {
+  const lost = { ...EIGHT, rest: { rows: 2, sum: Number.NaN } };
+  const after = EIGHT.groups.slice(PIE_SLICES_AT_MOST).reduce((sum, g) => sum + g.sum, 0);
+  expect(slices(SUMS, lost)).toStrictEqual([
+    ...firstOf(EIGHT, PIE_SLICES_AT_MOST),
+    { value: undefined, size: after },
+  ]);
+  expect(past(SUMS, lost)).toBe(m.chart_pie_past_left_out({ count: num(DISTINCT_AT_MOST) }));
+});
+
 test("a pie of fewer than six slices has no Other, nor one of six with nothing past them", () => {
   const five = tallyOf(...EIGHT.groups.slice(0, PIE_SLICES_AT_MOST - 1));
   expect(slices(ROWS, { ...five, rest: { rows: 20, sum: 0 } })).toStrictEqual(firstOf(five));
