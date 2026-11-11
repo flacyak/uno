@@ -12,10 +12,14 @@ import { BY_HAND, CHARTS_AT_MOST, REFRESH_MINUTES_AT_MOST } from "@document";
 import type { Plot } from "@document";
 import { Refusal } from "@engine";
 import { m } from "@paraglide/messages";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { ChartForm } from "@renderer/chart/form";
 import type { ChartSource, Opening } from "@renderer/chart/form";
 import { madeTitle } from "@renderer/chart/window";
+import { offered } from "@renderer/language";
 import { num } from "@renderer/locale";
+import { LABELS } from "@renderer/shell/form";
+import { FormulaForm } from "@renderer/shell/formula";
 
 /** The sales export's columns, as the engine reads them. Revenue's numbers are formatted. */
 const COLUMNS = [
@@ -514,4 +518,22 @@ test("a source with nothing to read again is checked by hand, whatever was chose
   press("Enter");
   await settle();
   expect(applied).toStrictEqual([inserting(REGION_BARS, "", LOST.id), "closed"]);
+});
+
+/** The formula form's label of its expression, a sign in every language. */
+const EQUALS = "=";
+
+test("every worded label of the chart form and the formula form sets the column they share, in every language", () => {
+  for (const locale of offered(true)) {
+    void setLocale(locale, { reload: false });
+    form();
+    new FormulaForm({ left: 0, top: 0 }, "q3.csv", [{ header: "price" }], 0, {
+      insert: () => Promise.resolve(),
+      closed: () => undefined,
+    });
+    const worded = [...document.querySelectorAll(".what")].map((at) => at.textContent);
+    const said = LABELS.map((label) => label());
+    expect(worded.filter((label) => label !== EQUALS && !said.includes(label))).toStrictEqual([]);
+  }
+  void setLocale(baseLocale, { reload: false });
 });

@@ -1,7 +1,8 @@
 /**
  * @fileoverview The chart form in real layout: Insert chart… on the open
  * workspace opens it on the selected column, and it wears the formula form's
- * look in light and in dark, its controls in line with the formula form's.
+ * look in light and in dark, its controls in line with the formula form's in
+ * every language.
  * Escape closes it with nothing inserted, so the chart layer still waits for
  * the first workspace with charts. Each note a schedule shows fits its two
  * lines in every language. Ctrl+Shift+G and the View menu open it under the
@@ -15,6 +16,7 @@ import { DEFAULT_THEME } from "@renderer/theme";
 import { pressing } from "./chart-moves.ts";
 import { DOUBLE_ZOOM, NARROW_WIDTH } from "./charts.ts";
 import type { Check } from "./check.ts";
+import { LOCALE } from "./fixture.ts";
 import { RIGHT_CLICK } from "./sidebar.ts";
 
 /** The fixture's name, for the notes that name the source. */
@@ -127,6 +129,35 @@ const WORN: Check[] = (["light", "dark"] as const).map((mode) => ({
   `,
 }));
 
+/** One check a language a person can choose: every control of both forms
+ * starts at one x. */
+const SPOKEN: Check[] = offered(false).map((locale) => ({
+  name: `in ${locale}, the formula form's controls and the chart form's stand in one column`,
+  script: `
+    ${FORMS}
+    const gear = document.querySelector("#settings");
+    const speak = async (choice, lang) => {
+      gear.click();
+      document.querySelector('.settings [data-language="' + choice + '"]').click();
+      gear.click();
+      return until(() => document.documentElement.lang === lang);
+    };
+    // Where each shown field's control starts, from the form's left side.
+    const starts = (form) => [...form.querySelectorAll(".field:not([hidden])")].map((line) => (line.lastElementChild.getBoundingClientRect().left - form.getBoundingClientRect().left).toFixed(2));
+    if (!(await speak("${locale}", "${locale}"))) return "the page says it is in " + document.documentElement.lang;
+    const formula = await open(${JSON.stringify(m.menu_insert_formula({}, { locale }))}, ".formula");
+    const there = formula === null ? [] : starts(formula);
+    escape(formula);
+    const chart = await open(${JSON.stringify(m.menu_insert_chart({}, { locale }))}, ".chart-form");
+    const here = chart === null ? [] : starts(chart);
+    escape(chart);
+    if (!(await speak("system", ${JSON.stringify(LOCALE)}))) return "the page stayed in " + document.documentElement.lang;
+    if (formula === null || chart === null) return "a form did not open";
+    if (new Set([...there, ...here]).size === 1) return "";
+    return "the formula form's controls start at " + there.join() + " and the chart form's at " + here.join();
+  `,
+}));
+
 export const CHART_FORM: Check[] = [
   ...WORN,
   {
@@ -145,6 +176,7 @@ export const CHART_FORM: Check[] = [
       return document.querySelector("#charts").hidden ? "" : "the layer shows";
     `,
   },
+  ...SPOKEN,
   {
     name: "every note the chart form says of a schedule fits its two lines, in every language",
     script: `

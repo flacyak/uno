@@ -14,6 +14,23 @@ import { button, clickAway, el, hang, walk } from "./util.ts";
 /** The minimum gap between a form and the window's edge, in pixels. */
 const EDGE = 8;
 
+/** Every pop-up form's worded labels. Each form's label column is as wide as
+ * the longest of them in the language spoken, so the forms' controls line up. */
+export const LABELS: ReadonlyArray<() => string> = [
+  m.formula_column,
+  m.chart_form_source,
+  m.chart_form_kind,
+  m.chart_form_by,
+  m.chart_form_sum,
+  m.chart_form_x,
+  m.chart_form_y,
+  m.chart_form_title_field,
+  m.chart_form_refresh,
+];
+
+/** Splits a label into the letters a reader sees. */
+const LETTERS = new Intl.Segmenter();
+
 /** What a frame asks of the form it holds. */
 export interface Held {
   /** Sends what the form holds, from Enter or the primary button. */
@@ -79,6 +96,9 @@ export class PopForm {
     const buttons = el("div", "buttons");
     buttons.append(cancel, this.submit);
     this.box.append(...fields, this.note, buttons);
+    // The forms are set in a monospaced font, so a label of n letters is n ch wide.
+    const longest = Math.max(...LABELS.map((label) => [...LETTERS.segment(label())].length));
+    this.box.style.setProperty("--label-width", `${longest}ch`);
     document.body.append(this.box);
     hang(this.box, place, EDGE);
     this.disarm = clickAway(this.box, () => this.close());
@@ -106,7 +126,8 @@ export class PopForm {
   }
 }
 
-/** field is one row of a form: a label and a control. */
+/** field is one row of a form: a label and a control. A worded `name` is one
+ * of LABELS, so the label column is wide enough for it. */
 export function field(name: string, control: HTMLElement): HTMLElement {
   const line = el("label", "field");
   line.append(el("span", "what", name), control);

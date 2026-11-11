@@ -21,6 +21,24 @@
   color: var(--ink);
 }
 
+/* The labels stand in a column as wide as the longest label of every pop-up
+ * form, --label-width from form.ts, and at least 48 px, so a language with
+ * longer words keeps them whole and the forms' controls line up in each. The
+ * column holds the field's 8 px inset too, and rounds up to a whole pixel,
+ * which takes in the fraction a label's laid-out letters run past its ch. The
+ * note stands under the controls. */
+.pop-form {
+  --label-column: round(up, calc(8px + max(48px, var(--label-width))), 1px);
+  display: grid;
+  grid-template-columns: minmax(var(--label-column), max-content) minmax(0, 1fr);
+  column-gap: 8px;
+}
+
+.pop-form .title,
+.pop-form .buttons {
+  grid-column: 1 / -1;
+}
+
 .pop-form .title {
   margin-bottom: 8px;
   padding: 6px 8px 8px;
@@ -35,14 +53,14 @@
 }
 
 .pop-form .field {
-  display: flex;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 8px;
   padding: 3px 8px;
 }
 
 .pop-form .what {
-  flex: 0 0 48px;
   color: var(--ink-3);
 }
 
@@ -78,11 +96,12 @@
 /* The hint under the fields, or the engine's refusal. Two lines at
  * most; the full text is the hover text. */
 .pop-form .note {
+  grid-column: 2;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   min-height: 16px;
-  margin: 4px 8px 0 64px;
+  margin: 4px 8px 0 0;
   overflow: hidden;
   font-size: 11px;
   line-height: 16px;
