@@ -72,6 +72,9 @@ const SIDEBAR_CLOSED = "closed";
 /** The class on #app while the sidebar is closed. */
 const NO_SIDEBAR = "no-sidebar";
 
+/** The class on the sheet while the side columns leave it no width. */
+const NO_WIDTH = "no-width";
+
 /**
  * An action that would close the workspace and drop its edits: Ctrl+O, the
  * window's ×, a workspace picked from the sidebar, or a .uno named on the
@@ -261,6 +264,11 @@ export class Shell {
       setInput: (name) => this.setInput(name),
     });
     this.root.classList.toggle(NO_SIDEBAR, !this.sidebarOpen);
+    // panel.css reads the class to drop the panel's rule beside the sidebar's.
+    const sheet = found(".win-sheet");
+    new ResizeObserver(() => {
+      sheet.classList.toggle(NO_WIDTH, sheet.getBoundingClientRect().width === 0);
+    }).observe(sheet);
     found("#new").addEventListener("click", () => void this.open());
     found("#close").addEventListener("click", () => this.quit());
     this.wireKeys();

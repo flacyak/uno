@@ -2,7 +2,8 @@
  * @fileoverview Checks of the chart windows in real layout: the layer over the
  * sheet lands a window on the rules around it, clear of both scrollbars and the
  * ×, inside its room at 200% zoom, and tucked to its head where the side columns
- * leave too little room. None of it marks the workspace unsaved, and the grid
+ * leave too little room. Where they leave the sheet no width, one rule parts
+ * the sidebar and the panel. None of it marks the workspace unsaved, and the grid
  * still takes the pointer and the keys beside a window. In light and dark, a
  * window reads as the settings menu's box, the sidebar's band and the window's ×.
  * Its bars draw once its chart's tally completes, as bars.ts sizes them, a
@@ -520,6 +521,33 @@ export const CHARTS: Check[] = [
       sheet.scrollTo(...scrolled);
       if (!faded) return "the stack's shadow stands at opacity " + stack() + " over the selection";
       return back ? "" : "the stack's shadow stays at opacity " + stack();
+    `,
+  },
+  {
+    name: "with a sheet of no width, the sidebar's rule alone parts it from the panel",
+    window: { zoom: MENU_ZOOM, width: NARROW_WIDTH },
+    shot: "charts-sheetless",
+    script: `
+      const sidebar = document.querySelector("#sidebar");
+      const sheet = document.querySelector(".win-sheet");
+      const panel = document.querySelector("#panel");
+      const ruled = () => getComputedStyle(panel).borderLeftWidth;
+      const one = () => panel.getBoundingClientRect().left === sidebar.getBoundingClientRect().right && ruled() === "0px";
+      if (await until(() => innerWidth < ${NARROW_WIDTH} && sheet.offsetWidth === 0 && one())) return "";
+      return "beside a sheet " + sheet.offsetWidth + " px wide, the panel starts at " + panel.getBoundingClientRect().left +
+        " with a rule of " + ruled() + ", beside a sidebar to " + sidebar.getBoundingClientRect().right;
+    `,
+  },
+  {
+    name: "with room again, the panel draws its own rule beside the sheet",
+    window: {},
+    script: `
+      const sheet = document.querySelector(".win-sheet");
+      const panel = document.querySelector("#panel");
+      const ruled = () => getComputedStyle(panel).borderLeftWidth;
+      const own = () => sheet.offsetWidth > 0 && panel.getBoundingClientRect().left === sheet.getBoundingClientRect().right && ruled() !== "0px";
+      if (await until(own)) return "";
+      return "beside a sheet " + sheet.offsetWidth + " px wide, the panel starts at " + panel.getBoundingClientRect().left + " with a rule of " + ruled();
     `,
   },
   {

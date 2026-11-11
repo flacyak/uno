@@ -22,6 +22,12 @@
   animation: panel-in var(--panel-in) ease-out;
 }
 
+/* A sheet of no width puts the panel against the sidebar. The panel drops its
+ * own rule, so the sidebar's parts the two. */
+#app:not(.no-sidebar) .win-sheet.no-width + .win-side > .panel {
+  border-left-width: 0;
+}
+
 /* The panel slides in from the right edge. */
 @keyframes panel-in {
   from {
