@@ -927,7 +927,7 @@ export const CHART_SCATTER: Check[] = [
 /** A check after CHART_SCATTER, as it opens a workspace of three scatters in place of that one. */
 export const CHART_ALONG: Check[] = [
   {
-    name: "a scatter's x axis writes its labels in full where they fit side by side, compactly in a window too narrow for that, and at every second tick where even those crowd, all clear of the y axis's",
+    name: "a scatter's x axis writes its labels in full where they fit side by side, compactly in a window too narrow for that, and at every second tick where even those crowd, all clear of the y axis's, keeping no room for a last label it does not write",
     send: ["menu:open-path", ALONG],
     shot: "chart-along",
     script: `
@@ -943,6 +943,13 @@ export const CHART_ALONG: Check[] = [
         if (near !== -1) return "two labels of " + said[windows().indexOf(win)].join() + " stand " + (at[near].left - at[near - 1].right) + " px apart";
         const [foot, first] = [".chart-ticks.y", ".chart-ticks.x"].map((axis) => win.querySelector(axis + " .chart-tick").getBoundingClientRect());
         if (first.top - foot.bottom < ${TICK_GAP - RECT_SLACK}) return "the x axis's first label stands " + (first.top - foot.bottom) + " px under the y axis's first";
+        // Past an unlabelled last gridline the points reach the plot's inset, and the last label stays inside it.
+        const [plot, points] = [".chart-plot", ".chart-points"].map((selector) => win.querySelector(selector).getBoundingClientRect());
+        const across = (rect) => (rect.left + rect.right) / 2;
+        const lines = [...win.querySelectorAll(".chart-grid.x")].map((line) => across(line.getBoundingClientRect()));
+        const kept = Math.abs(across(at.at(-1)) - lines.at(-1)) <= ${RECT_SLACK};
+        if (!kept && plot.right - points.right - ${BARS_INSET} > ${RECT_SLACK}) return "the points of " + said[windows().indexOf(win)].join() + " end " + (plot.right - points.right) + " px from the plot's edge";
+        if (!kept && at.at(-1).right > plot.right - ${BARS_INSET - RECT_SLACK}) return "the last label of " + said[windows().indexOf(win)].join() + " runs into the plot's inset";
       }
       return "";
     `,

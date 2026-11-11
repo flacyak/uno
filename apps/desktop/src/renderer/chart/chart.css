@@ -418,12 +418,12 @@
 /* A scatter's plot, from scatter.ts: the y axis's labels in a gutter as wide as
  * scatter.ts gives, the points beside them, and the x axis's labels under those.
  * Every label stands inside the bars' inset: the y axis's last centres on the
- * points' top, so they start half a line further in, and the x axis's first and
- * last reach half their length past the points. Its labels stand scatter.ts's
- * gap from the points. It is the ticks' size, so its ch is theirs. A point at
- * an axis's end shows whole past it. The SVG paints from the whole px nearest
- * its start, so the points start on one, and a gridline lands where its label
- * centres. */
+ * points' top, so they start half a line further in, and the x axis's first
+ * reaches half its length past the points, as its last does where it is
+ * written. Its labels stand scatter.ts's gap from the points. It is the ticks'
+ * size, so its ch is theirs. A point at an axis's end shows whole past it. The
+ * SVG paints from the whole px nearest its start, so the points start on one,
+ * and a gridline lands where its label centres. */
 .chart-scatter {
   display: grid;
   grid-template: minmax(0, 1fr) auto / round(up, var(--gutter), 1px) minmax(0, 1fr);

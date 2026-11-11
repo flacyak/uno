@@ -122,17 +122,17 @@ test("an x axis whose labels crowd even compactly labels every second tick, or f
   // 1,050,000 reads 1.1M compactly, so these ticks stay in full.
   const near = sampleOf([900_000, 1_050_000], [0, 1]);
   const ticks = ["900,000", "950,000", "1,000,000", "1,050,000"] as const;
-  // Lays each label out as a page would, centred on its tick, `apart` px from the next tick.
-  const fitted = (apart: number): HTMLElement => {
-    const wide = apart * (ticks.length - 1);
+  // Lays each label of `sample` out as a page would, centred on its tick, `apart` px from the next tick.
+  const fitted = (apart: number, sample = near): HTMLElement => {
+    const wide = apart * (axis(sample.least.x, sample.most.x).ticks.length - 1);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       function (this: HTMLElement) {
         const width = this.textContent!.length * CH;
         return new DOMRect((parseFloat(this.style.left) / 100) * wide - width / 2, 0, width);
       },
     );
-    const box = scatter(near);
-    fitAlong(box, near);
+    const box = scatter(sample);
+    fitAlong(box, sample);
     return box;
   };
   const said = (box: HTMLElement): Array<string | null> =>
@@ -140,16 +140,27 @@ test("an x axis whose labels crowd even compactly labels every second tick, or f
   // How far apart the middles of labels `a` and `b` stand where the two touch.
   const touching = (a: string, b: string): number => ((a.length + b.length) / 2) * CH;
   const [first, second, third, last] = ticks;
+  const lastRoom = (box: HTMLElement): string => box.style.getPropertyValue("--x-last");
   // The widest two stand TICK_GAP apart, and every other two further.
-  expect(said(fitted(touching(third, last) + TICK_GAP))).toStrictEqual(ticks);
+  const full = fitted(touching(third, last) + TICK_GAP);
+  expect(said(full)).toStrictEqual(ticks);
+  expect(lastRoom(full)).toBe(`${last.length / 2}ch`);
   // The first two touch, and every second tick's labels stand two ticks apart.
   const thinned = fitted(touching(first, second));
   expect(said(thinned)).toStrictEqual([first, third]);
+  // The last tick goes unlabelled, so the plot keeps no room for its label.
+  expect(lastRoom(thinned)).toBe("0ch");
   expect(labels(thinned, "x").map((at) => at.style.left)).toStrictEqual(
     read(thinned, ".chart-grid.x", "x1").filter((_, i) => i % 2 === 0),
   );
+  // Five ticks thinned the same way still label the last, so the plot keeps its room.
+  const five = fitted(touching(first, second), sampleOf([900_000, 1_100_000], [0, 1]));
+  expect(said(five)).toStrictEqual([first, third, "1,100,000"]);
+  expect(lastRoom(five)).toBe(`${"1,100,000".length / 2}ch`);
   // Every second tick's labels touch too, so only the first is written.
-  expect(said(fitted(touching(first, third) / 2))).toStrictEqual([first]);
+  const alone = fitted(touching(first, third) / 2);
+  expect(said(alone)).toStrictEqual([first]);
+  expect(lastRoom(alone)).toBe("0ch");
 });
 
 test("a sample says how many of its plotted rows it draws, in the language chosen, and nothing where it draws every one", () => {
