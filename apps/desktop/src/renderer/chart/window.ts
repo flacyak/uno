@@ -53,7 +53,7 @@ import {
   reading,
   trouble,
 } from "./caption.ts";
-import { belowZero, fitLabels, past, pie } from "./pie.ts";
+import { belowZero, fitGaps, fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
 import type { Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
@@ -516,9 +516,9 @@ export class ChartWindow {
 
   /**
    * draw draws `tally` as `plot` reads it, at the plot's height, as an image
-   * `named` names, fits the values, the x axis or the labels to the plot
-   * once they stand in it, and gives the box the marks where the fit leaves
-   * them.
+   * `named` names, fits the values, the x axis or a pie's labels and gaps to
+   * the plot once they stand in it, and gives the box the marks where the
+   * fit leaves them.
    */
   private draw(plot: Plot, tally: GroupsTally | SampleTally, named: string): void {
     let drawn: HTMLElement | undefined;
@@ -531,6 +531,7 @@ export class ChartWindow {
     } else if (plot.t === "pie" && tally.t === "groups") {
       drawn = this.place(pie(plot, tally), named);
       fitLabels(drawn);
+      fitGaps(drawn);
     }
     if (drawn !== undefined) this.tip.show(targets(plot, tally, drawn));
   }

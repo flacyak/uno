@@ -569,7 +569,8 @@
 }
 
 /* A pie's slice, from pie.ts, wears the `--key` it sets. Two slices stand
- * apart by 1 px of the page's ground, whatever the size of the pie. */
+ * apart by the --slice-gap pie.ts sets, of the page's ground, where both are
+ * wide enough at the rim to show beside it; a gap that covers a slice hides. */
 .chart-slice {
   fill: var(--key);
 }
@@ -577,8 +578,12 @@
 .chart-slice-gap {
   fill: none;
   stroke: var(--paper);
-  stroke-width: 1px;
+  stroke-width: var(--slice-gap);
   vector-effect: non-scaling-stroke;
+}
+
+.chart-slice-gap.covers {
+  visibility: hidden;
 }
 
 /* The mark the cursor is on, from tooltip.ts. A bar moves a fifth of the way
@@ -657,7 +662,7 @@
 }
 
 /* A forced palette would take the marks' colour away, so they wear the text's,
- * and a pie's slices stand apart by the page's. */
+ * and a pie's slices, its thinnest too, stand apart by the page's. */
 @media (forced-colors: active) {
   .chart-bar,
   .chart-coverage::after {
@@ -674,6 +679,10 @@
   .chart-slice-gap {
     stroke: Canvas;
     forced-color-adjust: none;
+  }
+
+  .chart-slice-gap.covers {
+    visibility: visible;
   }
 
   .chart-bar-row.cursor .chart-bar {
