@@ -154,6 +154,36 @@ test("the caption's count of the cells that were not numbers is a button that la
   expect(await until(page, () => cell() === landed), cell()).toBe(true);
 });
 
+/** The largest double, as a revenue cell writes it. */
+const MOST = Number.MAX_VALUE;
+
+/** A revenue column whose North sums past the largest double, and South past its negative. */
+const PAST_DOUBLE = [
+  `North,${MOST}`,
+  `North,${MOST}`,
+  `South,-${MOST}`,
+  `South,-${MOST}`,
+  "East,5",
+];
+
+test("a sum past the largest double draws across its side, and the other bars beside it", async () => {
+  const csv = join(dir, "huge.csv");
+  await writeFile(csv, `region,revenue\n${PAST_DOUBLE.join("\n")}\n`);
+  const sum = { col: 1, header: "revenue" };
+  const sums: Chart = { ...BARS, plot: { t: "bars", by: { col: 0, header: "region" }, sum } };
+  const path = join(dir, "huge.uno");
+  await writeFile(path, unoOf([sums], [], csv));
+  await shell.openRef({ name: "huge.uno", path });
+  const tips = [num(Infinity), num(5), num(-Infinity)];
+  expect(await until(page, () => texts(".chart-bar-tip").join() === tips.join())).toBe(true);
+  const box = document.querySelector<HTMLElement>(".chart-bars")!;
+  const tracks = [...document.querySelectorAll<HTMLElement>(".chart-bar-track")];
+  const shares = tracks.map((track) => Number(track.style.getPropertyValue("--share")));
+  expect([Number(box.style.getPropertyValue("--zero")), ...shares]).toStrictEqual([
+    0.5, 0.5, 0.5, 0.5,
+  ]);
+});
+
 test("a workspace with none takes the last one's windows away", async () => {
   await open("before.uno", [BARS]);
   await open("none.uno", []);

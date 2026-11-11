@@ -38,6 +38,12 @@ export const TIP_GAP = 6;
  */
 export const SPAN_LEAST = 2 * BAR_THICK;
 
+/**
+ * The length an infinite sum takes where no finite sum has one: any will do, as
+ * a bar draws its share of the span.
+ */
+const ANY_LENGTH = 1;
+
 /** What a bar chart draws. */
 type Bars = Extract<Plot, { t: "bars" }>;
 
@@ -90,9 +96,21 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
     size: measure(g),
     tip: num(measure(g)),
   }));
-  // Every bar starts at zero, on one scale from the least sum to the largest.
-  const low = Math.min(0, ...drawn.map(({ size }) => size));
-  const span = Math.max(0, ...drawn.map(({ size }) => size)) - low;
+  // A sum past the largest double reads as infinite, and draws as long as the
+  // longest finite bar on its own side, so the scale stays the finite sums'.
+  // Where its side has none it takes the other side's longest, and any length
+  // where no sum is finite.
+  const finite = drawn.map(({ size }) => size).filter(Number.isFinite);
+  const length = (size: number): number => {
+    if (Number.isFinite(size)) return size;
+    const own = longest(finite.filter((other) => Math.sign(other) === Math.sign(size)));
+    const reach = own > 0 ? own : longest(finite);
+    return Math.sign(size) * (reach > 0 ? reach : ANY_LENGTH);
+  };
+  // Every bar starts at zero, on one scale from the least length to the largest.
+  const lengths = drawn.map(({ size }) => length(size));
+  const low = Math.min(0, ...lengths);
+  const span = Math.max(0, ...lengths) - low;
 
   const box = el("div", "chart-bars");
   box.style.setProperty("--bar-thick", `${BAR_THICK}px`);
@@ -105,7 +123,7 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
   for (const { label, size, tip } of drawn) {
     const track = el("div", "chart-bar-track");
     track.classList.toggle("below", size < 0);
-    track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(size) / span}`);
+    track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(length(size)) / span}`);
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
     const row = el("div", "chart-bar-row");
     row.append(named(label), track);
@@ -121,6 +139,11 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
   }
   if (past) box.append(line(m.chart_bars_past({ count: num(DISTINCT_AT_MOST) })));
   return box;
+}
+
+/** The longest of `sizes` from zero, or 0 where there are none. */
+function longest(sizes: number[]): number {
+  return Math.max(0, ...sizes.map((size) => Math.abs(size)));
 }
 
 /**
