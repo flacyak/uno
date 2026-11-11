@@ -45,6 +45,9 @@ const NEAR_EDGE = 0;
 /** A place's x or y at the room's right or bottom edge. */
 const FAR_EDGE = 1;
 
+/** A place's x or y that puts a window's middle on the room's, in a room of any size. */
+const MIDDLE = (NEAR_EDGE + FAR_EDGE) / 2;
+
 /** The layer's box, which windows may fill, in CSS px. */
 export interface Room {
   w: number;
@@ -146,11 +149,22 @@ export function thin(room: Room): boolean {
  * top of the half of the room away from the `selected` column, the half its
  * middle is not in, flush to that half's outer edge. A room under twice the
  * window's width has it cross the middle.
+ *
+ * `corner` is how far the room's right edge reaches under the window's ×. A
+ * new window on the right stands that far in, so its × stands clear, but no
+ * further than the selected column's right edge, so the window stays whole
+ * while the grid has the keys. It goes flush when standing in would bring its
+ * middle to the room's. It is stored as a fraction, so it stands further in
+ * as the room grows and nearer the edge as it shrinks, and stays on the right
+ * half.
  */
-export function fresh(n: number, selected: ColumnSpan, room: Room): ChartPlace {
+export function fresh(n: number, selected: ColumnSpan, room: Room, corner = 0): ChartPlace {
   const middle = (selected.left + selected.right) / 2;
+  const free = room.w - DEFAULT_WIDTH;
+  const steppedIn = share(Math.max(free - corner, selected.right), free, FAR_EDGE);
+  const far = steppedIn > MIDDLE ? steppedIn : FAR_EDGE;
   return {
-    x: middle < room.w / 2 ? FAR_EDGE : NEAR_EDGE,
+    x: middle < room.w / 2 ? far : NEAR_EDGE,
     y: share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE),
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,

@@ -43,6 +43,9 @@ const columnAt = (left: number): ColumnSpan => ({ left, right: left + COLUMN_WID
 /** How far a column across the room's middle reaches past it on its shorter side. */
 const PAST_MIDDLE = 2;
 
+/** How far an 1100 px window's room reaches under its ×: `--corner`'s 34 px past the 12 px bar. */
+const CORNER = 22;
+
 /** A room of exactly one window of a new chart's size. */
 const SNUG: Room = { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
 
@@ -171,6 +174,27 @@ test("a column across the middle sends a new window to the half it has less of",
   const half = ROOM.w / 2;
   expect(fresh(0, columnAt(half - PAST_MIDDLE), ROOM).x).toBe(0);
   expect(fresh(0, columnAt(half - COLUMN_WIDTH + PAST_MIDDLE), ROOM).x).toBe(1);
+});
+
+test("a new window on the right stands as far in as the room reaches under the window's ×", () => {
+  const inset = (place: ChartPlace, room: Room): number => {
+    const at = placed(place, room);
+    return room.w - at.x - at.width;
+  };
+  const place = fresh(0, columnAt(0), ROOM, CORNER);
+  expect(inset(place, ROOM)).toBeCloseTo(CORNER);
+  // The inset is a share of the free px, so a narrower room has it nearer the edge.
+  const half = { ...ROOM, w: ROOM.w / 2 };
+  const share = (half.w - DEFAULT_WIDTH) / (ROOM.w - DEFAULT_WIDTH);
+  expect(inset(place, half)).toBeCloseTo(CORNER * share);
+  // A selected column reaching into the inset keeps the window clear of it.
+  const reaching = { left: 0, right: ROOM.w - DEFAULT_WIDTH - CORNER / 2 };
+  expect(placed(fresh(0, reaching, ROOM, CORNER), ROOM).x).toBeCloseTo(reaching.right);
+  // A room where standing in would bring its middle to the room's keeps it flush, as it grows.
+  for (const free of [CORNER, CORNER + 1, 2 * CORNER]) {
+    const narrow = { ...ROOM, w: DEFAULT_WIDTH + free };
+    expect(inset(fresh(0, columnAt(0), narrow, CORNER), ROOM)).toBe(0);
+  }
 });
 
 test("each chart already there moves a new one down, as far as the room goes", () => {

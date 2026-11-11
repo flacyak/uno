@@ -151,9 +151,12 @@ export class ChartLayer implements Stage {
   /** fresh gives a new chart's place, away from `column`, which stands
    * across the window. */
   fresh(column: ColumnSpan): ChartPlace {
-    const { left } = this.root.getBoundingClientRect();
+    const { left, right } = this.root.getBoundingClientRect();
     const inRoom = { left: column.left - left, right: column.right - left };
-    return fresh(this.charts.all.length, inRoom, this.room());
+    // The × keeps `--corner` clear at the window's top right, 0 on a page with no ×.
+    const kept = Number.parseFloat(getComputedStyle(this.root).getPropertyValue("--corner"));
+    const corner = Number.isFinite(kept) ? Math.max(0, right - (innerWidth - kept)) : 0;
+    return fresh(this.charts.all.length, inRoom, this.room(), corner);
   }
 
   /** focus gives chart `id`'s window the keys, which raises it. */
