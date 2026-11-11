@@ -533,3 +533,20 @@ test("the keys and the cursor stay in the plot through a new tally and go togeth
   await frame();
   expect(plot.tabIndex).toBe(0);
 });
+
+test("a pie's window hides each gap that would cover a slice too thin for it, as its ring measures", async () => {
+  // One value of 990 rows and seven of 2, on PR 36's pixel review's 187 px ring.
+  const chart: Chart = { ...BARS, plot: { t: "pie", by: REGION } };
+  const big = { value: "big", rows: 990, sum: 0 };
+  const names = ["a", "b", "c", "d", "e", "f", "g"];
+  const read = { ...tallyOf(names, true), plot: chart.plot };
+  read.groups = [big, ...names.map((value) => ({ value, rows: 2, sum: 0 }))];
+  const reviewed = 187;
+  vi.spyOn(SVGElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, reviewed, reviewed),
+  );
+  const made = hearing(() => heardOf(read, read), chart);
+  await frame();
+  const shown = made.box.querySelectorAll(".chart-slice-gap:not(.covers)");
+  expect([...shown].map((line) => line.getAttribute("d"))).toStrictEqual(["M0 0L0 -1"]);
+});
