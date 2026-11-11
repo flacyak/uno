@@ -80,6 +80,13 @@ test("a tick is the decimal it stands for, and none stands a step short of the l
   expect(axis(0.3, 0.6).ticks).toEqual([0.3, 0.4, 0.5, 0.6]);
 });
 
+test("an end that stands on a tick ten million steps or more from zero is the axis's end", () => {
+  // 12345678.1 / 0.1 is 123456780.99999999 as a double, under the tick it stands on.
+  const tenths = [12345678.1, 12345678.2, 12345678.3, 12345678.4];
+  expect(axis(12345678.1, 12345678.4).ticks).toEqual(tenths);
+  expect(axis(100, 100.000003).ticks).toEqual([100, 100.000001, 100.000002, 100.000003]);
+});
+
 test("an axis over one value runs from zero to twice it", () => {
   expect(axis(5, 5).ticks).toEqual([0, 5, 10]);
   expect(axis(-3, -3).ticks).toEqual([-6, -4, -2, 0]);
