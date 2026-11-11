@@ -67,6 +67,15 @@ const BOTH_SIDES_OPEN = 640 - 168 - 250 - 12;
 /** The same window at 200% zoom, which halves its px, with the sidebar alone open. */
 const ZOOMED = 640 / 2 - 168 - 12;
 
+/** A place a move leaves at a share of the free px, which a resize can put between px. */
+const MOVED: ChartPlace = { ...PLACE, x: 0.4, y: 0.6 };
+
+/** ROOM with a px taken off each way, which leaves MOVED's share between px. */
+const RESIZED: Room = { w: ROOM.w - 1, h: ROOM.h - 1 };
+
+/** What a zoom can leave a room past a whole px. */
+const HALF_PX = 0.5;
+
 /** A press of `key`, as a window's keydown hands it over. */
 function press(key: string, more: Partial<Press> = {}): Press {
   return { key, ctrl: false, alt: false, meta: false, shift: false, repeat: false, ...more };
@@ -84,6 +93,19 @@ test("a window at the right and bottom edges stays there as the room narrows", (
     expect(rect.x + rect.width).toBe(room.w);
     expect(rect.y + rect.height).toBe(room.h);
   }
+});
+
+test("a window stands on whole px as the room resizes, and flush to an edge between px", () => {
+  const { x, y } = placed(MOVED, RESIZED);
+  expect([x, y].every(Number.isInteger)).toBe(true);
+  const zoomed = { w: ROOM.w + HALF_PX, h: ROOM.h + HALF_PX };
+  const flush = placed({ ...PLACE, x: 1, y: 1 }, zoomed);
+  expect([flush.x + flush.width, flush.y + flush.height]).toEqual([zoomed.w, zoomed.h]);
+});
+
+test("a press keeps the share of a side it leaves where it stands", () => {
+  expect(pressed(MOVED, press("ArrowRight"), RESIZED).y).toBe(MOVED.y);
+  expect(pressed({ ...MOVED, y: 1 }, press("ArrowDown"), RESIZED).x).toBe(MOVED.x);
 });
 
 test("a place draws at no less than the least size, and no more than the room", () => {
