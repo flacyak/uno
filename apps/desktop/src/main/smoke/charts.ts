@@ -459,7 +459,7 @@ export const CHARTS: Check[] = [
       if (new Set(outer).size > 1) return "the stack's outer corners differ: " + outer.join(", ");
       if (upper[1].boxShadow !== "none" || lower[1].boxShadow !== "none") return "the heads throw " + upper[1].boxShadow + " and " + lower[1].boxShadow;
       const [top, foot] = windows();
-      if (parseFloat(stack.height) !== foot.bottom - top.top) return "the shadow is " + stack.height + " high, behind heads at " + edges(top) + " and " + edges(foot);
+      if (parseFloat(stack.height) !== foot.bottom - top.top || parseFloat(stack.width) !== foot.width || parseFloat(stack.top) !== top.top - room().top) return "the shadow is " + stack.width + " by " + stack.height + " at " + stack.top + ", behind heads at " + edges(top) + " and " + edges(foot);
       const menu = getComputedStyle(document.querySelector(".settings")).boxShadow;
       if (stack.boxShadow !== menu) return "the stack throws " + stack.boxShadow + ", and the settings menu " + menu;
       upper[0].scrollTop = 1;
