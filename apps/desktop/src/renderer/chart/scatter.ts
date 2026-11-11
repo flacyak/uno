@@ -81,15 +81,17 @@ function gridline(cls: string, x1: string, y1: string, x2: string, y2: string): 
 /**
  * writeAlong writes `x`'s labels under `box`'s points, each at its tick's share,
  * at every `every`th tick from the first. A label centres on its tick, so the
- * plot keeps half the first and last label's length past the points, whichever
- * ones it writes.
+ * plot keeps half the first label's length before the points, and half the
+ * last's past them where it writes the last.
  */
 function writeAlong(box: HTMLElement, x: Axis, every = 1): void {
   const labels = tickLabels(x);
   for (const [i, label] of labels.entries()) label.style.left = percent(share(x, x.ticks[i]!));
   box.querySelector(".chart-ticks.x")!.replaceChildren(...labels.filter((_, i) => i % every === 0));
   box.style.setProperty("--x-first", `${x.labels[0]!.length / 2}ch`);
-  box.style.setProperty("--x-last", `${x.labels.at(-1)!.length / 2}ch`);
+  const last = x.labels.length - 1;
+  const past = last % every === 0 ? x.labels[last]!.length / 2 : 0;
+  box.style.setProperty("--x-last", `${past}ch`);
 }
 
 /**
@@ -169,7 +171,7 @@ export function fitAlong(box: HTMLElement, sample: Sample): void {
   if (!crowded(along(box))) return;
   const x = axis(sample.least.x, sample.most.x);
   writeAlong(box, x);
-  // The plot keeps its room whichever labels it writes, so those kept stand as measured.
+  // Thinning only widens the plot, so the labels kept stand at least as far apart as measured.
   const drawn = along(box);
   let every = 1;
   while (crowded(drawn.filter((_, i) => i % every === 0))) every *= 2;
