@@ -146,6 +146,15 @@ test.each(palettes)("%s, %s: its ink reads on the grid", (_, _mode, p) => {
   expect(contrast(p.ink, p.surface)).toBeGreaterThanOrEqual(4.5);
 });
 
+/** The faintest a rule stands from the sunken band it borders in any theme
+ * today, Sakura light's 1.10 to 1: a head's rule and a tucked head's top
+ * border are drawn on it. */
+const RULE_ON_SUNKEN = 1.1;
+
+test.each(palettes)("%s, %s: its rules show on the sunken band", (_, _mode, p) => {
+  expect(contrast(p.rule, p.sunken)).toBeGreaterThanOrEqual(RULE_ON_SUNKEN);
+});
+
 // ----------------------------------------------------------------- contrast
 
 /** WCAG's AA bound for body text: 4.5 to 1. */

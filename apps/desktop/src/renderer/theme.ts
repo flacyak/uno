@@ -135,7 +135,7 @@ export const THEMES = [
       surface: "#eff1f5",
       ink: "#4c4f69",
       ink3: "#555869",
-      rule: "#ccd0da",
+      rule: "#bcc0cc",
       accent: "#8839ef",
       chart: ["#8839ef", "#e4612c", "#0f9e6d", "#ba7e08", "#e05d93", "#008300"],
     },
