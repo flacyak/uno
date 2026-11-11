@@ -205,10 +205,10 @@ test("a new window on the right stands as far in as the room reaches under the w
   };
   const place = fresh(0, columnAt(0), ROOM, CORNER);
   expect(inset(place, ROOM)).toBeCloseTo(CORNER);
-  // The inset is a share of the free px, so a narrower room has it nearer the edge.
+  // The inset is a share of the free px, on a whole px, so a narrower room has it nearer the edge.
   const half = { ...ROOM, w: ROOM.w / 2 };
   const share = (half.w - DEFAULT_WIDTH) / (ROOM.w - DEFAULT_WIDTH);
-  expect(inset(place, half)).toBeCloseTo(CORNER * share);
+  expect(inset(place, half)).toBe(Math.round(CORNER * share));
   // A selected column reaching into the inset keeps the window clear of it.
   const reaching = { left: 0, right: ROOM.w - DEFAULT_WIDTH - CORNER / 2 };
   expect(placed(fresh(0, reaching, ROOM, CORNER), ROOM).x).toBeCloseTo(reaching.right);
