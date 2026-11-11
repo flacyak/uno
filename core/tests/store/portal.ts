@@ -3,7 +3,7 @@
  *
  * It answers GET /federation/credentials with the role keys granted to the
  * token in the x-amz-sso_bearer_token header, and refuses an unknown token.
- * It records every request in `seen`.
+ * It records every request to that path in `seen`.
  */
 
 import { createServer } from 'node:http';
@@ -34,7 +34,6 @@ export async function portal(grants: Map<string, Grant>): Promise<Portal> {
     const account = url.searchParams.get('account_id') ?? '';
     const role = url.searchParams.get('role_name') ?? '';
     const token = String(req.headers['x-amz-sso_bearer_token'] ?? '');
-    seen.push({ account, role, token });
 
     const json = (status: number, body: unknown): void => {
       res
@@ -43,6 +42,7 @@ export async function portal(grants: Map<string, Grant>): Promise<Portal> {
     };
     if (url.pathname !== '/federation/credentials')
       return json(404, { message: 'not found' });
+    seen.push({ account, role, token });
     const grant = grants.get(token);
     if (grant === undefined) {
       return json(401, { message: 'Session token not found or invalid' });

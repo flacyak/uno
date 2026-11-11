@@ -1,7 +1,7 @@
 /**
  * @fileoverview A stand-in for what a host answers on: the EC2 instance
  * metadata service, v2 and v1, and the credentials endpoint beside a
- * container. On localhost. Every request is recorded in `seen`.
+ * container. On localhost. Every request but one for the root is in `seen`.
  */
 
 import { createServer } from 'node:http';
@@ -36,6 +36,7 @@ export interface Host {
 
 const IMDS_TOKEN = 'imds-token';
 const ROLES = '/latest/meta-data/iam/security-credentials/';
+const ROOT = '/';
 
 /**
  * host starts the stand-in on a free port of localhost.
@@ -53,12 +54,14 @@ export async function host(): Promise<Host> {
     const path = new URL(req.url!, `http://${req.headers.host}`).pathname;
     const token = req.headers['x-aws-ec2-metadata-token'];
     const authorization = req.headers['authorization'];
-    h.seen.push({
-      method: req.method!,
-      path,
-      token: typeof token === 'string' ? token : undefined,
-      authorization,
-    });
+    if (path !== ROOT) {
+      h.seen.push({
+        method: req.method!,
+        path,
+        token: typeof token === 'string' ? token : undefined,
+        authorization,
+      });
+    }
 
     const answer = (
       status: number,

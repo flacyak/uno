@@ -5,8 +5,8 @@
  * It signs each AssumeRole again with the secret of the claimed access key
  * and refuses a mismatch. A role is handed out only to a caller its trust
  * names, with the external ID the trust asks for, or to a web identity token
- * its trust names. Every request is recorded in `seen`; for a web identity
- * call, `caller` is the token.
+ * its trust names. Every request that names an Action is recorded in `seen`;
+ * for a web identity call, `caller` is the token.
  */
 
 import { createServer } from 'node:http';
@@ -79,13 +79,15 @@ export async function sts(
       const region = scope?.[1] ?? '';
       const roleArn = q.get('RoleArn') ?? '';
       const externalId = q.get('ExternalId') ?? undefined;
-      seen.push({
-        caller,
-        roleArn,
-        externalId,
-        sessionName: q.get('RoleSessionName') ?? '',
-        region,
-      });
+      if (q.has('Action')) {
+        seen.push({
+          caller,
+          roleArn,
+          externalId,
+          sessionName: q.get('RoleSessionName') ?? '',
+          region,
+        });
+      }
 
       const refuse = (status: number, code: string, message: string): void => {
         res
