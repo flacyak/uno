@@ -8,6 +8,7 @@
  * that object.
  */
 
+import { DOUBLE_ZOOM, NARROW_WIDTH } from "./charts.ts";
 import type { Check } from "./check.ts";
 
 /** The names on a section's lines, beside the PRELUDE's helpers. */
@@ -161,5 +162,42 @@ export const PANEL: Check[] = [
       const moved = () => from().filter((t) => t.startsWith(q3)).length === 2 && !from().some((t) => t.startsWith(q4));
       return (await until(moved)) ? "" : "the tabs read from " + JSON.stringify(from());
     `,
+  },
+  {
+    // Measures layout, which only a real window has.
+    name: "at 200% zoom in a narrow window, a tab's Reload, Re-point and Remove stand inside the page",
+    window: { zoom: DOUBLE_ZOOM, width: NARROW_WIDTH },
+    shot: "panel-zoomed",
+    script: `
+      if (!(await until(() => innerWidth <= ${NARROW_WIDTH / DOUBLE_ZOOM}))) return "the page is " + innerWidth + "px wide";
+      const tab = [...document.querySelectorAll("#panel .panel-row")].find((r) => r.title.startsWith("s3://"));
+      tab.click();
+      await frame();
+      if (JSON.stringify(foot()) !== '["Reload","Re-point","Remove"]') return "the buttons are " + JSON.stringify(foot());
+      const panel = document.querySelector("#panel").getBoundingClientRect();
+      if (panel.right > innerWidth) return "the panel runs to " + panel.right + "px on a page " + innerWidth + "px wide";
+      const out = footButtons().map((b) => b.getBoundingClientRect()).filter((r) => r.right > innerWidth || r.bottom > innerHeight);
+      return out.length === 0 ? "" : out.length + " buttons stand past the page's " + innerWidth + "x" + innerHeight;
+    `,
+  },
+  {
+    name: "at 200% zoom in a narrow window, the sidebar's words keep to one line and its + stays square",
+    window: { zoom: DOUBLE_ZOOM, width: NARROW_WIDTH },
+    script: `
+      const lines = (el) => {
+        const words = document.createRange();
+        words.selectNodeContents(el);
+        return new Set([...words.getClientRects()].map((r) => r.top)).size;
+      };
+      const wrapped = [...document.querySelectorAll("#sidebar .label")].filter((l) => lines(l) > 1);
+      if (wrapped.length > 0) return "these wrap: " + JSON.stringify(wrapped.map((l) => l.textContent));
+      const plus = document.querySelector("#new .plus").getBoundingClientRect();
+      return plus.width === plus.height ? "" : "the + is " + plus.width + "x" + plus.height;
+    `,
+  },
+  {
+    name: "back at full zoom, the page is as wide as the run began",
+    window: {},
+    script: `return (await until(() => innerWidth > ${NARROW_WIDTH})) ? "" : "the page is " + innerWidth + "px wide";`,
   },
 ];

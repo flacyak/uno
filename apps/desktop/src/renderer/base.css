@@ -110,15 +110,17 @@ body {
   min-height: 0;
 }
 
-/* `min-width: 0` so the sheet shrinks for the side columns and both stay on
- * the window. `isolation` keeps the grid's sticky headers in their
- * own stacking context, so the scrim only needs to be above the sheet.
+/* The sheet takes the width the side columns leave, down to none. Its basis
+ * of 0 and `min-width: 0` keep the grid's width from counting when the
+ * columns shrink, so the side columns shrink only on a page too narrow for
+ * both of them. `isolation` keeps the grid's sticky headers in their own
+ * stacking context, so the scrim only needs to be above the sheet.
  * `position` holds the chart layer to the sheet. */
 .win-sheet {
   position: relative;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   isolation: isolate;
@@ -169,11 +171,13 @@ body {
 
 /* The column holding the sources panel: a head at the top and the panel
  * under it. The head stays under the scrim with the rest of the top line.
- * The column is hidden while the panel is hidden. */
+ * The column is hidden while the panel is hidden. On a page too narrow for
+ * it and the sidebar, as a 640 px window at 200% zoom, the two shrink in
+ * step, so the panel and its buttons stay on the window. */
 .win-side {
   display: flex;
   flex-direction: column;
-  flex: 0 0 330px;
+  flex: 0 1 330px;
   min-width: 0;
   min-height: 0;
 }
