@@ -80,8 +80,7 @@ test("Insert chart… makes bars of the selected column, which draw from the eng
   expect([by.value, document.activeElement]).toStrictEqual(["1", by]);
 
   await enter(by);
-  const title = m.chart_title_rows({ by: "region" });
-  expect(document.querySelector("#status-msg")!.textContent).toBe(m.chart_inserted({ title }));
+  expect(document.querySelector("#status-msg")!.textContent).toBe("inserted rows per region");
   expect(document.querySelector<HTMLElement>("#charts")!.hidden).toBe(false);
   expect(document.activeElement).toBe(document.querySelector(".chart"));
   expect(document.querySelector(".ws.open .dirty")).not.toBeNull();
@@ -109,9 +108,8 @@ test("the form makes a pie of region and a scatter of units, which draw from the
   };
   await openForm();
   await enter(kind("pie"));
-  const shares = m.chart_title_share_of_rows({ by: "region" });
   expect(document.querySelector("#status-msg")!.textContent).toBe(
-    m.chart_inserted({ title: shares }),
+    "inserted share of rows per region",
   );
   const slices = (): number => document.querySelectorAll(".chart-pie .chart-slice").length;
   expect(await until(page, () => slices() === REGIONS.length)).toBe(true);
@@ -121,10 +119,7 @@ test("the form makes a pie of region and a scatter of units, which draw from the
   for (let col = REGION; col < UNITS; col++) await page.press("ArrowRight");
   await openForm();
   await enter(kind("scatter"));
-  const against = m.chart_title_against({ x: "units", y: "revenue" });
-  expect(document.querySelector("#status-msg")!.textContent).toBe(
-    m.chart_inserted({ title: against }),
-  );
+  expect(document.querySelector("#status-msg")!.textContent).toBe("inserted revenue against units");
   const points = (): number => document.querySelectorAll(".chart-scatter .chart-point").length;
   expect(await until(page, () => points() > 0)).toBe(true);
 });

@@ -42,7 +42,7 @@ function tallyOf(...groups: Group[]): GroupsTally {
 }
 
 /** What the head calls the chart, as the table's caption. */
-const called = (): HTMLElement => el("bdi", "", "Rows per region");
+const called = (): HTMLElement => el("bdi", "", "rows per region");
 
 /** The rows of `box`'s table, as each cell's text. */
 const rows = (box: HTMLElement): string[][] =>
@@ -54,7 +54,7 @@ test("a table has a row per value sent, the largest first, its value heading the
   const tally = tallyOf(sent("North", 1204), sent("South", 812));
   const box = table(BARS.plot, tally, called());
   expect(box.classList.contains("chart-scrolls")).toBe(true);
-  expect(box.querySelector("table > caption")?.textContent).toBe("Rows per region");
+  expect(box.querySelector("table > caption")?.textContent).toBe("rows per region");
   expect(rows(box)).toStrictEqual([
     ["region", "rows"],
     ["North", "1,204"],

@@ -11,7 +11,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Chart, Plot } from "@document";
 import type { GroupsTally } from "@engine";
 import { m } from "@paraglide/messages";
-import { baseLocale, setLocale } from "@paraglide/runtime";
+import { baseLocale, locales, setLocale } from "@paraglide/runtime";
 import { summary } from "@renderer/chart/summary";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import type { Stage } from "@renderer/chart/window";
@@ -24,6 +24,17 @@ const REGION = { col: 1, header: "region" };
 const UNITS = { col: 4, header: "units" };
 const REVENUE = { col: 5, header: "revenue" };
 const BLANK = { col: 2, header: "" };
+
+/** The plots whose made title starts with a message, not a header. */
+const WORDED: Plot[] = [
+  { t: "bars", by: REGION },
+  { t: "bars", by: REGION, sum: REVENUE },
+  { t: "pie", by: REGION },
+  { t: "pie", by: REGION, sum: REVENUE },
+];
+
+/** A text whose first letter is lower case, past any marks a pseudo-locale puts before it. */
+const LOWER_FIRST = /^\P{L}*\p{Ll}/u;
 
 /** A chart with a title a person gave it. */
 const TITLED: Chart = { ...BARS, title: "Where the rows are" };
@@ -80,25 +91,30 @@ afterEach(() => {
 });
 
 test.each<[string, string, Plot]>([
-  ["Rows per region", "Filas por region", { t: "bars", by: REGION }],
+  ["rows per region", "filas por region", { t: "bars", by: REGION }],
   [
-    "Sum of revenue per region",
-    "Suma de revenue por region",
+    "sum of revenue per region",
+    "suma de revenue por region",
     { t: "bars", by: REGION, sum: REVENUE },
   ],
-  ["Share of rows per region", "Proporción de filas por region", { t: "pie", by: REGION }],
+  ["share of rows per region", "proporción de filas por region", { t: "pie", by: REGION }],
   [
-    "Share of revenue per region",
-    "Proporción de revenue por region",
+    "share of revenue per region",
+    "proporción de revenue por region",
     { t: "pie", by: REGION, sum: REVENUE },
   ],
   ["revenue against units", "revenue frente a units", { t: "scatter", x: UNITS, y: REVENUE }],
-  ["Rows per column 3", "Filas por columna 3", { t: "bars", by: BLANK }],
+  ["rows per column 3", "filas por columna 3", { t: "bars", by: BLANK }],
   ["column 3 against units", "columna 3 frente a units", { t: "scatter", x: UNITS, y: BLANK }],
 ])("a plot makes the title %s in the app's language, from its columns", (en, es, plot) => {
   expect(madeTitle(plot)).toBe(en);
   void setLocale("es", { reload: false });
   expect(madeTitle(plot)).toBe(es);
+});
+
+test.each(locales)("%s starts every title a bars or pie chart makes in lower case", (locale) => {
+  void setLocale(locale, { reload: false });
+  for (const plot of WORDED) expect(madeTitle(plot)).toMatch(LOWER_FIRST);
 });
 
 test("a window is a group called a chart, named by its head and described by its caption", () => {
@@ -309,7 +325,7 @@ test("a relabel writes the summary in the language chosen since, out of sight", 
   made.relabel();
   await frame();
   const { said } = summary(madeTitle(BARS.plot), NAME, BARS.plot, read);
-  expect(said).toContain("Filas");
+  expect(said).toContain("filas por");
   expect(made.box.querySelector(".chart-summary-said")?.textContent).toBe(said);
   expect(made.box.querySelector<HTMLElement>(".chart-summary")?.hidden).toBe(true);
 });
