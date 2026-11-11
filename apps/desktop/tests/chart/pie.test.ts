@@ -2,7 +2,8 @@
  * @fileoverview A pie chart's slices of a tally: one for each value above zero,
  * the six largest first, and Other after them for the rest. Each runs its share
  * of the way round from the top, wears a chart colour, Other the caption's ink,
- * and a line of the page's ground parts it from the next slice round the ring.
+ * and a line of the page's ground parts it from the next slice round the ring,
+ * where both are wide enough at the rim to show beside it.
  * A label past the ring by the middle of each arc gives its value and its share.
  * Labels that would meet or run into the inset give way to a list by the ring.
  * The caption says how Other takes the values past those a tally keeps apart,
@@ -21,7 +22,9 @@ import { BARS_INSET } from "@renderer/chart/bars";
 import {
   LABEL_GAP,
   PIE_SLICES_AT_MOST,
+  SLICE_LEAST,
   belowZero,
+  fitGaps,
   fitLabels,
   past,
   pie,
@@ -164,6 +167,33 @@ test("a line parts each slice from the next, over them all, and a lone one from 
   expect(paths(box, ".chart-slice-gap")).toStrictEqual(["M0 0L0 -1", "M0 0L0 1", "M0 0L-1 0"]);
   expect(box.querySelector(".chart-slice-gap ~ .chart-slice")).toBeNull();
   expect(pie(ROWS, tallyOf(sent("North", 3))).querySelector(".chart-slice-gap")).toBeNull();
+});
+
+test("a slice under SLICE_LEAST round the rim keeps its colour, with no gap beside it", () => {
+  // One value of 990 rows and seven of 2: five slices of 0.2%, and Other of 0.4%.
+  const big = 990;
+  const small = 2;
+  const names = ["a", "b", "c", "d", "e", "f", "g"];
+  const tiny = tallyOf(sent("big", big), ...names.map((name) => sent(name, small)));
+  const gapsOn = (across: number): Array<string | null> => {
+    const box = pie(ROWS, tiny);
+    const ring = box.querySelector(".chart-slices")!;
+    Object.defineProperty(ring, "getBoundingClientRect", {
+      value: () => new DOMRect(0, 0, across, across),
+    });
+    fitGaps(box);
+    return paths(box, ".chart-slice-gap:not(.covers)");
+  };
+  // A 0.2% slice has SLICE_LEAST of arc on a ring `least` across. PR 36's pixel review drew 187 px.
+  const least = SLICE_LEAST / (Math.PI * (small / (big + names.length * small)));
+  const reviewed = 187;
+  // A px either side of where the gaps go.
+  const step = 1;
+  expect(gapsOn(reviewed)).toStrictEqual(["M0 0L0 -1"]);
+  expect(gapsOn(least - step)).toStrictEqual(["M0 0L0 -1"]);
+  expect(gapsOn(least + step)).toHaveLength(PIE_SLICES_AT_MOST + 1);
+  // A ring not laid out yet keeps them all, to fit them once it is.
+  expect(gapsOn(0)).toHaveLength(PIE_SLICES_AT_MOST + 1);
 });
 
 test("a slice's label is its value as the file has it and its share, and Other's its own name", () => {

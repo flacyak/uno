@@ -8,8 +8,9 @@
  * The slices go round from the top, as SVG on a ring of radius 1, so whatever
  * sizes the SVG sizes the pie, round in any shape. Each wears its colour as
  * --key, which chart.css fills it with, so a theme recolours it, and a line of
- * the page's ground parts it from the next. Its label, HTML outside the ring,
- * gives its value, the file's text set as text alone, and its share.
+ * the page's ground parts it from the next, where both are wide enough to show
+ * beside it. Its label, HTML outside the ring, gives its value, the file's text
+ * set as text alone, and its share.
  * Where labels would meet or run past the plot, a list beside the ring gives them.
  */
 
@@ -111,6 +112,15 @@ const OTHER_KEY = "var(--ink-3)";
 /** The room between the ring and a label, in px: as far as a bar's value stands from its bar. */
 export const LABEL_GAP = TIP_GAP;
 
+/** The width of the line of the page's ground that parts two slices, in px. */
+const SLICE_GAP = 1;
+
+/**
+ * The least arc a slice keeps its gaps beside, in px round the rim: half a gap
+ * at each end, and a gap's width of its own colour between them.
+ */
+export const SLICE_LEAST = 2 * SLICE_GAP;
+
 /** How far past its room a label may measure, in px: a layout's rounding, under a px. */
 const FIT_SLACK = 0.5;
 
@@ -153,10 +163,14 @@ function wedge(from: number, to: number): SVGElement {
   return slice;
 }
 
-/** gap gives the line that parts two slices where they meet, `turn` of the way round. */
-function gap(turn: number): SVGElement {
+/**
+ * gap gives the line that parts two slices where they meet, `turn` of the way
+ * round, with the smaller's `share` of the whole, for fitGaps to measure.
+ */
+function gap(turn: number, share: number): SVGElement {
   const line = mark("path", "chart-slice-gap");
   line.setAttribute("d", `M0 0L${point(turn)}`);
+  line.dataset["share"] = `${share}`;
   return line;
 }
 
@@ -224,13 +238,16 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
     const key = value === undefined ? OTHER_KEY : `var(--chart-${i + 1})`;
     slice.style.setProperty("--key", key);
     ring.append(slice);
-    gaps.push(gap(from));
+    // Each slice's gap stands where it starts, after the slice before it, the first's after the last.
+    const prior = drawn.at(i - 1)?.size ?? size;
+    gaps.push(gap(from, Math.min(size, prior) / whole));
     labels.push(label(value, size / whole, (from + to) / 2));
     list.append(entry(key, value, size / whole));
   }
   if (drawn.length > 1) ring.append(...gaps);
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--label-gap", `${LABEL_GAP}px`);
+  box.style.setProperty("--slice-gap", `${SLICE_GAP}px`);
   const disc = el("div", "chart-pie-disc");
   disc.append(ring, ...labels);
   box.append(disc, list);
@@ -267,4 +284,20 @@ export function fitLabels(box: HTMLElement): void {
   );
   const fit = drawn.every((a, i) => inside(a) && drawn.slice(i + 1).every((b) => apart(a, b)));
   box.classList.toggle("listed", !fit);
+}
+
+/**
+ * fitGaps marks each gap of `box`, as pie drew it, that covers a slice under
+ * SLICE_LEAST round the rim, for chart.css to hide, so the slice shows in its
+ * colour, which parts it from the next. It measures the drawn ring, so `box`
+ * stands in the page by then.
+ */
+export function fitGaps(box: HTMLElement): void {
+  const ring = box.querySelector(".chart-slices")?.getBoundingClientRect();
+  // A plot not laid out yet has nothing to measure, and draws again as it takes a size.
+  if (ring === undefined || ring.width === 0) return;
+  const rim = Math.PI * Math.min(ring.width, ring.height);
+  for (const line of box.querySelectorAll<SVGElement>(".chart-slice-gap")) {
+    line.classList.toggle("covers", Number(line.dataset["share"]) * rim < SLICE_LEAST);
+  }
 }
