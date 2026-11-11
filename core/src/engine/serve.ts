@@ -117,6 +117,8 @@ function notARequest(msg: unknown): Said {
  * refused.
  * `telemetry` receives the time each request took and each source took to
  * index.
+ * It returns a close that ends the workspace and every source in it, for a
+ * caller that ends the engine without a close request over the port.
  */
 export function serve(
   port: Port<Request, Reply>,
@@ -124,7 +126,7 @@ export function serve(
   tuning: Tuning = TUNING,
   connecting?: Connecting,
   telemetry: Telemetry = unmeasured,
-): void {
+): () => Promise<void> {
   const connections = connecting?.connections;
   const workspace = new Workspace(
     sources.files,
@@ -319,4 +321,5 @@ export function serve(
       },
     );
   });
+  return () => workspace.close();
 }

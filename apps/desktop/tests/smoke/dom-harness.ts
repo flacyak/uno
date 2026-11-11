@@ -18,6 +18,8 @@ import { fileURLToPath } from "node:url";
 import { MessageChannel } from "node:worker_threads";
 import type { MessagePort } from "node:worker_threads";
 
+import { afterAll } from "vite-plus/test";
+
 import { messagePort, serve } from "@engine";
 import type { MessagePortLike, Reply, Request } from "@engine";
 import { sources } from "@plugin";
@@ -44,6 +46,15 @@ export const FIRST_ROWS_MS = 20_000;
 
 /** The engine's end of each channel the shell connected over, in order, for a check that closes one. */
 export const engineEnds: MessagePort[] = [];
+/** Ends each engine the shell connected to, with every file it holds open. */
+const engineCloses: Array<() => Promise<void>> = [];
+
+// Every file that boots a shell ends its engines before happy-dom goes, so an
+// answer or an offer still on its way cannot reach a page with no document.
+afterAll(async () => {
+  await Promise.all(engineCloses.splice(0).map((close) => close()));
+  for (const end of engineEnds.splice(0)) end.close();
+});
 const POLL_MS = 50;
 
 /** A chart window's head, its caption and its two 1px borders, in px, which chart.css draws. */
@@ -106,7 +117,7 @@ export async function bootShell(
   // engine with the old.
   const connect = (): MessagePortLike => {
     const { port1, port2 } = new MessageChannel();
-    serve(
+    const close = serve(
       messagePort<Request, Reply>(port2 as unknown as MessagePortLike),
       sources(providers),
       undefined,
@@ -116,6 +127,7 @@ export async function bootShell(
           Promise.resolve({ modes: ["machine", "profile", "public"], profiles: ["default"] }),
       },
     );
+    engineCloses.push(close);
     engineEnds.push(port2);
     return port1 as unknown as MessagePortLike;
   };
