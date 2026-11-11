@@ -174,6 +174,9 @@ const HEAD_LOOK = [
 /** What a window's × copies from the window's own. */
 const X_LOOK = ["background-color", "border", "border-radius", "color", "cursor", "width"];
 
+/** A bucket name as long as S3 allows, 63 characters, with no hyphen or dot to break a line at. */
+const LONG_BUCKET = "nobodyconnectedwithaverylongnamethatrunstosixtythreecharacters1";
+
 /**
  * Helpers: unfit says what of a connect form runs off its panel, text wider
  * than the form, a button past the window's edge or a label broken onto two
@@ -1043,6 +1046,26 @@ export const CHART_STATES: Check[] = [
       await Promise.all(panel.getAnimations().map((a) => a.finished));
       return unfit(form);
     `,
+  },
+  {
+    name: "in a narrow window, the connect form on a long bucket keeps its words and buttons in the panel, each label on one line",
+    window: { width: NARROW_WIDTH },
+    shot: "chart-states-connect-narrow",
+    script: `
+      ${FORM_FITS}
+      if (!(await until(() => innerWidth <= ${NARROW_WIDTH}))) return "the page is " + innerWidth + "px wide";
+      const form = document.querySelector(".panel-connect");
+      const bucket = form.querySelector('[aria-label="bucket"]');
+      bucket.value = ${JSON.stringify(LONG_BUCKET)};
+      bucket.dispatchEvent(new Event("input", { bubbles: true }));
+      await frame();
+      return unfit(form);
+    `,
+  },
+  {
+    name: "back at full width, the page is as wide as the run began",
+    window: {},
+    script: `return (await until(() => innerWidth > ${NARROW_WIDTH})) ? "" : "the page is " + innerWidth + "px wide";`,
   },
   {
     name: "Edit chart on a chart whose column has gone opens the chart form on it",

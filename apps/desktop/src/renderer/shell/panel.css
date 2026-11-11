@@ -481,14 +481,18 @@
   background: var(--flag-b);
 }
 
+/* A panel too narrow for the row moves a whole button onto the next line,
+ * and each label stays on one. */
 .panel-connect .buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
 }
 
 .panel-connect button {
   padding: 3px 9px;
+  white-space: nowrap;
   font: inherit;
   font-size: 11.5px;
   color: var(--ink);
@@ -513,4 +517,5 @@
   color: var(--ink-3);
   font-size: 11px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
