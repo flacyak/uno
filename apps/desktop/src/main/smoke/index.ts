@@ -24,6 +24,7 @@ import { CHART_TABLE, CHART_WHEEL } from "./chart-wheel.ts";
 import {
   CHARTS,
   CHART_ALONG,
+  CHART_BLANK,
   CHART_PIE,
   CHART_SCATTER,
   CHART_SIGNED,
@@ -92,6 +93,7 @@ const CHECKS: Check[] = [
   ...CHART_TABLE,
   ...CHART_ALONG,
   ...CHART_PIE,
+  ...CHART_BLANK,
   ...CHART_STATES,
   ...CHART_EDITS,
   ...CHART_REFRESH,

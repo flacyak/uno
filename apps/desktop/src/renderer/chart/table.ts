@@ -38,9 +38,10 @@ function header(text: string, fromFile: boolean, digits = false): HTMLTableCellE
 
 /** rowHead gives a row's header of `value`: the file's text, or the app's word for a blank cell. */
 function rowHead(value: string): HTMLTableCellElement {
-  const th = el("th");
+  const blank = value === "";
+  const th = el("th", blank ? "chart-blank" : "");
   th.scope = "row";
-  return value === "" ? words(th, m.chart_blank_value(), false) : words(th, value, true);
+  return blank ? words(th, m.chart_blank_value(), false) : words(th, value, true);
 }
 
 /** digits gives a cell of `n` in the app's language, in the digits' column. */

@@ -359,6 +359,25 @@ await writeFile(
   }),
 );
 
+// A workspace of bars of the second export's rows per Conversions, whose cell
+// is blank in 74 rows, in a window tall enough for all nine of its values, by
+// the sheet's right edge, clear of its first cell.
+const blanks = join(scratch, "sent", "blanks.uno");
+const conversions = rowsPer(adsSource.id, 6, "Conversions");
+const tall = { ...chartSize, height: 2 * chartSize.height, x: 1, y: 0 };
+await writeFile(
+  blanks,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [adsSource],
+    active: adsSource.id,
+    log: [],
+    charts: [{ ...conversions, id: "c1", place: tall }],
+    extra: new Map(),
+    at: blanks,
+  }),
+);
+
 // A workspace of one chart that checks its file every minute, the shortest
 // schedule, over a file of two rows. A check asks for a third, and the chart
 // draws it once the minute is up, which may take a check's own limit more.
@@ -481,6 +500,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_ALONG: along,
     UNO_SMOKE_PIES: pies,
     UNO_SMOKE_STATES: states,
+    UNO_SMOKE_BLANKS: blanks,
     UNO_SMOKE_SCHEDULED: scheduled,
     // What the + at the foot of the sidebar opens, in place of the Open dialog.
     UNO_DRIVEN_OPEN: second,

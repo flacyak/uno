@@ -357,6 +357,11 @@
   white-space: nowrap;
 }
 
+/* The app's word for a blank value wears the caption's ink, apart from the file's values. */
+.chart-blank {
+  color: var(--ink-3);
+}
+
 /* A bar starts at zero, `--zero` of the way along the span the bars share, and
  * runs `--share` of the span: right of zero for a value above it, and left for
  * one below. The span leaves each side the room its values take. */
