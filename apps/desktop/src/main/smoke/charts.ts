@@ -174,6 +174,32 @@ const HEAD_LOOK = [
 /** What a window's × copies from the window's own. */
 const X_LOOK = ["background-color", "border", "border-radius", "color", "cursor", "width"];
 
+/** A bucket name as long as S3 allows, 63 characters, with no hyphen or dot to break a line at. */
+const LONG_BUCKET = "nobodyconnectedwithaverylongnamethatrunstosixtythreecharacters1";
+
+/**
+ * Helpers: unfit says what of a connect form runs off its panel, text wider
+ * than the form, a button past the window's edge or a label broken onto two
+ * lines, and "" when all of it fits.
+ */
+const FORM_FITS = `
+  const lines = (at) => {
+    const range = document.createRange();
+    range.selectNodeContents(at);
+    return range.getClientRects().length;
+  };
+  const unfit = (form) => {
+    if (form.scrollWidth > form.clientWidth) return "the form's text runs " + form.scrollWidth + " px wide in a form of " + form.clientWidth;
+    const edge = document.documentElement.clientWidth;
+    const buttons = [...form.querySelectorAll("button")];
+    const said = (some) => some.map((button) => button.textContent).join(", ");
+    const cut = buttons.filter((button) => button.getBoundingClientRect().right > edge + ${RECT_SLACK});
+    if (cut.length > 0) return "the window cuts " + said(cut) + " at " + edge;
+    const broken = buttons.filter((button) => lines(button) > 1);
+    return broken.length === 0 ? "" : "the labels of " + said(broken) + " break onto two lines";
+  };
+`;
+
 /** Helpers: a window's parts, and a CSS colour as the page computes it. */
 const CHROME = `
   const box = () => document.querySelector(".chart");
@@ -1000,9 +1026,10 @@ export const CHART_STATES: Check[] = [
     `,
   },
   {
-    name: "Re-point on a chart opens the panel's browser, and Connect the connect form on its bucket",
+    name: "Re-point on a chart opens the panel's browser, and Connect the connect form on its bucket, all of it in the panel",
     shot: "chart-states-connect",
     script: `
+      ${FORM_FITS}
       const [connect, repoint] = ${JSON.stringify(STATE_WORDS.map(([, action]) => action))};
       const press = (action) => [...document.querySelectorAll(".chart-state button")].find((button) => button.textContent === action).click();
       const [panel, list, form] = ["#panel", ".panel-list", ".panel-connect"].map((at) => document.querySelector(at));
@@ -1012,8 +1039,33 @@ export const CHART_STATES: Check[] = [
       press(connect);
       if (!(await until(() => !form.hidden))) return "Connect left the connect form hidden";
       const bucket = form.querySelector('[aria-label="bucket"]').value;
-      return bucket === "nobody-connected" ? "" : "the form is on " + JSON.stringify(bucket);
+      if (bucket !== "nobody-connected") return "the form is on " + JSON.stringify(bucket);
+      if (!(await until(() => !form.querySelector(".policy").hidden))) return "the form shows no policy";
+      // The panel is still sliding in from Re-point, so it is measured and
+      // shot once its animation ends.
+      await Promise.all(panel.getAnimations().map((a) => a.finished));
+      return unfit(form);
     `,
+  },
+  {
+    name: "in a narrow window, the connect form on a long bucket keeps its words and buttons in the panel, each label on one line",
+    window: { width: NARROW_WIDTH },
+    shot: "chart-states-connect-narrow",
+    script: `
+      ${FORM_FITS}
+      if (!(await until(() => innerWidth <= ${NARROW_WIDTH}))) return "the page is " + innerWidth + "px wide";
+      const form = document.querySelector(".panel-connect");
+      const bucket = form.querySelector('[aria-label="bucket"]');
+      bucket.value = ${JSON.stringify(LONG_BUCKET)};
+      bucket.dispatchEvent(new Event("input", { bubbles: true }));
+      await frame();
+      return unfit(form);
+    `,
+  },
+  {
+    name: "back at full width, the page is as wide as the run began",
+    window: {},
+    script: `return (await until(() => innerWidth > ${NARROW_WIDTH})) ? "" : "the page is " + innerWidth + "px wide";`,
   },
   {
     name: "Edit chart on a chart whose column has gone opens the chart form on it",
