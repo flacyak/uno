@@ -2,7 +2,7 @@
  * at its foot. */
 
 .sidebar {
-  flex: 0 0 216px;
+  flex: 0 1 216px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -190,6 +190,16 @@
   cursor: pointer;
 }
 
+/* The words of the add-source line and of the + at the foot keep to one line
+ * and end in an ellipsis on a sidebar too narrow for them, as tab names do. */
+.tab-add .label,
+.sidebar-new .label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .tab-add:hover {
   color: var(--accent);
 }
@@ -212,6 +222,7 @@
 }
 
 .sidebar-new .plus {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;

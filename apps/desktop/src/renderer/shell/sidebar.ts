@@ -60,7 +60,8 @@ export function sidebarRows(
     rows.push(...w.sources.map((t) => tabFor(w, t, removable, act)));
     rows.push(...arriving.map(arrivingRow));
 
-    const add = el("div", "tab-add", m.sidebar_add_source());
+    const add = el("div", "tab-add");
+    add.append(el("span", "label", m.sidebar_add_source()));
     add.title = m.sidebar_add_source_hint();
     add.setAttribute("role", "button");
     add.addEventListener("click", () => act.add(add));
