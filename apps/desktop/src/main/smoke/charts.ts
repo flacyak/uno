@@ -8,17 +8,20 @@
  * Its bars draw once its chart's tally completes, as bars.ts sizes them, a
  * scatter's points stand inside its axes, against labels on their gridlines,
  * and a pie stands round in its plot, in the chart colours, its labels clear of
- * one another, or a list beside it where they cannot be. A chart over what it
- * cannot read says why in its plot, with the button that mends it.
+ * one another, or a list beside it where they cannot be. A blank value is named
+ * (blank) in the caption's ink. A chart over what it cannot read says why in
+ * its plot, with the button that mends it.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
- * right edge, one at the top and one at the foot. The last five open others:
+ * right edge, one at the top and one at the foot. The last six open others:
  * one whose sums leave a window of the least width too little room for bars and
  * values, one of a scatter, one of three scatters whose x axis has room for its
  * labels in full in one window, not in a second, and not even compactly in the
- * third, one of three pies, and one of three charts over what they cannot read.
+ * third, one of three pies, one of bars with a blank value, and one of three
+ * charts over what they cannot read.
  */
 
+import { m } from "@paraglide/messages";
 import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
 import { LABEL_GAP, PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
@@ -61,6 +64,16 @@ const ALONG_LABELS = [
  */
 const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
+
+/**
+ * The one it wrote of bars of the second export's rows per Conversions, whose
+ * cell is blank in some rows, and how many values those bars draw.
+ */
+const BLANKS = process.env["UNO_SMOKE_BLANKS"] ?? "";
+const CONVERSIONS_VALUES = 9;
+
+/** The blank value's bar, the smallest, and so the last row. */
+const BLANK_ROW = `.chart-bar-row:nth-child(${CONVERSIONS_VALUES})`;
 
 /**
  * The one it wrote of three charts over what a chart cannot read: a source in
@@ -189,6 +202,15 @@ const CHROME = `
     probe.remove();
     return worn;
   };
+`;
+
+/**
+ * Helpers, after CHROME's: the first of what `at` picks whose words are the
+ * app's for a blank value, and the colour it wears.
+ */
+const BLANK = `
+  const blank = (at) => [...document.querySelectorAll(at)].find((one) => one.textContent === ${JSON.stringify(m.chart_blank_value())});
+  const quiet = (one) => style(one).color === computed("var(--ink-3)") ? "" : "wears " + style(one).color;
 `;
 
 /** Helpers: the boxes of the windows and the layer, and what the checks ask of them. */
@@ -958,7 +980,46 @@ export const CHART_PIE: Check[] = [
   },
 ];
 
-/** Checks after CHART_PIE, as they open a workspace of charts over what they cannot read in place of that one. */
+/** Checks after CHART_PIE, as they open a workspace of bars with a blank value in place of that one. */
+export const CHART_BLANK: Check[] = [
+  {
+    name: "the bar of a blank value is named (blank) in the caption's ink, and a value of the file's in the text's",
+    send: ["menu:open-path", BLANKS],
+    shot: "chart-blank",
+    script: `
+      ${CHROME}
+      ${BLANK}
+      const labels = () => [...document.querySelectorAll(".chart-bar-label")];
+      if (!(await arrives(() => labels().length === ${CONVERSIONS_VALUES}))) return "the plot draws " + labels().length + " bars";
+      const label = document.querySelector(${JSON.stringify(BLANK_ROW)} + " .chart-bar-label");
+      if (label !== blank(".chart-bar-label")) return "the last bar is named " + label.textContent;
+      if (quiet(label) !== "") return "the blank bar's label " + quiet(label);
+      return style(labels()[0]).color === computed("var(--ink)") ? "" : "a value of the file's wears " + style(labels()[0]).color;
+    `,
+  },
+  {
+    name: "the tooltip over the bar of a blank value names it (blank) in the caption's ink",
+    hover: BLANK_ROW,
+    script: `
+      ${CHROME}
+      ${BLANK}
+      if (!(await until(() => blank(".chart-tip-label") !== undefined))) return "the tooltip says " + text(".chart-tip");
+      return quiet(blank(".chart-tip-label"));
+    `,
+  },
+  {
+    name: "the table names the row of a blank value (blank) in the caption's ink",
+    click: { selector: ".chart-table-toggle" },
+    script: `
+      ${CHROME}
+      ${BLANK}
+      if (!(await until(() => blank(".chart-table tbody th") !== undefined))) return "no row of the table is named blank";
+      return quiet(blank(".chart-table tbody th"));
+    `,
+  },
+];
+
+/** Checks after CHART_BLANK, as they open a workspace of charts over what they cannot read in place of that one. */
 export const CHART_STATES: Check[] = [
   {
     name: "a chart over what it cannot read says why in the middle of its plot, with Connect, Re-point or Edit chart under the words, and no track",
