@@ -210,13 +210,15 @@ test("a slice's label is its value as the file has it and its share, and Other's
   expect(other.querySelector(".from-file")).toBeNull();
 });
 
-test("the slice of the rows with no value is named blank in its label and the list, the app's word in its language", () => {
+test("the slice of the rows with no value is named blank in its label and the list, the app's word in its language and the caption's ink", () => {
   const box = pie(ROWS, tallyOf(sent("North", 2), sent("", 1)));
   const names = [...box.querySelectorAll(".chart-slice-name")];
   const blank = m.chart_blank_value();
   expect(names.map((name) => name.textContent)).toStrictEqual(["North", blank, "North", blank]);
   const fromFile = names.map((name) => name.classList.contains("from-file"));
   expect(fromFile).toStrictEqual([true, false, true, false]);
+  const quiet = names.map((name) => name.classList.contains("chart-blank"));
+  expect(quiet).toStrictEqual([false, true, false, true]);
   void setLocale("pt-BR", { reload: false });
   const [alone] = labels(pie(ROWS, tallyOf(sent("", 1))));
   expect(alone?.textContent).toBe("(em branco) 100%");

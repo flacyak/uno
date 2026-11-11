@@ -85,6 +85,8 @@ test("a sum's column is headed by the column summed, a blank value is called bla
   ]);
   expect(box.querySelectorAll("thead .from-file")).toHaveLength(2);
   expect(box.querySelector("tbody tr:first-child th .from-file")).toBeNull();
+  const blank = box.querySelector("tbody tr:first-child th");
+  expect(blank?.classList.contains("chart-blank")).toBe(true);
   expect([...box.querySelectorAll("td")].every((td) => td.classList.contains("num"))).toBe(true);
 });
 

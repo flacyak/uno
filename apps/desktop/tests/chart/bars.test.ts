@@ -175,11 +175,12 @@ test("a value's label is the file's text, marked as the file's, and never markup
   expect(label?.querySelector("img")).toBeNull();
 });
 
-test("the bar of the rows with no value is labelled blank, the app's word in its language", () => {
+test("the bar of the rows with no value is labelled blank, the app's word in its language and the caption's ink", () => {
   const unvalued = tallyOf({ value: "", rows: 3, sum: 0 });
   const [label] = all(bars(ROWS, unvalued, TALL), ".chart-bar-label");
   expect(label?.textContent).toBe(m.chart_blank_value());
   expect(label?.classList.contains("from-file")).toBe(false);
+  expect(label?.classList.contains("chart-blank")).toBe(true);
   void setLocale("es", { reload: false });
   expect(labels(bars(ROWS, unvalued, TALL))).toStrictEqual(["(en blanco)"]);
 });

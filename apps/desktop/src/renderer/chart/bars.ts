@@ -73,7 +73,7 @@ function room(side: ReadonlyArray<{ tip: string }>): string {
  * the rows whose cell is blank, which a tally counts as a value of their own.
  */
 function named(value: string): HTMLElement {
-  if (value === "") return el("span", "chart-bar-label", m.chart_blank_value());
+  if (value === "") return el("span", "chart-bar-label chart-blank", m.chart_blank_value());
   return el("bdi", "chart-bar-label from-file", value);
 }
 

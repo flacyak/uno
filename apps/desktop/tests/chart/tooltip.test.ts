@@ -77,6 +77,8 @@ test("a bar's row is worth the rows it counts, labelled by the file's text, mark
   ]);
   const [north] = all[0]!.said();
   expect((north!.label as Element).classList.contains("from-file")).toBe(true);
+  const [blank] = all[2]!.said();
+  expect((blank!.label as Element).classList.contains("chart-blank")).toBe(true);
   expect(all[0]!.at).toBe(box.querySelector(".chart-bar-tip"));
   expect(all[0]!.key).toBe("var(--accent)");
   // A plot with no room for the values leaves the box the bar to stand by.

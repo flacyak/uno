@@ -115,7 +115,7 @@ export const NONE: Targets = { all: [], under: () => undefined };
  * file's, or the app's word for the rows whose cell is blank.
  */
 function named(value: string): HTMLElement {
-  if (value === "") return el("span", "", m.chart_blank_value());
+  if (value === "") return el("span", "chart-blank", m.chart_blank_value());
   return el("bdi", "from-file", value);
 }
 

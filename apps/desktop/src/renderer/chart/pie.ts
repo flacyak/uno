@@ -183,7 +183,7 @@ function words(value: string | undefined, share: number): [HTMLElement, HTMLElem
     value === undefined
       ? el("span", "chart-slice-name", m.chart_pie_other())
       : value === ""
-        ? el("span", "chart-slice-name", m.chart_blank_value())
+        ? el("span", "chart-slice-name chart-blank", m.chart_blank_value())
         : el("bdi", "chart-slice-name from-file", value);
   return [name, el("span", "chart-slice-share", percent(share))];
 }
