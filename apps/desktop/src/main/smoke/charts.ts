@@ -621,7 +621,7 @@ export const CHARTS: Check[] = [
       if (caption.bottom !== foot) return "the caption ends at " + caption.bottom + ", and the box at " + foot;
       const grip = box().querySelector(".chart-grip").getBoundingClientRect();
       if (grip.right !== cross.right) return "the grip ends at " + grip.right + ", and the × at " + cross.right;
-      return text(".chart-title") === "Rows per Location" ? "" : "the head says " + text(".chart-title");
+      return text(".chart-title") === "rows per Location" ? "" : "the head says " + text(".chart-title");
     `,
   },
   {

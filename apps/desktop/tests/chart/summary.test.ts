@@ -65,13 +65,13 @@ test("a summary says the title, the source and the rows, the largest values and 
   const tally = tallyOf(REGIONS);
   expect(REGIONS.length).toBe(SUMMARY_VALUES + 1);
   expect(summary(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
-    said: "Rows per region in sales-q3.csv, 4,812 rows.",
+    said: "rows per region in sales-q3.csv, 4,812 rows.",
     values: "North 2,000, South 1,500, West 1,000",
     more: "and 1 more.",
   });
   void setLocale("es", { reload: false });
   expect(summary(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
-    said: "Filas por region en sales-q3.csv, 4812 filas.",
+    said: "filas por region en sales-q3.csv, 4812 filas.",
     values: "North 2000, South 1500, West 1000",
     more: "y 1 más.",
   });
@@ -90,7 +90,7 @@ test("a sum names each value's sum, and the values a tally sent none of count am
 test("a summary of fewer values than it names counts no more, and calls a blank value blank", () => {
   const tally = tallyOf([sent("", 3, 0), sent("North", 1, 0)]);
   expect(summary(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
-    said: "Rows per region in sales-q3.csv, 4,812 rows.",
+    said: "rows per region in sales-q3.csv, 4,812 rows.",
     values: "(blank) 3, North 1",
     more: "",
   });
@@ -100,7 +100,7 @@ test("a pie's summary gives each slice's share, Other among them", () => {
   const seven = [80, 70, 60, 50, 40, 30, 20, 10].map((rows, i) => sent(`v${i + 1}`, rows, 0));
   const tally = tallyOf(seven);
   expect(summary(madeTitle(PIE.plot), NAME, PIE.plot, tally)).toStrictEqual({
-    said: "Share of rows per region in sales-q3.csv, 4,812 rows.",
+    said: "share of rows per region in sales-q3.csv, 4,812 rows.",
     values: "v1 22%, v2 19%, v3 17%",
     more: "and 4 more.",
   });
