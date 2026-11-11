@@ -80,13 +80,22 @@ function share(offset: number, free: number, none: number): number {
   return free > 0 ? clamp(offset / free, FAR_EDGE) : none;
 }
 
+/**
+ * along gives how far in a window stands at `fraction` of the `free` px, on the
+ * nearest whole px, so its plot draws on whole px however a resize divides the
+ * room. A room that ends between px keeps a window at its far edge flush to it.
+ */
+function along(fraction: number, free: number): number {
+  return Math.min(Math.round(fraction * free), free);
+}
+
 /** placed gives the rect a place draws in a room, whatever size the room is. */
 export function placed(place: ChartPlace, room: Room): Rect {
   const width = fit(place.width, MIN_WIDTH, room.w);
   const height = fit(place.height, MIN_HEIGHT, room.h);
   return {
-    x: place.x * (room.w - width),
-    y: place.y * (room.h - height),
+    x: along(place.x, room.w - width),
+    y: along(place.y, room.h - height),
     width,
     height,
   };
@@ -95,16 +104,19 @@ export function placed(place: ChartPlace, room: Room): Rect {
 /**
  * placeOf gives the place a rect stores in a room, held to the room and the
  * least size. A rect cannot show all of `was`, the place it came from, so a
- * side with no free px keeps its fraction, and a size the rect leaves as `was`
- * draws it stays stored. A tucked window stores nothing: its rect has no place.
+ * side with no free px keeps its fraction, and a size or a side the rect leaves
+ * as `was` draws it stays stored. A tucked window stores nothing: its rect has
+ * no place.
  */
 export function placeOf(rect: Rect, room: Room, was: ChartPlace): ChartPlace {
   const drawn = placed(was, room);
   const width = fit(rect.width, MIN_WIDTH, room.w);
   const height = fit(rect.height, MIN_HEIGHT, room.h);
+  const keepsX = rect.x === drawn.x && width === drawn.width;
+  const keepsY = rect.y === drawn.y && height === drawn.height;
   return {
-    x: share(rect.x, room.w - width, was.x),
-    y: share(rect.y, room.h - height, was.y),
+    x: keepsX ? was.x : share(rect.x, room.w - width, was.x),
+    y: keepsY ? was.y : share(rect.y, room.h - height, was.y),
     width: width === drawn.width ? was.width : width,
     height: height === drawn.height ? was.height : height,
   };

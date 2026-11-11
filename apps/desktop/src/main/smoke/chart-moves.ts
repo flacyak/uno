@@ -44,6 +44,9 @@ const CARRY_BACK = { x: CARRY.x, y: -CARRY.y };
 /** What the two edges take off and add. */
 const EDGE_PX = 30;
 
+/** What a resize takes off the sheet each way, which leaves a moved window's place between px. */
+const SHEET_STEP = 1;
+
 /** How far in from a window's corner a point stands inside its 8 px radius. */
 const CORNER_IN = 4;
 
@@ -170,6 +173,29 @@ export const CHART_MOVES: Check[] = [
     script: `
       ${MOVES}
       return wait({ right: room().right + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a move");
+    `,
+  },
+  {
+    name: "a moved window stands on whole px after the sheet resizes, and goes back with it",
+    script: `
+      ${MOVES}
+      const sheet = document.querySelector(".win-sheet");
+      const inRoom = () => ({ x: first().left - room().left, y: first().top - room().top });
+      const was = room();
+      const { width, height } = sheet.getBoundingClientRect();
+      sheet.style.maxWidth = width - ${SHEET_STEP} + "px";
+      sheet.style.maxHeight = height - ${SHEET_STEP} + "px";
+      const shrunk = () => near(room().width, was.width - ${SHEET_STEP}) && near(room().height, was.height - ${SHEET_STEP});
+      const resized = await until(shrunk);
+      // The layer places its windows again on the frame after the room resizes.
+      await frame();
+      const now = inRoom();
+      sheet.style.maxWidth = "";
+      sheet.style.maxHeight = "";
+      if (!resized) return "the room stayed at " + edges(room());
+      const whole = (px) => near(px, Math.round(px));
+      if (!whole(now.x) || !whole(now.y)) return "the window stands between px, at " + now.x + " " + now.y + " in the room";
+      return wait({ right: room().right + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a resize");
     `,
   },
   {
