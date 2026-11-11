@@ -36,7 +36,7 @@ const DIGITS = [1, 2, 5] as const;
 
 /**
  * How far past a whole number of steps a value may land and still stand on a
- * tick, in steps: far above a double's error, and far below a step.
+ * tick, in steps: far above a double's error near zero, and far below a step.
  */
 const ON_TICK = 1e-9;
 
@@ -93,8 +93,12 @@ function finer(step: Step): Step {
 /** ticksBy gives the ticks `step` apart from at or below `from` to at or above `to`. */
 function ticksBy(step: Step, from: number, to: number): number[] {
   const size = decimal(step.digit, step.exponent);
-  const first = Math.floor(from / size + ON_TICK);
-  const last = Math.ceil(to / size - ON_TICK);
+  let first = Math.floor(from / size + ON_TICK);
+  let last = Math.ceil(to / size - ON_TICK);
+  // Far from zero, the quotient's error passes ON_TICK, so an end that stands
+  // on a tick is checked against that tick's own value.
+  while (decimal((first + 1) * step.digit, step.exponent) <= from) first++;
+  while (decimal((last - 1) * step.digit, step.exponent) >= to) last--;
   const ticks: number[] = [];
   for (let i = 0; i <= last - first; i++) {
     ticks.push(decimal((first + i) * step.digit, step.exponent));

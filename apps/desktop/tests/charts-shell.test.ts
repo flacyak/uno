@@ -184,6 +184,24 @@ test("a sum past the largest double draws across its side, and the other bars be
   ]);
 });
 
+/** Readings that each stand on a tick, the least 123,456,781 tenths from zero. */
+const READINGS = ["12345678.1", "12345678.2", "12345678.3", "12345678.4"];
+
+test("an axis whose ends stand on ticks far from zero runs from the least to the most", async () => {
+  const csv = join(dir, "readings.csv");
+  await writeFile(csv, `units,reading\n${READINGS.map((at, i) => `${i},${at}`).join("\n")}\n`);
+  const readings: Chart = {
+    ...BARS,
+    plot: { t: "scatter", x: { col: 0, header: "units" }, y: { col: 1, header: "reading" } },
+  };
+  const path = join(dir, "readings.uno");
+  await writeFile(path, unoOf([readings], [], csv));
+  await shell.openRef({ name: "readings.uno", path });
+  const y = (): Array<string | null> => texts(".chart-ticks.y .chart-tick");
+  expect(await until(page, () => y().length > 0)).toBe(true);
+  expect(y()).toStrictEqual(["12,345,678.1", "12,345,678.2", "12,345,678.3", "12,345,678.4"]);
+});
+
 test("a workspace with none takes the last one's windows away", async () => {
   await open("before.uno", [BARS]);
   await open("none.uno", []);
