@@ -24,8 +24,13 @@ export const DECORATION = ",$£€%' ";
  * COMMA_DECORATION is the characters stripped from a value before it is read
  * as a number with the comma mark: the symbols DECORATION strips, and the
  * spaces that separate thousands, the no-break and narrow no-break ones too.
+ * The full stop also separates thousands there, but only before a group of
+ * GROUP_DIGITS digits, so it is taken off by `ungroup`.
  */
 const COMMA_DECORATION = "$£€%' \u00a0\u202f";
+
+/** GROUP_DIGITS is how many digits a thousands separator stands before. */
+export const GROUP_DIGITS = 3;
 
 // The characters a value may hold once decoration is removed. Anything else
 // refuses the value before the parse, which keeps "inf", "NaN" and
@@ -33,9 +38,9 @@ const COMMA_DECORATION = "$£€%' \u00a0\u202f";
 const ALLOWED = '0123456789+-.eE';
 
 /**
- * undress returns a copy of `v` with every character of its mark's
- * decoration removed: DECORATION for the point mark, COMMA_DECORATION for
- * the comma mark.
+ * undress returns a copy of `v` with its decoration removed: every
+ * DECORATION character for the point mark, and for the comma mark every
+ * COMMA_DECORATION character and each full stop `ungroup` takes off.
  */
 export function undress(v: string, mark: Mark): string {
   const decoration = mark === 'point' ? DECORATION : COMMA_DECORATION;
@@ -43,7 +48,27 @@ export function undress(v: string, mark: Mark): string {
   for (const r of v) {
     if (!decoration.includes(r)) out += r;
   }
+  return mark === 'point' ? out : ungroup(out);
+}
+
+/**
+ * ungroup removes each full stop that stands before exactly GROUP_DIGITS
+ * digits, as in 1.234,56. Any other full stop is kept, so that 1.5 is not
+ * read as 15 with the comma mark.
+ */
+function ungroup(v: string): string {
+  let out = '';
+  for (let i = 0; i < v.length; i++) {
+    if (v[i] !== '.' || digitsAt(v, i + 1) !== GROUP_DIGITS) out += v[i];
+  }
   return out;
+}
+
+/** digitsAt counts the ASCII digits in `v` from `at` up to the next non-digit. */
+function digitsAt(v: string, at: number): number {
+  let end = at;
+  while (end < v.length && v[end]! >= '0' && v[end]! <= '9') end++;
+  return end - at;
 }
 
 /**

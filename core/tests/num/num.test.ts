@@ -103,9 +103,10 @@ describe('parse reads the number a person sees', () => {
   }
 });
 
-// With the comma mark, the comma is the decimal mark and spaces separate
-// thousands. A full stop refuses the value, so it is never read as a
-// separator by mistake.
+// With the comma mark, the comma is the decimal mark, and full stops and
+// spaces separate thousands. A full stop anywhere but before a group of
+// three digits refuses the value, so it is never read as a separator by
+// mistake.
 describe('parse reads a number written with the comma mark', () => {
   const cases: Array<[string, number | undefined]> = [
     ['1,5', 1.5],
@@ -118,8 +119,15 @@ describe('parse reads a number written with the comma mark', () => {
     ['1 234,56 €', 1234.56],
     ['(1 234,56)', -1234.56],
     ['1 234,56-', -1234.56],
+    ['1.234,56', 1234.56],
+    ['1.234.567,8', 1234567.8],
+    ['1.234', 1234],
+    ['€1.234,56', 1234.56],
+    ['(1.234,56)', -1234.56],
 
     ['1.5', undefined],
+    ['1.2345', undefined],
+    ['12.34,5', undefined],
     ['1,234.56', undefined],
     ['N/A', undefined],
     ['', undefined],
