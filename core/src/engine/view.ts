@@ -442,14 +442,11 @@ export class View {
     const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
 
     return schema.headers.map((header, col) => {
-      const { kind, flagged } = inferKind(
-        shown.length,
-        (row) => shown[row]![col] ?? '',
-      );
+      const inferred = inferKind(shown.length, (row) => shown[row]![col] ?? '');
       const binding = schema.binding(col);
       return binding === undefined
-        ? { header, kind, flagged }
-        : { header, kind, flagged, binding };
+        ? { header, ...inferred }
+        : { header, ...inferred, binding };
     });
   }
 

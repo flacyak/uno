@@ -60,12 +60,14 @@ test('the engine reads the fixture the way read does', async () => {
     const src = await openOne(engine, { name: 'sales-q3.csv', path: FIXTURE });
     const opened = src.opened;
     expect(saidIn(opened.label)).toBe("UTF-8 · delimiter ','");
-    // Same columns as `read`: units is text flagged as numeric.
+    // Same columns as `read`: units is text flagged as numeric, its 1,204
+    // read either way, so with the point mark.
     expect(opened.columns).toEqual(sales.columns);
     expect(opened.columns[UNITS]).toEqual({
       header: 'units',
       kind: 'text',
       flagged: true,
+      mark: 'point',
     });
 
     await indexed(src);

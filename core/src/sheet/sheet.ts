@@ -8,6 +8,7 @@
 
 import type { Formula } from '@formula';
 import { evaluate } from '@formula';
+import type { Mark } from '@num';
 import type { Program } from '@program';
 import { text as programText } from '@program';
 import type { Edit } from './edit.ts';
@@ -29,6 +30,8 @@ export interface Column {
    * thousands separators. The recogniser acts on it.
    */
   flagged: boolean;
+  /** The decimal mark the column's numbers are read with. */
+  mark: Mark;
 }
 
 /**
@@ -65,6 +68,7 @@ export class Sheet {
       header: h,
       kind: 'text' as Kind,
       flagged: false,
+      mark: 'point' as Mark,
     }));
     this.infer();
   }
@@ -282,11 +286,12 @@ export class Sheet {
   }
 
   private inferColumn(col: number): void {
-    const { kind, flagged } = inferKind(this.rowData.length, (row) =>
+    const { kind, flagged, mark } = inferKind(this.rowData.length, (row) =>
       this.display(row, col),
     );
     const c = this.columns[col]!;
     c.kind = kind;
     c.flagged = flagged;
+    c.mark = mark;
   }
 }
