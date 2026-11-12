@@ -437,23 +437,41 @@ export class View {
   /**
    * columns infers each column's kind and decimal mark from the sample rows,
    * with the log applied. A chart that reads a column whose mark changed
-   * folds again with the mark now.
+   * folds again with the mark now, as does one over a formula that reads it.
+   * Such a formula's column is inferred again with the mark now too.
    */
   private async columns(): Promise<ColumnInfo[]> {
+    let columns = await this.inferred();
+    const marks = columns.map((c) => c.mark);
+    const was = this.schema.marks;
+    const changed = marks.flatMap((mark, col) =>
+      mark === was[col] ? [] : [col],
+    );
+    let refolded = false;
+    if (changed.length > 0) {
+      this.schema.marks = marks;
+      const readers = changed.flatMap((col) => this.schema.readersOf(col));
+      if (readers.length > 0) columns = await this.inferred();
+      refolded = this.tallies.refold(new Set(readers));
+    }
+    if (this.tallies.remark(marks) || refolded) this.tally();
+    return columns;
+  }
+
+  /** inferred infers each column's kind and decimal mark from the sample rows. */
+  private async inferred(): Promise<ColumnInfo[]> {
     const source = await this.pages.rows(0, SAMPLE_ROWS);
     const files = await this.files(0, source.length);
     const schema = this.schema;
     const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
 
-    const columns = schema.headers.map((header, col): ColumnInfo => {
+    return schema.headers.map((header, col) => {
       const inferred = inferKind(shown.length, (row) => shown[row]![col] ?? '');
       const binding = schema.binding(col);
       return binding === undefined
         ? { header, ...inferred }
         : { header, ...inferred, binding };
     });
-    if (this.tallies.remark(columns.map((c) => c.mark))) this.tally();
-    return columns;
   }
 
   /**

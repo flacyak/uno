@@ -939,3 +939,43 @@ test('a chart sums a column with the decimal mark its sample shows, and folds ag
     done();
   }
 });
+
+test('a chart over a formula sums what it computes from a column with its decimal mark, and folds again when an edit changes the mark', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const blob = new Blob(['region;amount;double\nNorth;1,5;\nSouth;2,25;\n']);
+    const src = await openOne(engine, { name: 'eu.csv', blob });
+    engine.mode(true);
+    const bind = { op: Op.Bind, row: NO_ROW, col: 2, now: 'amount * 2' };
+    const { columns } = await src.edit(bind);
+    expect(columns.map((c) => [c.kind, c.mark])).toEqual([
+      ['text', 'point'],
+      ['num', 'comma'],
+      ['num', 'point'],
+    ]);
+    const at = (col: number, header: string) => ({ col, header });
+    const plot: Plot = { t: 'bars', by: at(0, 'region'), sum: at(2, 'double') };
+    const heard = new Heard(src);
+    const sums = async (change: () => Promise<unknown>) => {
+      const last = heard.of(REGION_ROWS.id);
+      await change();
+      const tally = await last;
+      if (tally.t !== 'groups') throw new Error(`heard ${tally.t}`);
+      return tally.groups.map(({ value, sum }) => [value, sum]);
+    };
+    const chart = { ...REGION_ROWS, source: src.id, plot };
+    expect(await sums(() => engine.chart(chart))).toEqual([
+      ['South', 4.5],
+      ['North', 3],
+    ]);
+    // South's row is not edited, but what its formula reads is.
+    const set = { op: Op.Set, row: 0, col: 1, now: '0.5' };
+    expect(await sums(() => src.edit(set))).toEqual([
+      ['South', 450],
+      ['North', 1],
+    ]);
+    expect((await src.rows(1, 1)).rows).toEqual([['South', '2,25', '450']]);
+  } finally {
+    done();
+  }
+});
