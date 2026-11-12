@@ -11,7 +11,11 @@
 import type { Chart, ChartColumn, Plot } from '@document';
 import type { Said } from '@said';
 import { GroupsFold, SampleFold } from '@tally';
+import type { Marks } from '@tally';
 import type { Tally } from './protocol.ts';
+
+/** A scatter's columns, both read with the point mark. */
+const POINTS: Marks = { x: 'point', y: 'point' };
 
 /** How far one chart's fold has got. */
 interface Folding {
@@ -176,7 +180,7 @@ export class Tallies {
       for (const t of charts) {
         if (t.t !== 'sample') continue;
         for (const stale of t.fold.stale()) {
-          const alone = new SampleFold();
+          const alone = new SampleFold(t.fold.marks);
           sample(alone, t, stale, await read(stale));
           t.fold.refold(stale, alone);
         }
@@ -289,7 +293,7 @@ function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
     if (x === undefined) return plot.x.header;
     if (y === undefined) return plot.y.header;
     const key = `sample ${x} ${y}`;
-    return { ...folding, key, t: 'sample', fold: new SampleFold(), x, y };
+    return { ...folding, key, t: 'sample', fold: new SampleFold(POINTS), x, y };
   }
   const by = placeOf(plot.by, headers);
   if (by === undefined) return plot.by.header;
@@ -300,7 +304,7 @@ function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
   const sum = placeOf(plot.sum, headers);
   if (sum === undefined) return plot.sum.header;
   const key = `groups ${by} ${sum}`;
-  const fold = new GroupsFold('sum');
+  const fold = new GroupsFold('sum', 'point');
   return { ...folding, key, t: 'groups', fold, by, sum };
 }
 
@@ -311,8 +315,10 @@ function unfolded(): Omit<Folding, 'plot' | 'key'> {
 
 /** fresh is `t` with nothing folded, pending again. */
 function fresh(t: Tallying): Tallying {
-  if (t.t === 'sample') return { ...t, ...unfolded(), fold: new SampleFold() };
-  const fold = new GroupsFold(t.sum === undefined ? 'rows' : 'sum');
+  if (t.t === 'sample')
+    return { ...t, ...unfolded(), fold: new SampleFold(POINTS) };
+  const fold =
+    t.sum === undefined ? new GroupsFold() : new GroupsFold('sum', 'point');
   return { ...t, ...unfolded(), fold };
 }
 
@@ -380,7 +386,7 @@ function unfold(t: Tallying, block: number, { from, end, shown }: Block): void {
     for (let row = from; row < end; row++) {
       t.fold.remove(block, row, xs(row), ys(row));
     }
-    t.fold.refold(block, new SampleFold());
+    t.fold.refold(block, new SampleFold(t.fold.marks));
   } else {
     const by = shown(t.by);
     const sum = t.sum === undefined ? undefined : shown(t.sum);

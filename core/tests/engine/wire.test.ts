@@ -64,8 +64,8 @@ test('plain data is one text frame, and reads back equal', async () => {
 });
 
 test("a chart's tally from either fold is plain data, and crosses as one text frame", async () => {
-  const groups = new GroupsFold('sum');
-  const sample = new SampleFold();
+  const groups = new GroupsFold('sum', 'point');
+  const sample = new SampleFold({ x: 'point', y: 'point' });
   // A region, a revenue and a units cell, with a blank and a word left out.
   const rows: Array<[string, string, string]> = [
     ['North', '1.5', '2'],

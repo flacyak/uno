@@ -115,13 +115,14 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   const coverage =
     rows === ROWS ? WHOLE : { rows, total: rows, complete: true };
   if (plot.t === 'scatter') {
-    const fold = new SampleFold();
+    const fold = new SampleFold({ x: 'point', y: 'point' });
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
     return { t: 'sample', plot, coverage, ...fold.snapshot() };
   }
   const { by, sum } = plot;
-  const fold = new GroupsFold(sum === undefined ? 'rows' : 'sum');
+  const fold =
+    sum === undefined ? new GroupsFold() : new GroupsFold('sum', 'point');
   for (let r = 0; r < rows; r++) {
     fold.add(cell(r, by), sum === undefined ? '' : cell(r, sum));
   }

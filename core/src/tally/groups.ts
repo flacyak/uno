@@ -3,6 +3,7 @@
  */
 
 import { compareStrings, runes } from '@go';
+import type { Mark } from '@num';
 import { parse } from '@num';
 
 import { ExactSum } from './exact.ts';
@@ -62,15 +63,21 @@ class Count {
  * rest is empty. Any other value is counted in the rest, so a value's rows
  * are all in its group or all in the rest, and every count and sum is exact.
  * An edit takes back its old row first, so its new row can fill a freed place.
+ * A fold that sums reads the cells with the decimal mark of their column.
  */
 export class GroupsFold {
   private readonly measure: Measure;
+  /** The mark summed cells are read with; undefined when counting rows. */
+  readonly mark: Mark | undefined;
   private readonly groups = new Map<string, Count>();
   private readonly rest = new Count();
   private readonly skipped: Skipped = { blank: 0, unparsed: 0 };
 
-  constructor(measure: Measure = 'rows') {
-    this.measure = measure;
+  constructor();
+  constructor(measure: 'sum', mark: Mark);
+  constructor(measure?: 'sum', mark?: Mark) {
+    this.measure = measure ?? 'rows';
+    this.mark = mark;
   }
 
   /** add counts a row of `value`, whose cell in the summed column is `cell`. */
@@ -130,8 +137,8 @@ export class GroupsFold {
   /** count adds a row to `to`, or takes one back when `sign` is -1. */
   private count(to: Count, cell: string, sign: 1 | -1): void {
     to.rows += sign;
-    if (this.measure === 'rows') return;
-    const x = parse(cell, 'point');
+    if (this.mark === undefined) return;
+    const x = parse(cell, this.mark);
     if (x !== undefined) to.sum.add(sign * x);
     else if (cell === '') this.skipped.blank += sign;
     else this.skipped.unparsed += sign;

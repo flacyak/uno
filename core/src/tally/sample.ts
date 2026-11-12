@@ -2,6 +2,7 @@
  * @fileoverview A scatter's points, from a sample of rows chosen by number.
  */
 
+import type { Mark } from '@num';
 import { parse } from '@num';
 
 import { byRank } from './rank.ts';
@@ -23,6 +24,12 @@ const PAGE_BLOCKS = 256;
 export interface Point {
   x: number;
   y: number;
+}
+
+/** The decimal marks of a scatter's x and y columns. */
+export interface Marks {
+  x: Mark;
+  y: Mark;
 }
 
 /** What a fold holds, read. */
@@ -88,8 +95,10 @@ class Page {
  * is not a number keeps its place in the sample, with no point. Beside it,
  * a fold counts every row it plots and every row it leaves out, and keeps
  * each block's least and most x and y, so a chart's axes take in every row.
+ * It reads x and y with the decimal marks of their columns, `marks`.
  */
 export class SampleFold {
+  readonly marks: Marks;
   /** Each kept row's point, or undefined when the row is left out. */
   private readonly kept = new Map<number, Point | undefined>();
   /** The row ranked last when kept was last cut. No row past it is sampled. */
@@ -100,6 +109,10 @@ export class SampleFold {
   private readonly pages = new Map<number, Page>();
   /** The blocks whose least or most an edit took back. */
   private readonly stales = new Set<number>();
+
+  constructor(marks: Marks) {
+    this.marks = marks;
+  }
 
   /** add folds `row` of `block`, whose x cell is `xCell` and y `yCell`. */
   add(block: number, row: number, xCell: string, yCell: string): void {
@@ -202,8 +215,8 @@ export class SampleFold {
 
   /** count counts a row, or takes one back when `sign` is -1. */
   private count(xCell: string, yCell: string, sign: 1 | -1): Point | undefined {
-    const x = parse(xCell, 'point');
-    const y = parse(yCell, 'point');
+    const x = parse(xCell, this.marks.x);
+    const y = parse(yCell, this.marks.y);
     if (x === undefined || y === undefined) {
       const word = (v: number | undefined, cell: string) =>
         v === undefined && cell !== '';

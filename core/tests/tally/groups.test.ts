@@ -32,7 +32,7 @@ function folded(rows: string[]): GroupsFold {
 }
 
 function summed(rows: Array<[string, string]>): GroupsFold {
-  const fold = new GroupsFold('sum');
+  const fold = new GroupsFold('sum', 'point');
   for (const [value, cell] of rows) fold.add(value, cell);
   return fold;
 }
@@ -127,7 +127,7 @@ test('values first seen past DISTINCT_AT_MOST are counted in the rest', () => {
 test('a snapshot sends the largest groups, each value cut to a label', () => {
   // A wide value of 1, then values of 0.1 and 0.2, eleven of them unsent,
   // and two unsent values of 0 and -1, which a pie leaves out.
-  const fold = new GroupsFold('sum');
+  const fold = new GroupsFold('sum', 'point');
   fold.add(WIDE.repeat(LABEL_AT_MOST + 1), '1');
   fold.add('even', '0');
   fold.add('loss', '-1');
@@ -152,4 +152,13 @@ test('a snapshot sends the largest groups, each value cut to a label', () => {
   // A fold that counts rows has none below, though its sums are 0.
   const ids = Array.from({ length: GROUPS_SENT + 1 }, (_, i) => `${i}`);
   expect(folded(ids).snapshot().others).toEqual({ values: 1, rows: 1, sum: 0 });
+});
+
+test('a fold sums cells with the decimal mark of their column', () => {
+  const fold = new GroupsFold('sum', 'comma');
+  for (const cell of ['1,5', '2,25', '1.234,56', '1.5'])
+    fold.add('North', cell);
+  const { groups, skipped } = fold.snapshot();
+  expect(groups[0]!.sum).toBe(1238.31);
+  expect(skipped.unparsed).toBe(1);
 });
