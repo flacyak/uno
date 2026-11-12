@@ -287,6 +287,28 @@ test('a chart folds each block from the first it lacks, and one attached later l
   expect(tallies.from()).toBe(0);
 });
 
+test('a chart over a column whose decimal mark changed folds again from its first row, with the mark now, and one over the others keeps its fold', () => {
+  const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+  const tallies = folded(charts);
+  const marks = HEADERS.map(() => 'point' as const);
+  expect(tallies.remark(marks)).toBe(false);
+  expect(tallies.from()).toBe(ROWS);
+  const comma = marks.map((m, col) => (col === UNITS ? 'comma' : m));
+  expect(tallies.remark(comma)).toBe(true);
+  expect(tallies.from()).toBe(0);
+  const rows = tallies
+    .read(ROWS, true)
+    .map(([id, t]) => [id, t.t === 'unread' ? undefined : t.coverage.rows]);
+  expect(rows).toEqual([
+    [REGION_ROWS.id, ROWS],
+    [REGION_REVENUE.id, ROWS],
+    [UNITS_REVENUE.id, 0],
+  ]);
+  // Attached again, the scatter keeps the fold it made with the mark now.
+  tallies.attach(UNITS_REVENUE, HEADERS);
+  expect(tallies.remark(comma)).toBe(false);
+});
+
 test('charts folded a block at a time read as the pure fold of every row, and are pending until read complete', () => {
   const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
   const tallies = folded(charts);

@@ -5,17 +5,14 @@
  * fold holds every row before the first block it lacks, an edit moves a
  * fold by the one row it changed, and an append takes over the folds of
  * the rows it kept. A chart reads the columns its plot names, found again
- * by header where the file moved them.
+ * by header where the file moved them, with each column's decimal mark.
  */
 
 import type { Chart, ChartColumn, Plot } from '@document';
+import type { Mark } from '@num';
 import type { Said } from '@said';
 import { GroupsFold, SampleFold } from '@tally';
-import type { Marks } from '@tally';
 import type { Tally } from './protocol.ts';
-
-/** A scatter's columns, both read with the point mark. */
-const POINTS: Marks = { x: 'point', y: 'point' };
 
 /** How far one chart's fold has got. */
 interface Folding {
@@ -63,6 +60,8 @@ export interface Block {
  */
 export class Tallies {
   private readonly charts = new Map<string, Tallying>();
+  /** Each column's decimal mark, by place, as `remark` was last told. */
+  private marks: readonly Mark[] = [];
 
   /**
    * attach folds `chart`, keeping the fold of the chart with its id when it
@@ -71,19 +70,35 @@ export class Tallies {
    */
   attach(chart: Chart, headers: readonly string[]): string | undefined {
     const { id, plot } = chart;
-    const t = tallying(plot, headers);
+    const t = tallying(plot, headers, this.marks);
     if (typeof t === 'string') {
       this.charts.delete(id);
       return t;
     }
     const was = this.charts.get(id);
-    if (was?.key === t.key) {
+    if (was?.key === t.key && readsWith(was, this.marks)) {
       was.plot = plot;
       was.done = false;
       return undefined;
     }
     this.charts.set(id, t);
     return undefined;
+  }
+
+  /**
+   * remark takes each column's decimal mark, by place, and starts the fold
+   * of each chart that reads a column with another mark again from its
+   * first row, with the mark now. It says whether any chart does.
+   */
+  remark(marks: readonly Mark[]): boolean {
+    this.marks = marks;
+    let refolded = false;
+    for (const [id, t] of this.charts) {
+      if (readsWith(t, marks)) continue;
+      this.charts.set(id, fresh(t, marks));
+      refolded = true;
+    }
+    return refolded;
   }
 
   /** detach stops folding the chart with `id`. */
@@ -223,7 +238,9 @@ export class Tallies {
    * hold rows of the blocks `now` read again, which this view has not.
    */
   reclaim(now: Tallies): void {
-    for (const [id, t] of now.charts) this.charts.set(id, fresh(t));
+    for (const [id, t] of now.charts) {
+      this.charts.set(id, fresh(t, this.marks));
+    }
     now.charts.clear();
   }
 
@@ -236,7 +253,7 @@ export class Tallies {
     let refolded = false;
     for (const [id, t] of this.charts) {
       if (!colsOf(t).some((col) => cols.has(col))) continue;
-      this.charts.set(id, fresh(t));
+      this.charts.set(id, fresh(t, this.marks));
       refolded = true;
     }
     return refolded;
@@ -283,9 +300,14 @@ export class Tallies {
 
 /**
  * tallying makes the fold `plot` reads, over its columns where `headers`
- * put them, or returns the header of a column the view has not.
+ * put them and with the decimal marks `marks` gives them, or returns the
+ * header of a column the view has not.
  */
-function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
+function tallying(
+  plot: Plot,
+  headers: readonly string[],
+  marks: readonly Mark[],
+): Tallying | string {
   const folding = { ...unfolded(), plot };
   if (plot.t === 'scatter') {
     const x = placeOf(plot.x, headers);
@@ -293,7 +315,8 @@ function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
     if (x === undefined) return plot.x.header;
     if (y === undefined) return plot.y.header;
     const key = `sample ${x} ${y}`;
-    return { ...folding, key, t: 'sample', fold: new SampleFold(POINTS), x, y };
+    const fold = new SampleFold({ x: markOf(marks, x), y: markOf(marks, y) });
+    return { ...folding, key, t: 'sample', fold, x, y };
   }
   const by = placeOf(plot.by, headers);
   if (by === undefined) return plot.by.header;
@@ -304,7 +327,7 @@ function tallying(plot: Plot, headers: readonly string[]): Tallying | string {
   const sum = placeOf(plot.sum, headers);
   if (sum === undefined) return plot.sum.header;
   const key = `groups ${by} ${sum}`;
-  const fold = new GroupsFold('sum', 'point');
+  const fold = new GroupsFold('sum', markOf(marks, sum));
   return { ...folding, key, t: 'groups', fold, by, sum };
 }
 
@@ -313,12 +336,33 @@ function unfolded(): Omit<Folding, 'plot' | 'key'> {
   return { rows: 0, ahead: undefined, done: false };
 }
 
-/** fresh is `t` with nothing folded, pending again. */
-function fresh(t: Tallying): Tallying {
-  if (t.t === 'sample')
-    return { ...t, ...unfolded(), fold: new SampleFold(POINTS) };
+/**
+ * markOf is the decimal mark `marks` gives column `col`, or the point for
+ * one it does not reach, as a fold made before any mark was inferred reads.
+ */
+function markOf(marks: readonly Mark[], col: number): Mark {
+  return marks[col] ?? 'point';
+}
+
+/** readsWith says whether `t`'s fold reads its columns with `marks`. */
+function readsWith(t: Tallying, marks: readonly Mark[]): boolean {
+  if (t.t === 'groups') {
+    return t.sum === undefined || t.fold.mark === markOf(marks, t.sum);
+  }
+  const { x, y } = t.fold.marks;
+  return x === markOf(marks, t.x) && y === markOf(marks, t.y);
+}
+
+/** fresh is `t` with nothing folded, pending again, read with `marks`. */
+function fresh(t: Tallying, marks: readonly Mark[]): Tallying {
+  if (t.t === 'sample') {
+    const read = { x: markOf(marks, t.x), y: markOf(marks, t.y) };
+    return { ...t, ...unfolded(), fold: new SampleFold(read) };
+  }
   const fold =
-    t.sum === undefined ? new GroupsFold() : new GroupsFold('sum', 'point');
+    t.sum === undefined
+      ? new GroupsFold()
+      : new GroupsFold('sum', markOf(marks, t.sum));
   return { ...t, ...unfolded(), fold };
 }
 
