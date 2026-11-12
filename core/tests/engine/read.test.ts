@@ -149,7 +149,7 @@ test('find reads the column past any band, with the log applied', async () => {
     const unparsed: number[] = [];
     for (let row = 0; row < rows; row++) {
       const v = sales.display(row, UNITS).trim();
-      if (v !== '' && !isNumber(v)) unparsed.push(row);
+      if (v !== '' && !isNumber(v, 'point')) unparsed.push(row);
     }
     const units = (from: number, dir: 1 | -1) =>
       src.find({ col: UNITS, from, dir, match: { t: 'unparsed' } });

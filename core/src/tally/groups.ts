@@ -131,7 +131,7 @@ export class GroupsFold {
   private count(to: Count, cell: string, sign: 1 | -1): void {
     to.rows += sign;
     if (this.measure === 'rows') return;
-    const x = parse(cell);
+    const x = parse(cell, 'point');
     if (x !== undefined) to.sum.add(sign * x);
     else if (cell === '') this.skipped.blank += sign;
     else this.skipped.unparsed += sign;

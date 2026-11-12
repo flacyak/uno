@@ -45,8 +45,8 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
     seen++;
 
     if (isDate(v)) dates++;
-    else if (isNumber(v)) nums++;
-    else if (isNumber(undress(v))) formatted++;
+    else if (isNumber(v, 'point')) nums++;
+    else if (isNumber(undress(v, 'point'), 'point')) formatted++;
   }
 
   if (seen === 0) return { kind: 'text', flagged: false };

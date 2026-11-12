@@ -1039,7 +1039,7 @@ export class View {
       return text === '' ? undefined : (shown) => shown.includes(text);
     }
     if (req.match.t === 'not-number') {
-      return (shown) => shown !== '' && parse(shown) === undefined;
+      return (shown) => shown !== '' && parse(shown, 'point') === undefined;
     }
 
     const column = (await this.columns())[req.col];
@@ -1048,7 +1048,7 @@ export class View {
       column.kind === 'date'
         ? isDate
         : column.kind === 'num' || column.flagged
-          ? isNumber
+          ? (v: string) => isNumber(v, 'point')
           : undefined;
     if (parses === undefined) return undefined;
     return (shown) => {

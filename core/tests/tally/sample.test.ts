@@ -91,7 +91,9 @@ test('a sample fold reads the same block by block, in any order', () => {
     const order = rowsOf(shuffled(blocks, random));
     expect(folded(rows, order).snapshot()).toEqual(whole);
     // A row with a word in either cell is not a number, else it is blank.
-    const out = rows.filter((row) => row.some((c) => parse(c) === undefined));
+    const out = rows.filter((row) =>
+      row.some((c) => parse(c, 'point') === undefined),
+    );
     const words = out.filter((row) => row.includes('n/a')).length;
     expect(whole.plotted).toBe(ROWS - out.length);
     expect(whole.skipped).toEqual({
