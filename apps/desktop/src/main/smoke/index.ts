@@ -50,6 +50,7 @@ import { MEETS } from "./meets.ts";
 import { MULTI } from "./multi.ts";
 import { OPEN } from "./open.ts";
 import { PANEL } from "./panel.ts";
+import { STATUS } from "./status.ts";
 import { CHART_REFRESH, REFRESH } from "./refresh.ts";
 import { CHART_SCHEDULE } from "./schedule.ts";
 import { SETTINGS } from "./settings.ts";
@@ -74,6 +75,7 @@ const CHECKS: Check[] = [
   ...VIM_STYLE,
   ...SOURCES,
   ...PANEL,
+  ...STATUS,
   ...CONNECTIONS,
   ...SETTINGS,
   ...MEETS,

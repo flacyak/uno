@@ -15,9 +15,16 @@
   color: var(--ink-2);
 }
 
-/* One line, however narrow: everything stays on it. The mode and the cell
- * keep their width; the file and message lines shrink in proportion to their
- * length. Each has its full text as its hover text. */
+/* One line, however narrow. The mode and the cell keep their width; the file
+ * and message lines shrink in proportion to their length, each down to its
+ * least. Each has its full text as its hover text. Past that, StatusBar.fit
+ * gives up what it can spare, in order. */
+.win-status {
+  /* The least of a file or message line worth its place: room for a row
+   * count such as 2,600 rows and the ellipsis after it. */
+  --line-least: 11ch;
+}
+
 .win-status > * {
   flex-shrink: 0;
   white-space: nowrap;
@@ -25,7 +32,7 @@
 
 .win-status #status-file,
 .win-status #status-msg {
-  min-width: 0;
+  min-width: calc-size(max-content, min(size, var(--line-least)));
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -42,7 +49,7 @@
 /* A separator is hidden along with an empty message, clock or cell. */
 .win-status .sep:has(+ #status-msg:empty),
 .win-status #status-clock:empty + .sep,
-.win-status .sep:has(+ #status-cell:empty) {
+.win-status .sep:has(+ #status-cell > .col:empty) {
   display: none;
 }
 
@@ -98,6 +105,36 @@
 .win-status.prompting #status-msg,
 .win-status.prompting .sep:has(+ #status-msg) {
   display: none;
+}
+
+/* What StatusBar.fit gives up on a page too narrow for it. */
+.win-status.spare-clock #status-clock,
+.win-status.spare-clock #status-clock + .sep,
+.win-status.spare-switch #mode-switch,
+.win-status.spare-lines #status-file,
+.win-status.spare-lines #status-msg,
+.win-status.spare-lines .sep:has(+ #status-msg) {
+  display: none;
+}
+
+/* The cell's column name is the last to give way, so the row stays whole. */
+.win-status #status-cell {
+  display: flex;
+}
+
+.win-status.spare-lines #status-cell {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.win-status #status-cell .col {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.win-status #status-cell .row {
+  white-space: pre;
 }
 
 /* The mode switch: view in the accent, transform in amber. */
