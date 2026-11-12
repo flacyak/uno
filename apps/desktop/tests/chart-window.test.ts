@@ -48,6 +48,7 @@ const QUARTER_HOUR = 15;
 /** A layer for a window whose words are all a test reads. */
 const NO_LAYER: Stage = {
   room: () => ({ w: 0, h: 0 }),
+  corner: () => 0,
   move: () => undefined,
   draw: () => undefined,
   raise: () => undefined,
