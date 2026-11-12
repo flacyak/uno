@@ -277,6 +277,9 @@ test("a window reaching under the window's × shows stood in by the corner, and 
   // A drop in the corner stores where it ended, and shows clear of it.
   const dropped = placeOf({ ...RECT, x: ROOM.w - DEFAULT_WIDTH }, ROOM, PLACE, CORNER);
   expect(shown(dropped, ROOM, CORNER).x).toBe(at.x);
+  // A rect stopped by the corner, as an arrow leaves it, stores the far edge, where it shows.
+  expect(placeOf({ ...RECT, x: at.x }, ROOM, PLACE, CORNER).x).toBe(1);
+  expect(placeOf({ ...RECT, x: at.x - NUDGE_PX }, ROOM, PLACE, CORNER).x).toBeLessThan(1);
 });
 
 test("a window reaching under the window's × in a room too narrow to stand in shows clear at the left", () => {

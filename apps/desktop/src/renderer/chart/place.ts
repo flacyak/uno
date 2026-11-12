@@ -106,6 +106,11 @@ function cramped(free: number, corner: number): boolean {
   return corner > 0 && free <= STAND_IN_CORNERS * corner;
 }
 
+/** stoodIn gives the x a window with `free` px beside it stands at, in by `corner`. */
+function stoodIn(free: number, corner: number): number {
+  return Math.round(free - corner);
+}
+
 /** clearWidth gives how wide a window of up to `width` px stands at the left edge, clear of `corner`. */
 function clearWidth(room: Room, corner: number, width: number): number {
   return fit(Math.floor(room.w - corner), MIN_WIDTH, width);
@@ -135,7 +140,7 @@ export function placed(place: ChartPlace, room: Room): Rect {
 export function shown(place: ChartPlace, room: Room, corner: number): Rect {
   const rect = placed(place, room);
   const free = room.w - rect.width;
-  const inset = Math.round(free - corner);
+  const inset = stoodIn(free, corner);
   if (corner <= 0 || rect.x <= inset) return rect;
   if (cramped(free, corner)) {
     return { ...rect, x: NEAR_EDGE, width: clearWidth(room, corner, rect.width) };
@@ -148,7 +153,9 @@ export function shown(place: ChartPlace, room: Room, corner: number): Rect {
  * least size. A rect cannot show all of `was`, the place it came from, so a
  * side with no free px keeps its fraction, and a size or a side the rect leaves
  * as `was` shows it, in a room reaching `corner` px under the window's ×,
- * stays stored. A tucked window stores nothing: its rect has no place.
+ * stays stored. A rect stood in by the corner, as far right as a window shows
+ * there, stores the far edge. A tucked window stores nothing: its rect has no
+ * place.
  */
 export function placeOf(rect: Rect, room: Room, was: ChartPlace, corner = 0): ChartPlace {
   const drawn = shown(was, room, corner);
@@ -156,8 +163,11 @@ export function placeOf(rect: Rect, room: Room, was: ChartPlace, corner = 0): Ch
   const height = fit(rect.height, MIN_HEIGHT, room.h);
   const keepsX = rect.x === drawn.x && width === drawn.width;
   const keepsY = rect.y === drawn.y && height === drawn.height;
+  const free = room.w - width;
+  const atCorner = corner > 0 && !cramped(free, corner) && rect.x === stoodIn(free, corner);
+  const movedX = atCorner ? FAR_EDGE : share(rect.x, free, was.x);
   return {
-    x: keepsX ? was.x : share(rect.x, room.w - width, was.x),
+    x: keepsX ? was.x : movedX,
     y: keepsY ? was.y : share(rect.y, room.h - height, was.y),
     width: width === drawn.width ? was.width : width,
     height: height === drawn.height ? was.height : height,
