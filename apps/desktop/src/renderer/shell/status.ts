@@ -49,6 +49,16 @@ function clockText(tab: Tab): string {
   return p.complete ? `${time} · ${m.rows_count({ count: p.rows })}` : time;
 }
 
+/**
+ * What the bar gives up, in order, while it is too narrow for its items once
+ * the file and message lines are down to their least: the clock, which only
+ * adds the time to the file line's row count; the mode switch, which repeats
+ * the mode word and whose two modes are also a key and the View menu away;
+ * and the file and message lines. Past them the cell's column name ends in an
+ * ellipsis (status.css), and the mode, the row and the toggles stay whole.
+ */
+const SPARED = ["spare-clock", "spare-switch", "spare-lines"] as const;
+
 export class StatusBar {
   /** The character the open prompt began with. */
   private lead: Lead = ":";
@@ -60,7 +70,8 @@ export class StatusBar {
   private readonly waiting = must(document.querySelector<HTMLElement>("#status-keys"));
   private readonly cmd = must(document.querySelector<HTMLInputElement>("#status-cmd"));
   private readonly clock = must(document.querySelector<HTMLElement>("#status-clock"));
-  private readonly cell = must(document.querySelector<HTMLElement>("#status-cell"));
+  private readonly column = must(document.querySelector<HTMLElement>("#status-cell .col"));
+  private readonly row = must(document.querySelector<HTMLElement>("#status-cell .row"));
   private readonly seg = must(document.querySelector<HTMLElement>("#mode-switch"));
   private readonly side = must(document.querySelector<HTMLButtonElement>("#sidebar-toggle"));
   private readonly sources = must(document.querySelector<HTMLButtonElement>("#panel-toggle"));
@@ -86,6 +97,8 @@ export class StatusBar {
     }
     this.side.addEventListener("click", () => asks.toggleSidebar());
     this.sources.addEventListener("click", () => asks.togglePanel());
+    // A narrower or wider page, or a zoom, changes what the bar can show.
+    new ResizeObserver(() => this.fit()).observe(this.bar);
 
     const input = this.cmd;
     input.addEventListener("keydown", (e) => {
@@ -131,17 +144,38 @@ export class StatusBar {
     const tab = w?.active;
     this.clock.textContent = tab === undefined || tab.missing ? "" : clockText(tab);
 
+    this.paintCell(w, grid);
+    this.fit();
+  }
+
+  /** paintCell draws the selected cell's column and row. */
+  private paintCell(w: Workspace | undefined, grid: Grid | undefined): void {
     // The cell line is empty until there is a grid and the tab has a file.
     if (w === undefined || grid === undefined || w.active.missing) {
-      this.cell.textContent = "";
+      this.column.textContent = "";
+      this.row.textContent = "";
       return;
     }
     const { row, col } = grid.selection();
     const column = w.rows.columns[col];
-    const header = column === undefined ? "" : columnLabel(column.header, col);
+    this.column.textContent = column === undefined ? "" : columnLabel(column.header, col);
+    // The full name is the hover text, for a page too narrow for it.
+    this.column.title = this.column.textContent;
     // An empty sheet shows the column only.
-    this.cell.textContent =
-      w.rows.rows() === 0 ? header : `${header} · ${m.status_row({ row: num(row + 1) })}`;
+    this.row.textContent = w.rows.rows() === 0 ? "" : ` · ${m.status_row({ row: num(row + 1) })}`;
+  }
+
+  /**
+   * fit gives up what the bar can spare, in SPARED's order, until the rest
+   * fits on it. It starts from everything shown, so a wider page gets back
+   * what a narrower one gave up.
+   */
+  private fit(): void {
+    this.bar.classList.remove(...SPARED);
+    for (const spare of SPARED) {
+      if (this.bar.scrollWidth <= this.bar.clientWidth) return;
+      this.bar.classList.add(spare);
+    }
   }
 
   /** switches draws the mode switch and the two column toggles. */
@@ -170,11 +204,13 @@ export class StatusBar {
     this.msg.textContent = text;
     this.msg.title = text;
     this.msg.className = isError ? "err" : "";
+    this.fit();
   }
 
   /** keys shows a partly typed command, like vim's showcmd. */
   keys(text: string): void {
     this.waiting.textContent = text;
+    this.fit();
   }
 
   prompt(lead: Lead): void {
@@ -183,6 +219,7 @@ export class StatusBar {
     this.cmd.hidden = false;
     this.cmd.value = lead;
     this.cmd.focus();
+    this.fit();
   }
 
   close(): void {
@@ -191,6 +228,7 @@ export class StatusBar {
     if (this.cmd.hidden) return;
     this.cmd.hidden = true;
     this.bar.classList.remove("prompting");
+    this.fit();
     this.closed();
   }
 }
