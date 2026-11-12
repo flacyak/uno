@@ -46,6 +46,9 @@ const PAST_MIDDLE = 2;
 /** How far an 1100 px window's room reaches under its ×: `--corner`'s 34 px past the 12 px bar. */
 const CORNER = 22;
 
+/** The 1100 px window's room at 200% zoom with the panel closed, under DEFAULT_WIDTH. */
+const ZOOMED_ROOM_WIDTH = 371;
+
 /** A room of exactly one window of a new chart's size. */
 const SNUG: Room = { w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT };
 
@@ -218,6 +221,22 @@ test("a new window on the right stands as far in as the room reaches under the w
     const narrow = { ...ROOM, w: DEFAULT_WIDTH + free };
     expect(inset(fresh(0, columnAt(0), narrow, CORNER), ROOM)).toBe(0);
   }
+});
+
+test("a room too narrow for a new window beside the corner has it end where the corner starts", () => {
+  // The zoomed room, and one that ends between px.
+  for (const w of [ZOOMED_ROOM_WIDTH, ZOOMED_ROOM_WIDTH + 0.5]) {
+    const room = { ...ROOM, w };
+    for (const column of [columnAt(0), columnAt(w - COLUMN_WIDTH)]) {
+      const at = placed(fresh(0, column, room, CORNER), room);
+      expect([at.x, at.width]).toEqual([0, Math.floor(w - CORNER)]);
+    }
+    // With no × over the room, a new window fills it as before.
+    expect(placed(fresh(0, columnAt(0), room), room).width).toBe(w);
+  }
+  // At the left edge, the × stays clear in a room of any size.
+  const place = fresh(0, columnAt(0), { ...ROOM, w: ZOOMED_ROOM_WIDTH }, CORNER);
+  expect(placed(place, ROOM).x).toBe(0);
 });
 
 test("each chart already there moves a new one down, as far as the room goes", () => {

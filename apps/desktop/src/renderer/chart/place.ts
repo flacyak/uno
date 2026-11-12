@@ -169,15 +169,25 @@ export function thin(room: Room): boolean {
  * middle to the room's. It is stored as a fraction, so it stands further in
  * as the room grows and nearer the edge as it shrinks, and stays on the right
  * half.
+ *
+ * A room too narrow to hold a new window clear of the corner, as at 200% zoom,
+ * has it take the whole px the room leaves clear, from the left edge. It covers
+ * the selected column on either side, and at the left its × stays clear in a
+ * room of any size.
  */
 export function fresh(n: number, selected: ColumnSpan, room: Room, corner = 0): ChartPlace {
+  const y = share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE);
+  const clear = Math.floor(room.w - corner);
+  if (corner > 0 && clear < DEFAULT_WIDTH) {
+    return { x: NEAR_EDGE, y, width: Math.max(clear, MIN_WIDTH), height: DEFAULT_HEIGHT };
+  }
   const middle = (selected.left + selected.right) / 2;
   const free = room.w - DEFAULT_WIDTH;
   const steppedIn = share(Math.max(free - corner, selected.right), free, FAR_EDGE);
   const far = steppedIn > MIDDLE ? steppedIn : FAR_EDGE;
   return {
     x: middle < room.w / 2 ? far : NEAR_EDGE,
-    y: share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE),
+    y,
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,
   };
