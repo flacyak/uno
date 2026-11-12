@@ -17,7 +17,14 @@
 
 import { DEFAULT_WIDTH, STAND_IN_CORNERS } from "@renderer/chart/place";
 import { pressing } from "./chart-moves.ts";
-import { CLICK_AND_ARROW, DOUBLE_ZOOM, GEOMETRY, NARROW_WIDTH, STATE_WINDOWS } from "./charts.ts";
+import {
+  CLEAR_X,
+  CLICK_AND_ARROW,
+  DOUBLE_ZOOM,
+  GEOMETRY,
+  NARROW_WIDTH,
+  STATE_WINDOWS,
+} from "./charts.ts";
 import type { Check } from "./check.ts";
 
 /** The last window, its head and its ×. */
@@ -77,7 +84,8 @@ const PAST_BAND_WIDTH = 720;
  * corner. A chart inserted there stands clear of the corner: at the left edge
  * where its free px are no more than STAND_IN_CORNERS corners, as wide as the
  * room leaves clear up to a new window's width, and past that stood in by the
- * corner. Its × is clear of the window's.
+ * corner. Its × is clear of the window's, as is every window's inserted
+ * before, at the far edge at 100% and some with the panel open.
  */
 function clearOfCorner(name: string, shape: Check["window"], fits: string, shot: string): Check {
   return {
@@ -88,9 +96,7 @@ function clearOfCorner(name: string, shape: Check["window"], fits: string, shot:
       ${GEOMETRY}
       ${FORM}
       ${INSERT}
-      // The strip the window's × keeps clear at its top right.
-      const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
-      const reach = () => room().right - (innerWidth - corner());
+      ${CLEAR_X}
       if (!document.querySelector("#panel").hidden) document.querySelector("#panel-toggle").click();
       const cell = () => document.querySelector("tbody tr:not(.pending)").children[GUTTER];
       const column = () => cell().getBoundingClientRect();
@@ -109,8 +115,9 @@ function clearOfCorner(name: string, shape: Check["window"], fits: string, shot:
         return "the new window stands at " + edges(box) + ", not " + width + " px wide from " + left + " in a room at " + edges(room());
       }
       const x = at.querySelector(".chart-close").getBoundingClientRect();
-      const own = document.querySelector("#close").getBoundingClientRect();
-      return x.right < own.left ? "" : "the new window's × ends at " + x.right + ", over the window's × from " + own.left;
+      if (x.right >= own().left) return "the new window's × ends at " + x.right + ", over the window's × from " + own().left;
+      // The windows inserted before, at 100% and some with the panel open, stand clear as well.
+      return crossing();
     `,
   };
 }

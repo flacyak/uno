@@ -490,6 +490,16 @@ export const CHARTS: Check[] = [
     `,
   },
   {
+    name: "at 200% zoom a window saved at the sheet's right edge stands clear of the window's ×, and its place stays saved",
+    script: `
+      ${GEOMETRY}
+      ${CLEAR_X}
+      if (!(await until(() => reach() > 0))) return "the room reaches nothing under the window's ×, so this checks nothing";
+      if (!(await until(() => crossing() === ""))) return crossing();
+      return unsaved() ? "the zoom marked the workspace unsaved" : "";
+    `,
+  },
+  {
     // Tucked here, the windows are what the next check's reshape lands on, so
     // that check has to tell them from the ones it waits for.
     name: "at 200% zoom with both side columns open, each window tucks to its head, its × whole",
