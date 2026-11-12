@@ -8,11 +8,14 @@
  * back, and Ctrl+Z there undoes nothing and says why. A click on the × arms it
  * and the second removes the chart, as two presses of Delete remove another.
  * A chart inserted with the panel closed then stands in from the room's right
- * edge, its × clear of the window's, and one inserted with it open flush.
+ * edge, its × clear of the window's, and one inserted with it open flush. At
+ * 200% zoom, in a room narrower than a new window, one ends where the window's
+ * × keeps clear.
  */
 
+import { DEFAULT_WIDTH } from "@renderer/chart/place";
 import { pressing } from "./chart-moves.ts";
-import { CLICK_AND_ARROW, GEOMETRY, STATE_WINDOWS } from "./charts.ts";
+import { CLICK_AND_ARROW, DOUBLE_ZOOM, GEOMETRY, NARROW_WIDTH, STATE_WINDOWS } from "./charts.ts";
 import type { Check } from "./check.ts";
 
 /** The last window, its head and its ×. */
@@ -41,6 +44,20 @@ const FORM = `
   const count = () => document.querySelectorAll(".chart").length;
   const removed = (windows) => count() === windows && text("#status-msg").startsWith("removed ");
   const keyed = () => document.activeElement === last() ? "" : "the keys are in " + document.activeElement?.className;
+`;
+
+/** A helper that inserts a chart over the selected column and gives its window. */
+const INSERT = `
+  const insert = async () => {
+    const before = new Set(document.querySelectorAll(".chart"));
+    const added = () => [...document.querySelectorAll(".chart")].find((at) => !before.has(at));
+    const content = document.querySelector("#content");
+    content.focus();
+    content.dispatchEvent(new KeyboardEvent("keydown", { key: "G", ctrlKey: true, shiftKey: true, bubbles: true }));
+    if (!(await until(() => form() !== null))) return undefined;
+    form().querySelector("select").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    return (await until(() => added() !== undefined)) ? added() : undefined;
+  };
 `;
 
 export const CHART_EDITS: Check[] = [
@@ -162,18 +179,9 @@ export const CHART_EDITS: Check[] = [
     script: `
       ${GEOMETRY}
       ${FORM}
+      ${INSERT}
       const own = document.querySelector("#close").getBoundingClientRect();
       const open = room().right;
-      const content = document.querySelector("#content");
-      const insert = async () => {
-        const before = new Set(document.querySelectorAll(".chart"));
-        const added = () => [...document.querySelectorAll(".chart")].find((at) => !before.has(at));
-        content.focus();
-        content.dispatchEvent(new KeyboardEvent("keydown", { key: "G", ctrlKey: true, shiftKey: true, bubbles: true }));
-        if (!(await until(() => form() !== null))) return undefined;
-        form().querySelector("select").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-        return (await until(() => added() !== undefined)) ? added() : undefined;
-      };
       document.querySelector("#panel-toggle").click();
       const closed = (await until(() => room().right > open)) ? await insert() : undefined;
       const x = closed?.querySelector(".chart-close").getBoundingClientRect();
@@ -184,6 +192,39 @@ export const CHART_EDITS: Check[] = [
       const at = (await insert())?.getBoundingClientRect();
       if (at === undefined) return "no chart was inserted with the panel open";
       return at.right === room().right ? "" : "with the panel open the new window stands at " + edges(at) + " in a room at " + edges(room());
+    `,
+  },
+  {
+    // The panel closes again, so the room reaches under the window's ×.
+    name: "at 200% zoom a chart inserted in a room narrower than it ends where the window's × keeps clear",
+    window: { zoom: DOUBLE_ZOOM },
+    shot: "chart-zoomed-clear",
+    script: `
+      ${GEOMETRY}
+      ${FORM}
+      ${INSERT}
+      // The strip the window's × keeps clear at its top right.
+      const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
+      if (!(await until(() => innerWidth < ${NARROW_WIDTH}))) return "the page is " + innerWidth + "px wide";
+      document.querySelector("#panel-toggle").click();
+      if (!(await until(() => room().width < ${DEFAULT_WIDTH} && room().right > innerWidth - corner()))) {
+        return "the room stands at " + edges(room()) + ", so this checks nothing";
+      }
+      const at = await insert();
+      if (at === undefined) return "no chart was inserted";
+      const box = at.getBoundingClientRect();
+      if (box.right !== innerWidth - corner()) return "the new window ends at " + box.right + ", and the window's × keeps clear from " + (innerWidth - corner());
+      const x = at.querySelector(".chart-close").getBoundingClientRect();
+      const own = document.querySelector("#close").getBoundingClientRect();
+      return x.right < own.left ? "" : "the new window's × ends at " + x.right + ", over the window's × from " + own.left;
+    `,
+  },
+  {
+    name: "back at full zoom with the panel open, the page is as wide as the run began",
+    window: {},
+    script: `
+      await openPanel();
+      return (await until(() => innerWidth > ${NARROW_WIDTH})) ? "" : "the page is " + innerWidth + "px wide";
     `,
   },
 ];
