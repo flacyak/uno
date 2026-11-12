@@ -9,11 +9,12 @@
  * and the second removes the chart, as two presses of Delete remove another.
  * A chart inserted with the panel closed then stands in from the room's right
  * edge, its × clear of the window's, and one inserted with it open flush. At
- * 200% zoom, in a room narrower than a new window, one ends where the window's
- * × keeps clear.
+ * 200% zoom, in a room narrower than a new window, and in a 640 px window, in
+ * a room too narrow for one to stand in by the corner, one stands at the left
+ * edge, clear of the window's ×.
  */
 
-import { DEFAULT_WIDTH } from "@renderer/chart/place";
+import { DEFAULT_WIDTH, STAND_IN_CORNERS } from "@renderer/chart/place";
 import { pressing } from "./chart-moves.ts";
 import { CLICK_AND_ARROW, DOUBLE_ZOOM, GEOMETRY, NARROW_WIDTH, STATE_WINDOWS } from "./charts.ts";
 import type { Check } from "./check.ts";
@@ -59,6 +60,47 @@ const INSERT = `
     return (await until(() => added() !== undefined)) ? added() : undefined;
   };
 `;
+
+/**
+ * A check in `shape` that closes the panel, so the room reaches under the
+ * window's ×, and waits for a room that `fits`, a condition on `room()` and on
+ * `reach()`, how far the room reaches under the corner. A chart inserted there
+ * over the first column, on the room's left half, would go to the right half,
+ * and stands at the room's left edge instead, as wide as the room leaves clear
+ * of the corner up to a new window's width, its × clear of the window's.
+ */
+function clearAtLeft(name: string, shape: Check["window"], fits: string, shot: string): Check {
+  return {
+    name,
+    window: shape,
+    shot,
+    script: `
+      ${GEOMETRY}
+      ${FORM}
+      ${INSERT}
+      // The strip the window's × keeps clear at its top right.
+      const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
+      const reach = () => room().right - (innerWidth - corner());
+      if (!document.querySelector("#panel").hidden) document.querySelector("#panel-toggle").click();
+      if (!(await until(() => reach() > 0 && (${fits})))) return "the room stands at " + edges(room()) + ", so this checks nothing";
+      // The first column, on the room's left half, so the chart is sent to the right.
+      const cell = document.querySelector("tbody tr:not(.pending)").children[GUTTER];
+      cell.click();
+      const column = cell.getBoundingClientRect();
+      if (column.left + column.right >= room().left + room().right) return "the first column stands at " + edges(column) + ", on the room's right half";
+      const at = await insert();
+      if (at === undefined) return "no chart was inserted";
+      const box = at.getBoundingClientRect();
+      const width = Math.min(${DEFAULT_WIDTH}, Math.floor(room().width - reach()));
+      if (box.left !== room().left || box.width !== width) {
+        return "the new window stands at " + edges(box) + ", not " + width + " px wide at the left of a room at " + edges(room());
+      }
+      const x = at.querySelector(".chart-close").getBoundingClientRect();
+      const own = document.querySelector("#close").getBoundingClientRect();
+      return x.right < own.left ? "" : "the new window's × ends at " + x.right + ", over the window's × from " + own.left;
+    `,
+  };
+}
 
 export const CHART_EDITS: Check[] = [
   {
@@ -194,31 +236,18 @@ export const CHART_EDITS: Check[] = [
       return at.right === room().right ? "" : "with the panel open the new window stands at " + edges(at) + " in a room at " + edges(room());
     `,
   },
-  {
-    // The panel closes again, so the room reaches under the window's ×.
-    name: "at 200% zoom a chart inserted in a room narrower than it ends where the window's × keeps clear",
-    window: { zoom: DOUBLE_ZOOM },
-    shot: "chart-zoomed-clear",
-    script: `
-      ${GEOMETRY}
-      ${FORM}
-      ${INSERT}
-      // The strip the window's × keeps clear at its top right.
-      const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
-      if (!(await until(() => innerWidth < ${NARROW_WIDTH}))) return "the page is " + innerWidth + "px wide";
-      document.querySelector("#panel-toggle").click();
-      if (!(await until(() => room().width < ${DEFAULT_WIDTH} && room().right > innerWidth - corner()))) {
-        return "the room stands at " + edges(room()) + ", so this checks nothing";
-      }
-      const at = await insert();
-      if (at === undefined) return "no chart was inserted";
-      const box = at.getBoundingClientRect();
-      if (box.right !== innerWidth - corner()) return "the new window ends at " + box.right + ", and the window's × keeps clear from " + (innerWidth - corner());
-      const x = at.querySelector(".chart-close").getBoundingClientRect();
-      const own = document.querySelector("#close").getBoundingClientRect();
-      return x.right < own.left ? "" : "the new window's × ends at " + x.right + ", over the window's × from " + own.left;
-    `,
-  },
+  clearAtLeft(
+    "at 200% zoom a chart inserted in a room narrower than it ends where the window's × keeps clear",
+    { zoom: DOUBLE_ZOOM },
+    `room().width < ${DEFAULT_WIDTH} + reach()`,
+    "chart-zoomed-clear",
+  ),
+  clearAtLeft(
+    "in a 640 px window a chart inserted in a room too narrow to stand in by the corner stands clear at the left",
+    { width: NARROW_WIDTH },
+    `room().width >= ${DEFAULT_WIDTH} + reach() && room().width <= ${DEFAULT_WIDTH} + ${STAND_IN_CORNERS} * reach()`,
+    "chart-narrow-clear",
+  ),
   {
     name: "back at full zoom with the panel open, the page is as wide as the run began",
     window: {},
