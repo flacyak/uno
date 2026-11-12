@@ -214,9 +214,28 @@ test("a new window on the right stands as far in as the room reaches under the w
   const half = { ...ROOM, w: ROOM.w / 2 };
   const share = (half.w - DEFAULT_WIDTH) / (ROOM.w - DEFAULT_WIDTH);
   expect(inset(place, half)).toBe(Math.round(CORNER * share));
-  // A selected column reaching into the inset keeps the window clear of it.
+});
+
+test("past the band, the window's × wins over a selected column reaching into the inset", () => {
+  const upper = DEFAULT_WIDTH + STAND_IN_CORNERS * CORNER;
+  // Past the band; where the first column fills the free px; and where it
+  // reaches into the inset, from its least to the last px before it clears it.
+  const widths = [
+    upper + 1,
+    DEFAULT_WIDTH + COLUMN_WIDTH,
+    DEFAULT_WIDTH + COLUMN_WIDTH + 1,
+    DEFAULT_WIDTH + CORNER + COLUMN_WIDTH - 1,
+    DEFAULT_WIDTH + CORNER + COLUMN_WIDTH,
+  ];
+  for (const w of widths) {
+    const room = { ...ROOM, w };
+    const at = placed(fresh(0, columnAt(0), room, CORNER), room);
+    expect(w - at.x - at.width).toBe(CORNER);
+  }
   const reaching = { left: 0, right: ROOM.w - DEFAULT_WIDTH - CORNER / 2 };
-  expect(placed(fresh(0, reaching, ROOM, CORNER), ROOM).x).toBeCloseTo(reaching.right);
+  expect(placed(fresh(0, reaching, ROOM, CORNER), ROOM).x).toBeCloseTo(
+    ROOM.w - DEFAULT_WIDTH - CORNER,
+  );
 });
 
 test("a room too narrow for a new window to stand in by the corner has it stand clear at the left", () => {
@@ -243,11 +262,6 @@ test("a room too narrow for a new window to stand in by the corner has it stand 
     const bare = placed(fresh(0, columnAt(0), room), room);
     expect([bare.x + bare.width, bare.width]).toEqual([w, Math.min(w, DEFAULT_WIDTH)]);
   }
-  // 1 px past the band, a new window on the right stands in by the corner.
-  const past = { ...ROOM, w: upper + 1 };
-  const short = { left: 0, right: past.w - DEFAULT_WIDTH - CORNER };
-  const at = placed(fresh(0, short, past, CORNER), past);
-  expect(past.w - at.x - at.width).toBe(CORNER);
   // At the left edge, the × stays clear in a room of any size.
   expect(placed(fresh(0, columnAt(0), { ...ROOM, w: upper }, CORNER), ROOM).x).toBe(0);
 });

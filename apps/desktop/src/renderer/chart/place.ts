@@ -169,11 +169,11 @@ export function thin(room: Room): boolean {
  * window's width has it cross the middle.
  *
  * `corner` is how far the room's right edge reaches under the window's ×. A
- * new window on the right stands that far in, so its × stands clear, but no
- * further than the selected column's right edge, so the window stays whole
- * while the grid has the keys. It is stored as a fraction, so it stands
- * further in as the room grows and nearer the edge as it shrinks, and stays on
- * the right half.
+ * new window on the right stands that far in, so its × stands clear. A
+ * selected column that reaches past that inset is covered as little as the
+ * corner allows: the window's × wins over it. It is stored as a fraction, so
+ * it stands further in as the room grows and nearer the edge as it shrinks,
+ * and stays on the right half.
  *
  * A room whose free px are no more than STAND_IN_CORNERS corners, where
  * standing in would bring the window's middle to the room's, as at 200% zoom
@@ -189,9 +189,8 @@ export function fresh(n: number, selected: ColumnSpan, room: Room, corner = 0): 
     return { x: NEAR_EDGE, y, width, height: DEFAULT_HEIGHT };
   }
   const middle = (selected.left + selected.right) / 2;
-  const steppedIn = share(Math.max(free - corner, selected.right), free, FAR_EDGE);
   return {
-    x: middle < room.w / 2 ? steppedIn : NEAR_EDGE,
+    x: middle < room.w / 2 ? share(free - corner, free, FAR_EDGE) : NEAR_EDGE,
     y,
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,
