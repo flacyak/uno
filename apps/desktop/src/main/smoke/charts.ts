@@ -13,6 +13,10 @@
  * (blank) in the caption's ink. A chart over what it cannot read says why in
  * its plot, with the button that mends it.
  *
+ * A window saved at the sheet's right edge shows its × clear of the window's,
+ * at 100%, at 200% and in a narrow window it opens in, and stands where it was
+ * saved again with room again.
+ *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot. The last six open others:
  * one whose sums leave a window of the least width too little room for bars and
@@ -41,6 +45,8 @@ const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
 const SIGNED = process.env["UNO_SMOKE_SIGNED"] ?? "";
 const SIGNED_REGIONS = 4;
 const SIGNED_ROWS = 5;
+/** Its windows: one at the sheet's left edge and one at its right. */
+const SIGNED_WINDOWS = 2;
 
 /** The one it wrote of a scatter of the fixture's revenue against its units. */
 const SCATTERED = process.env["UNO_SMOKE_SCATTERED"] ?? "";
@@ -843,6 +849,43 @@ export const CHARTS: Check[] = [
 
 /** A check near the run's end, as it opens a workspace in place of the one the others read. */
 export const CHART_SIGNED: Check[] = [
+  {
+    name: "a 640 px window with the panel closed, for a workspace to open in",
+    window: { width: NARROW_WIDTH },
+    script: `
+      if (!document.querySelector("#panel").hidden) return "the panel is open";
+      return (await until(() => innerWidth === ${NARROW_WIDTH})) ? "" : "the page is " + innerWidth + "px wide";
+    `,
+  },
+  {
+    name: "a workspace saved with a window at the sheet's right edge opens in a narrow window with its × clear of the window's, and stays saved",
+    send: ["menu:open-path", SIGNED],
+    shot: "chart-reopened-narrow",
+    script: `
+      ${GEOMETRY}
+      ${CLEAR_X}
+      // Its first window's bars draw once its charts stand in place of the last workspace's.
+      const tracks = () => document.querySelectorAll(".chart-bar-track").length;
+      const opened = () => document.querySelector(".ws.open .name")?.textContent === "signed";
+      if (!(await arrives(() => opened() && tracks() === ${SIGNED_REGIONS}))) return "the plot draws " + tracks() + " bars";
+      if (windows().length !== ${SIGNED_WINDOWS}) return "the windows are " + windows().length;
+      if (!(await until(() => reach() > 0))) return "the room reaches nothing under the window's ×, so this checks nothing";
+      if (!(await until(() => crossing() === ""))) return crossing();
+      return unsaved() ? "opening the workspace marked it unsaved" : "";
+    `,
+  },
+  {
+    name: "back at full width, the window from the right edge stands in by the corner from it again, and the workspace stays saved",
+    window: {},
+    script: `
+      ${GEOMETRY}
+      ${CLEAR_X}
+      const far = () => windows()[${SIGNED_WINDOWS} - 1];
+      const back = () => innerWidth > ${NARROW_WIDTH} && far().right === room().right - reach();
+      if (!(await until(back))) return "the window stands at " + edges(far()) + " in a room at " + edges(room()) + ", reaching " + reach() + " px under the ×";
+      return unsaved() ? "the resize marked the workspace unsaved" : crossing();
+    `,
+  },
   {
     name: "a sum with long values on both sides of zero keeps its bars at the least width, and its values inside their tracks",
     send: ["menu:open-path", SIGNED],
