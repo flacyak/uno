@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { isNumber, parse, undress } from '@num';
+import { isNumber, markShown, parse, undress } from '@num';
 
 // isNumber accepts plain and accounting-style numbers and refuses the rest,
 // including values Number() would accept.
@@ -148,4 +148,26 @@ describe('isNumber with the comma mark refuses thousands separators', () => {
     expect(isNumber('1 234,5', 'comma')).toBe(false);
     expect(isNumber(undress('1 234,5', 'comma'), 'comma')).toBe(true);
   });
+});
+
+describe('markShown names the decimal mark a value shows beyond doubt', () => {
+  const cases: Array<[string, string | undefined]> = [
+    ['1,5', 'comma'],
+    ['2,25', 'comma'],
+    ['1,2345', 'comma'],
+    ['1.234,56', 'comma'],
+    ['1.234.567', 'comma'],
+    ['0.5', 'point'],
+    ['1,234.56', 'point'],
+    ['1,234,567', 'point'],
+    ['1,234', undefined],
+    ['1.234', undefined],
+    ['12', undefined],
+  ];
+
+  for (const [input, want] of cases) {
+    test(`${JSON.stringify(input)} => ${want}`, () => {
+      expect(markShown(input)).toBe(want);
+    });
+  }
 });

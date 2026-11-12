@@ -84,6 +84,25 @@ export function signed(v: string): string {
 }
 
 /**
+ * markShown returns the decimal mark `v` shows beyond doubt, or undefined
+ * when it shows none. A value with both marks shows its last as the decimal
+ * mark: 1.234,56 and 1,234.56. A mark written twice separates thousands, so
+ * the other one is the decimal mark: 1.234.567. A mark written once is the
+ * decimal mark unless exactly GROUP_DIGITS digits follow it, as in 1,234,
+ * which reads either way.
+ */
+export function markShown(v: string): Mark | undefined {
+  const point = v.lastIndexOf('.');
+  const comma = v.lastIndexOf(',');
+  if (point >= 0 && comma >= 0) return point > comma ? 'point' : 'comma';
+  if (point < 0 && comma < 0) return undefined;
+  const at = Math.max(point, comma);
+  const once: Mark = point >= 0 ? 'point' : 'comma';
+  if (v.indexOf(v[at]!) !== at) return once === 'point' ? 'comma' : 'point';
+  return digitsAt(v, at + 1) === GROUP_DIGITS ? undefined : once;
+}
+
+/**
  * isNumber reports whether `v`, after `signed`, is a plain decimal number
  * written with `mark`.
  */
