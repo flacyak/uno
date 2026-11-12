@@ -1,8 +1,9 @@
 /**
  * @fileoverview Checks of a chart window under a real pointer and real keys. A
  * drag moves it by the pointer's px, the grip and the edges resize it, the least
- * size holds and the room's edges stop it, and Escape puts a drag back. The
- * arrows step it, and Escape gives the grid its keys back. A press raises it.
+ * size holds and the room's edges stop it, a drop at its right edge stands it
+ * clear of the window's ×, and Escape puts a drag back. The arrows step it,
+ * and Escape gives the grid its keys back. A press raises it.
  * None of it marks the workspace unsaved, and Ctrl+S writes the places, which
  * smoke.js reads back. A finger gets 24 px at the zones and drags a head too, a
  * tucked head stays put, a press closes an open popup, and a drag from a window
@@ -19,7 +20,7 @@ import {
   MIN_WIDTH,
   NUDGE_PX,
 } from "@renderer/chart/place";
-import { BORDER_IN, GEOMETRY, RECT_SLACK } from "./charts.ts";
+import { BORDER_IN, CLEAR_X, GEOMETRY, RECT_SLACK } from "./charts.ts";
 import type { Check, Input } from "./check.ts";
 import { RIGHT_CLICK } from "./sidebar.ts";
 
@@ -118,6 +119,9 @@ export function pressing(
 /** Helpers: the first window, and whether it stands where a check wants it. */
 const MOVES = `
   ${GEOMETRY}
+  ${CLEAR_X}
+  // Where a window at the room's right edge shows, clear of the window's ×.
+  const edge = () => room().right - reach();
   const first = () => windows()[0];
   const near = (a, b) => Math.abs(a - b) < ${RECT_SLACK};
   const stands = (want) => Object.entries(want).every(([side, at]) => near(first()[side], at));
@@ -172,7 +176,7 @@ export const CHART_MOVES: Check[] = [
     drag: { selector: HEAD, by: CARRY },
     script: `
       ${MOVES}
-      return wait({ right: room().right + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a move");
+      return wait({ right: edge() + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a move");
     `,
   },
   {
@@ -195,7 +199,7 @@ export const CHART_MOVES: Check[] = [
       if (!resized) return "the room stayed at " + edges(room());
       const whole = (px) => near(px, Math.round(px));
       if (!whole(now.x) || !whole(now.y)) return "the window stands between px, at " + now.x + " " + now.y + " in the room";
-      return wait({ right: room().right + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a resize");
+      return wait({ right: edge() + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a resize");
     `,
   },
   {
@@ -203,8 +207,8 @@ export const CHART_MOVES: Check[] = [
     drag: { selector: GRIP, by: STRETCH },
     script: `
       ${MOVES}
-      const corner = { left: room().right + ${CARRY.x - DEFAULT_WIDTH}, top: room().top + ${CARRY.y} };
-      return wait({ ...corner, width: ${DEFAULT_WIDTH + STRETCH.x}, height: ${DEFAULT_HEIGHT + STRETCH.y} }, "a resize");
+      const topLeft = { left: edge() + ${CARRY.x - DEFAULT_WIDTH}, top: room().top + ${CARRY.y} };
+      return wait({ ...topLeft, width: ${DEFAULT_WIDTH + STRETCH.x}, height: ${DEFAULT_HEIGHT + STRETCH.y} }, "a resize");
     `,
   },
   {
@@ -311,11 +315,11 @@ export const CHART_MOVES: Check[] = [
     `,
   },
   {
-    name: "a drag past the room's foot right stops on it",
+    name: "a drag past the room's foot right stops on it, and the drop stands it clear of the window's ×",
     drag: { selector: HEAD, by: { x: FAR, y: FAR } },
     script: `
       ${MOVES}
-      return wait({ right: room().right, bottom: room().bottom }, "a move");
+      return wait({ right: edge(), bottom: room().bottom }, "a move");
     `,
   },
   {
@@ -324,7 +328,7 @@ export const CHART_MOVES: Check[] = [
     script: `
       ${MOVES}
       const bottom = room().bottom + ${CARRY_BACK.y};
-      return wait({ right: room().right + ${CARRY_BACK.x}, bottom }, "a drag");
+      return wait({ right: edge() + ${CARRY_BACK.x}, bottom }, "a drag");
     `,
   },
   {
@@ -339,12 +343,12 @@ export const CHART_MOVES: Check[] = [
     },
     script: `
       ${MOVES}
-      const failed = await wait({ right: room().right, bottom: room().bottom }, "Escape");
+      const failed = await wait({ right: edge(), bottom: room().bottom }, "Escape");
       if (failed !== "") return failed;
       await frame();
       const box = document.querySelector(".chart");
       if (document.activeElement !== box) return "the keys are in #" + document.activeElement?.id;
-      return stands({ right: room().right, bottom: room().bottom }) ? "" : "the drag went on to " + reads();
+      return stands({ right: edge(), bottom: room().bottom }) ? "" : "the drag went on to " + reads();
     `,
   },
   {
@@ -352,7 +356,7 @@ export const CHART_MOVES: Check[] = [
     input: { events: pressing("Left"), through: true },
     script: `
       ${MOVES}
-      return wait({ right: room().right - ${NUDGE_PX} }, "a press");
+      return wait({ right: edge() - ${NUDGE_PX} }, "a press");
     `,
   },
   {
@@ -360,7 +364,7 @@ export const CHART_MOVES: Check[] = [
     input: { events: pressing("Right", ["shift"]), through: true },
     script: `
       ${MOVES}
-      return wait({ right: room().right, width: ${MIN_WIDTH + NUDGE_PX} }, "a press");
+      return wait({ right: edge(), width: ${MIN_WIDTH + NUDGE_PX} }, "a press");
     `,
   },
   {
@@ -378,7 +382,7 @@ export const CHART_MOVES: Check[] = [
     touch: { selector: HEAD, by: FINGER_STEP },
     script: `
       ${MOVES}
-      const was = { right: room().right, bottom: room().bottom - ${NUDGE_PX} };
+      const was = { right: edge(), bottom: room().bottom - ${NUDGE_PX} };
       const right = was.right + ${FINGER_STEP.x};
       return wait({ right, bottom: was.bottom + ${FINGER_STEP.y} }, "a finger's move");
     `,
@@ -391,7 +395,7 @@ export const CHART_MOVES: Check[] = [
     },
     script: `
       ${MOVES}
-      const right = room().right + ${FINGER_STEP.x + STEPS_BACK * NUDGE_PX};
+      const right = edge() + ${FINGER_STEP.x + STEPS_BACK * NUDGE_PX};
       return wait({ right, bottom: room().bottom + ${FINGER_STEP.y - NUDGE_PX} }, "a press");
     `,
   },

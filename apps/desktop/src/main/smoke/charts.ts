@@ -254,6 +254,22 @@ export const GEOMETRY = `
   const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
 `;
 
+/**
+ * Helpers: how far the room reaches under the window's ×, and what of any
+ * window's × reaches the window's own, its rect beside the window's.
+ */
+export const CLEAR_X = `
+  const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
+  const reach = () => room().right - (innerWidth - corner());
+  const own = () => document.querySelector("#close").getBoundingClientRect();
+  const rectOf = (at) => "[" + [at.left, at.top, at.width, at.height].join(", ") + "]";
+  const crossing = () => {
+    const xs = [...document.querySelectorAll(".chart .chart-close")].map((x) => x.getBoundingClientRect());
+    const over = xs.find((x) => x.right >= own().left);
+    return over === undefined ? "" : "a window's × stands at " + rectOf(over) + ", over the window's × at " + rectOf(own());
+  };
+`;
+
 /** What a window, its head and its × copy, by selector. */
 const COPIES = [
   { of: "the settings menu's box", copy: ".chart", from: ".settings", names: BOX_LOOK },
@@ -319,6 +335,7 @@ export const CHARTS: Check[] = [
     shot: "charts-layer",
     script: `
       ${GEOMETRY}
+      ${CLEAR_X}
       if (!(await arrives(() => windows().length === 2))) return "the windows are " + windows().length + " · " + JSON.stringify(text("#status-msg"));
       const scroller = document.querySelector(".grid-scroll");
       if (scroller.scrollWidth <= scroller.clientWidth || scroller.scrollHeight <= scroller.clientHeight) {
@@ -332,10 +349,13 @@ export const CHARTS: Check[] = [
       if (top.top !== rule()) return "the top window starts at " + top.top + ", and the header row's rule at " + rule();
       const edge = document.elementFromPoint((top.left + top.right) / 2, top.top);
       if (edge.closest(".chart") === null) return "the top window's border is under the " + edge.tagName;
-      if (top.right !== right) return "the top window ends at " + top.right + ", and the scrollbar starts at " + right;
-      if (foot.right !== right) return "the foot window ends at " + foot.right + ", and the scrollbar starts at " + right;
+      // Each stands in from the scrollbar by as far as the room reaches under the window's ×.
+      const clear = right - reach();
+      if (top.right !== clear) return "the top window ends at " + top.right + ", not " + clear + " before the scrollbar at " + right;
+      if (foot.right !== clear) return "the foot window ends at " + foot.right + ", not " + clear + " before the scrollbar at " + right;
       if (foot.bottom !== bottom) return "the foot window ends at " + foot.bottom + ", and the scrollbar starts at " + bottom;
       if (top.top < close.bottom) return "the top window starts at " + top.top + ", beside the × to " + close.bottom;
+      if (crossing() !== "") return crossing();
       return unsaved() ? "opening the workspace marked it unsaved" : "";
     `,
   },
@@ -429,10 +449,13 @@ export const CHARTS: Check[] = [
   },
   {
     // A window's last device px stands over the grid, and the next on the bar.
+    // The panel opens, so the room reaches under no × and a window meets the
+    // bar on the right, and closes again after.
     name: "at the View menu's 158%, a window meets both scrollbars with no grid past it",
     window: { zoom: MENU_ZOOM },
     script: `
       ${GEOMETRY}
+      await openPanel();
       const middle = (px) => (px + 0.5) / devicePixelRatio;
       const grid = (x, y) => document.elementsFromPoint(x, y).some((hit) => hit.matches("td, th"));
       const meets = () => {
@@ -443,7 +466,10 @@ export const CHARTS: Check[] = [
         const x = (foot.left + foot.right) / 2;
         return grid(middle(right - 1), y) && !grid(middle(right), y) && grid(x, middle(bottom - 1)) && !grid(x, middle(bottom));
       };
-      if (await until(() => innerWidth < ${MENU_ZOOM_WIDTH} && meets())) return "";
+      const met = await until(() => innerWidth < ${MENU_ZOOM_WIDTH} && meets());
+      document.querySelector("#panel-toggle").click();
+      if (!(await until(() => document.querySelector("#panel").hidden))) return "the panel stayed open";
+      if (met) return "";
       return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
     `,
   },
@@ -577,10 +603,11 @@ export const CHARTS: Check[] = [
     window: {},
     script: `
       ${GEOMETRY}
+      ${CLEAR_X}
       document.querySelector("#panel-toggle").click();
       const back = () => {
         const [top, foot] = windows();
-        return top.height === ${DEFAULT_HEIGHT} && top.top === room().top && top.right === room().right && foot.bottom === room().bottom;
+        return top.height === ${DEFAULT_HEIGHT} && top.top === room().top && top.right === room().right - reach() && foot.bottom === room().bottom;
       };
       if (!(await until(back))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       return unsaved() ? "going back marked the workspace unsaved" : "";
