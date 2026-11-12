@@ -4,6 +4,7 @@
  * the grid itself unloaded.
  */
 
+import type { Mark } from "@num";
 import type { Kind } from "@sheet";
 
 import { m } from "@paraglide/messages";
@@ -20,6 +21,14 @@ export function unnamed(header: string): boolean {
   return header.trim() === "";
 }
 
+/** What the header shows of a column: its name, kind and decimal mark. */
+export interface Column {
+  header: string;
+  kind: Kind;
+  flagged: boolean;
+  mark: Mark;
+}
+
 /**
  * The data the grid draws. Implemented by a Sheet and by an engine's band.
  *
@@ -27,7 +36,7 @@ export function unnamed(header: string): boolean {
  * row loaded.
  */
 export interface Rows {
-  readonly columns: readonly { header: string; kind: Kind; flagged: boolean }[];
+  readonly columns: readonly Column[];
   rows(): number;
   cols(): number;
   display(row: number, col: number): string;

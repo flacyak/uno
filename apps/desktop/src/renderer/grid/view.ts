@@ -32,7 +32,7 @@ import {
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el } from "@renderer/shell/util";
 import { columnLabel, unnamed } from "./rows.ts";
-import type { Cell, Rows } from "./rows.ts";
+import type { Cell, Column, Rows } from "./rows.ts";
 
 /** The width of a cell's right and bottom rules, in px, as grid.css draws them. */
 const RULE_PX = 1;
@@ -137,8 +137,9 @@ export class View {
 
   /**
    * Draws the header row. Each column shows its name, a kind badge (flagged
-   * when the column holds formatted numbers that read as text), and an "fx"
-   * badge when a formula computes it.
+   * when the column holds formatted numbers that read as text, and saying so
+   * on hover, as it does a decimal comma), and an "fx" badge when a formula
+   * computes it.
    */
   private buildHead(): void {
     this.head.replaceChildren();
@@ -162,7 +163,7 @@ export class View {
       }
 
       const badge = el("span", column.flagged ? "badge flagged" : "badge", column.kind);
-      if (column.flagged) badge.title = m.column_flagged_hint();
+      badge.title = kindHint(column);
       wrap.append(badge);
 
       const th = el("th");
@@ -419,6 +420,19 @@ export class View {
     if (tr === undefined) return undefined;
     return tr.children[col + 1] as HTMLTableCellElement | undefined;
   }
+}
+
+/**
+ * kindHint is what a column's kind badge says on hover: that its numbers do
+ * not parse where it is flagged, and that they use a decimal comma where they
+ * do. Empty for a column with neither.
+ */
+function kindHint({ flagged, mark }: Column): string {
+  const hints = [
+    flagged ? m.column_flagged_hint() : "",
+    mark === "comma" ? m.column_decimal_comma_hint() : "",
+  ];
+  return hints.filter((hint) => hint !== "").join(" · ");
 }
 
 function className(kind: Kind, selected: boolean): string {

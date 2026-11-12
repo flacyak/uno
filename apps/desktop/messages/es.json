@@ -270,6 +270,7 @@
   "typed_before_reread": "no se escribió nada · el archivo se volvió a leer mientras escribías",
   "yank_clipboard_refused": "copiado, pero el portapapeles del sistema lo rechazó",
   "column_flagged_hint": "parece numérica, pero no se lee como número",
+  "column_decimal_comma_hint": "números con coma decimal: 1,5 es uno y medio",
   "offer_ambiguous": "otra regla también encaja con estos ejemplos",
   "find_column_is_text": "{column} es texto · todos sus valores se leen bien",
   "nothing_searched": "todavía no se ha buscado nada",

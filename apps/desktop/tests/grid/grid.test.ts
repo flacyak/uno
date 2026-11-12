@@ -25,7 +25,12 @@ const VIEWPORT = 600;
 function sheet(total: number, cols = 3): Rows {
   const kind: Kind = "text";
   return {
-    columns: Array.from({ length: cols }, (_, c) => ({ header: `c${c}`, kind, flagged: false })),
+    columns: Array.from({ length: cols }, (_, c) => ({
+      header: `c${c}`,
+      kind,
+      flagged: false,
+      mark: "point",
+    })),
     rows: () => total,
     cols: () => cols,
     display: (row, col) => `${row},${col}`,

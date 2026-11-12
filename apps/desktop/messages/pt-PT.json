@@ -270,6 +270,7 @@
   "typed_before_reread": "nada foi gravado · o ficheiro foi lido de novo enquanto escrevia",
   "yank_clipboard_refused": "copiado, mas a área de transferência do sistema recusou",
   "column_flagged_hint": "parece numérica, mas não é lida como número",
+  "column_decimal_comma_hint": "números com vírgula decimal: 1,5 é um e meio",
   "offer_ambiguous": "outra regra também se encaixa nestes exemplos",
   "find_column_is_text": "{column} é texto · todos os seus valores são lidos",
   "nothing_searched": "nada foi pesquisado ainda",
