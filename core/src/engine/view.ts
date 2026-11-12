@@ -1048,7 +1048,8 @@ export class View {
    *
    * An "unparsed" match tests a date column with isDate and a numeric or
    * flagged column with isNumber. A "not-number" match tests any column with
-   * parse, as a chart's fold reads its cells. A blank cell is skipped.
+   * parse, as a chart's fold reads its cells. Both read numbers with the
+   * column's decimal mark. A blank cell is skipped.
    */
   private async matcher(
     req: FindRequest,
@@ -1057,17 +1058,18 @@ export class View {
       const text = req.match.text;
       return text === '' ? undefined : (shown) => shown.includes(text);
     }
-    if (req.match.t === 'not-number') {
-      return (shown) => shown !== '' && parse(shown, 'point') === undefined;
-    }
-
     const column = (await this.columns())[req.col];
     if (column === undefined) return undefined;
+    const { mark } = column;
+    if (req.match.t === 'not-number') {
+      return (shown) => shown !== '' && parse(shown, mark) === undefined;
+    }
+
     const parses =
       column.kind === 'date'
         ? isDate
         : column.kind === 'num' || column.flagged
-          ? (v: string) => isNumber(v, 'point')
+          ? (v: string) => isNumber(v, mark)
           : undefined;
     if (parses === undefined) return undefined;
     return (shown) => {
