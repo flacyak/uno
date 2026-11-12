@@ -109,7 +109,7 @@ export const CHART_EDITS: Check[] = [
     click: { selector: LAST_X },
     script: `
       ${FORM}
-      if (!last().querySelector(".chart-close").classList.contains("armed")) return "the × is not armed";
+      if (!(await until(() => last().querySelector(".chart-close").classList.contains("armed")))) return "the × is not armed";
       return text("#status-msg").startsWith("× or Delete again removes the chart") ? "" : "the status line says " + text("#status-msg");
     `,
   },
