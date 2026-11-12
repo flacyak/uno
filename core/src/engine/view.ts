@@ -434,20 +434,26 @@ export class View {
     return { generation, rows, raws };
   }
 
-  /** columns infers each column's kind from the sample rows, with the log applied. */
+  /**
+   * columns infers each column's kind and decimal mark from the sample rows,
+   * with the log applied. A chart that reads a column whose mark changed
+   * folds again with the mark now.
+   */
   private async columns(): Promise<ColumnInfo[]> {
     const source = await this.pages.rows(0, SAMPLE_ROWS);
     const files = await this.files(0, source.length);
     const schema = this.schema;
     const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
 
-    return schema.headers.map((header, col) => {
+    const columns = schema.headers.map((header, col): ColumnInfo => {
       const inferred = inferKind(shown.length, (row) => shown[row]![col] ?? '');
       const binding = schema.binding(col);
       return binding === undefined
         ? { header, ...inferred }
         : { header, ...inferred, binding };
     });
+    if (this.tallies.remark(columns.map((c) => c.mark))) this.tally();
+    return columns;
   }
 
   /**
@@ -626,11 +632,13 @@ export class View {
    * the charts by its row, from what it showed before to what it shows now;
    * an edit over a whole column folds again the charts that read what it
    * changed. A moved chart hears its tally again from a pass, started when
-   * none runs.
+   * none runs. The columns are inferred first, so a chart over a column
+   * whose decimal mark the edit changed folds again and is not moved.
    */
   private async changed(e: Edit, edited: Edited | undefined): Promise<Changed> {
     this.generation++;
     this.recognise();
+    const columns = await this.columns();
     if (e.row === NO_ROW) {
       const cols = new Set([e.col, ...this.schema.readersOf(e.col)]);
       if (this.tallies.refold(cols)) this.tally();
@@ -643,11 +651,7 @@ export class View {
         .catch((err: unknown) => this.unread(err, moved));
       if (this.tallying === undefined) this.tally();
     }
-    return {
-      edit: e,
-      generation: this.generation,
-      columns: await this.columns(),
-    };
+    return { edit: e, generation: this.generation, columns };
   }
 
   /** refuseInView throws while the view is in view mode. */

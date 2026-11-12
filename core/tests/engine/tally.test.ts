@@ -904,3 +904,38 @@ test('an edit over a whole column folds the charts that read it again, through a
     done();
   }
 });
+
+test('a chart sums a column with the decimal mark its sample shows, and folds again when an edit changes the mark', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const csv =
+      'region;amount\nNorth;1,5\nNorth;2,25\nSouth;1.234,56\nSouth;0,75\n';
+    const blob = new Blob([csv]);
+    const src = await openOne(engine, { name: 'eu.csv', blob });
+    expect(src.opened.columns[1]!.mark).toBe('comma');
+    const at = (col: number, header: string) => ({ col, header });
+    const plot: Plot = { t: 'bars', by: at(0, 'region'), sum: at(1, 'amount') };
+    const heard = new Heard(src);
+    const sums = async (change: () => Promise<unknown>) => {
+      const last = heard.of(REGION_ROWS.id);
+      await change();
+      const tally = await last;
+      if (tally.t !== 'groups') throw new Error(`heard ${tally.t}`);
+      return tally.groups.map(({ value, sum }) => [value, sum]);
+    };
+    const chart = { ...REGION_ROWS, source: src.id, plot };
+    expect(await sums(() => engine.chart(chart))).toEqual([
+      ['South', 1235.31],
+      ['North', 3.75],
+    ]);
+    // A point decimal in the sample makes the column read as it always has.
+    engine.mode(true);
+    const set = { op: Op.Set, row: 0, col: 1, now: '0.5' };
+    expect(await sums(() => src.edit(set))).toEqual([
+      ['North', 225.5],
+      ['South', 76.23456],
+    ]);
+  } finally {
+    done();
+  }
+});
