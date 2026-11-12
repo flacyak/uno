@@ -12,6 +12,7 @@
 
 import type { Formula } from '@formula';
 import { Graph, parse as parseFormula } from '@formula';
+import type { Mark } from '@num';
 import {
   render as renderNotation,
   supported as notationSupported,
@@ -63,6 +64,11 @@ export class Schema {
 
   /** How many rows an edit may name. The holder of the rows keeps it current. */
   rows: number;
+  /**
+   * Each column's decimal mark, by place, which a formula reads the column's
+   * cells with. The holder of the rows keeps it current from its sample.
+   */
+  marks: readonly Mark[];
 
   private readonly log: Edit[] = [];
   /** Row, then column, then the last write. Sparse: only cells someone wrote. */
@@ -81,6 +87,7 @@ export class Schema {
     this.headers = headers;
     this.supplied = supplied;
     this.rows = rows;
+    this.marks = headers.map(() => 'point');
     headers.forEach((h, i) => this.names.set(h, this.names.has(h) ? -1 : i));
   }
 
@@ -121,6 +128,15 @@ export class Schema {
   }
 
   // ------------------------------------------------------------ reading
+
+  /**
+   * markOf is the decimal mark of the column named `name`, or the point
+   * for a name no one column has, which a formula cannot read.
+   */
+  markOf(name: string): Mark {
+    const col = this.indexOf(name);
+    return col === undefined ? 'point' : (this.marks[col] ?? 'point');
+  }
 
   /** True when the log is empty. */
   get empty(): boolean {

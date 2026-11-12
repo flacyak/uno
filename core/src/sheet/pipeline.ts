@@ -148,6 +148,7 @@ export function finishRows(
       const c = schema.indexOf(name);
       return c === undefined ? undefined : shown.map((row) => row[c]!);
     },
+    mark: (name) => schema.markOf(name),
   };
   for (const c of order) {
     const { values, errors } = evaluateColumn(

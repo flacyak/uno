@@ -362,3 +362,14 @@ test('a bound column over the whole file agrees with the preview row by row', ()
   // Some rows of the file hold text in units, so error rows are covered too.
   expect(failed).toBeGreaterThan(0);
 });
+
+// A formula reads a column with its decimal mark, and computes again when an
+// edit to the sample changes the mark.
+test('a bound column reads a column with its decimal mark', () => {
+  const s = new Sheet('eu.csv', ['amount', 'double'], [['1,5'], ['2,25']]);
+  s.bind(1, parse('amount * 2'));
+  expect([0, 1].map((row) => s.display(row, 1))).toEqual(['3', '4.5']);
+  s.set(0, 0, '0.5');
+  expect(s.columns[0]!.mark).toBe('point');
+  expect([0, 1].map((row) => s.display(row, 1))).toEqual(['1', '450']);
+});
