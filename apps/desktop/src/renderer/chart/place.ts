@@ -48,6 +48,12 @@ const FAR_EDGE = 1;
 /** A place's x or y that puts a window's middle on the room's, in a room of any size. */
 const MIDDLE = (NEAR_EDGE + FAR_EDGE) / 2;
 
+/**
+ * How many times the corner a room's free px must be for a new window on the
+ * right to stand in by the corner and keep its x past MIDDLE, on the right half.
+ */
+export const STAND_IN_CORNERS = FAR_EDGE / (FAR_EDGE - MIDDLE);
+
 /** The layer's box, which windows may fill, in CSS px. */
 export interface Room {
   w: number;
@@ -163,21 +169,29 @@ export function thin(room: Room): boolean {
  * window's width has it cross the middle.
  *
  * `corner` is how far the room's right edge reaches under the window's ×. A
- * new window on the right stands that far in, so its × stands clear, but no
- * further than the selected column's right edge, so the window stays whole
- * while the grid has the keys. It goes flush when standing in would bring its
- * middle to the room's. It is stored as a fraction, so it stands further in
- * as the room grows and nearer the edge as it shrinks, and stays on the right
- * half.
+ * new window on the right stands that far in, so its × stands clear. A
+ * selected column that reaches past that inset is covered as little as the
+ * corner allows: the window's × wins over it. It is stored as a fraction, so
+ * it stands further in as the room grows and nearer the edge as it shrinks,
+ * and stays on the right half.
+ *
+ * A room whose free px are no more than STAND_IN_CORNERS corners, where
+ * standing in would bring the window's middle to the room's, as at 200% zoom
+ * or in a 640 px window, has it stand at the left edge instead, as wide as the
+ * room leaves clear of the corner, up to its own width. It covers the selected
+ * column on either side, and at the left its × stays clear in a room of any size.
  */
 export function fresh(n: number, selected: ColumnSpan, room: Room, corner = 0): ChartPlace {
-  const middle = (selected.left + selected.right) / 2;
+  const y = share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE);
   const free = room.w - DEFAULT_WIDTH;
-  const steppedIn = share(Math.max(free - corner, selected.right), free, FAR_EDGE);
-  const far = steppedIn > MIDDLE ? steppedIn : FAR_EDGE;
+  if (corner > 0 && free <= STAND_IN_CORNERS * corner) {
+    const width = fit(Math.floor(room.w - corner), MIN_WIDTH, DEFAULT_WIDTH);
+    return { x: NEAR_EDGE, y, width, height: DEFAULT_HEIGHT };
+  }
+  const middle = (selected.left + selected.right) / 2;
   return {
-    x: middle < room.w / 2 ? far : NEAR_EDGE,
-    y: share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE),
+    x: middle < room.w / 2 ? share(free - corner, free, FAR_EDGE) : NEAR_EDGE,
+    y,
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,
   };
