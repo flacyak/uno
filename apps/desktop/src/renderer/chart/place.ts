@@ -98,6 +98,19 @@ function along(fraction: number, free: number): number {
   return Math.min(Math.round(fraction * free), free);
 }
 
+/**
+ * cramped says whether `free` px beside a window are too few for it to stand
+ * in by a `corner` that reaches into the room and keep its x past MIDDLE.
+ */
+function cramped(free: number, corner: number): boolean {
+  return corner > 0 && free <= STAND_IN_CORNERS * corner;
+}
+
+/** clearWidth gives how wide a window of up to `width` px stands at the left edge, clear of `corner`. */
+function clearWidth(room: Room, corner: number, width: number): number {
+  return fit(Math.floor(room.w - corner), MIN_WIDTH, width);
+}
+
 /** placed gives the rect a place draws in a room, whatever size the room is. */
 export function placed(place: ChartPlace, room: Room): Rect {
   const width = fit(place.width, MIN_WIDTH, room.w);
@@ -111,14 +124,34 @@ export function placed(place: ChartPlace, room: Room): Rect {
 }
 
 /**
+ * shown gives the rect a place shows in a room whose right edge reaches
+ * `corner` px under the window's ×: where it draws, unless that reaches into
+ * the corner. Then it stands clear as fresh stands a new window: in by the
+ * corner, or where its free px are no more than STAND_IN_CORNERS corners, at
+ * the left edge, as wide as the room leaves clear up to its own width. The
+ * place stays as it is, so a room that grows again shows the window where it
+ * was put.
+ */
+export function shown(place: ChartPlace, room: Room, corner: number): Rect {
+  const rect = placed(place, room);
+  const free = room.w - rect.width;
+  const inset = Math.round(free - corner);
+  if (corner <= 0 || rect.x <= inset) return rect;
+  if (cramped(free, corner)) {
+    return { ...rect, x: NEAR_EDGE, width: clearWidth(room, corner, rect.width) };
+  }
+  return { ...rect, x: inset };
+}
+
+/**
  * placeOf gives the place a rect stores in a room, held to the room and the
  * least size. A rect cannot show all of `was`, the place it came from, so a
  * side with no free px keeps its fraction, and a size or a side the rect leaves
- * as `was` draws it stays stored. A tucked window stores nothing: its rect has
- * no place.
+ * as `was` shows it, in a room reaching `corner` px under the window's ×,
+ * stays stored. A tucked window stores nothing: its rect has no place.
  */
-export function placeOf(rect: Rect, room: Room, was: ChartPlace): ChartPlace {
-  const drawn = placed(was, room);
+export function placeOf(rect: Rect, room: Room, was: ChartPlace, corner = 0): ChartPlace {
+  const drawn = shown(was, room, corner);
   const width = fit(rect.width, MIN_WIDTH, room.w);
   const height = fit(rect.height, MIN_HEIGHT, room.h);
   const keepsX = rect.x === drawn.x && width === drawn.width;
@@ -184,9 +217,13 @@ export function thin(room: Room): boolean {
 export function fresh(n: number, selected: ColumnSpan, room: Room, corner = 0): ChartPlace {
   const y = share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE);
   const free = room.w - DEFAULT_WIDTH;
-  if (corner > 0 && free <= STAND_IN_CORNERS * corner) {
-    const width = fit(Math.floor(room.w - corner), MIN_WIDTH, DEFAULT_WIDTH);
-    return { x: NEAR_EDGE, y, width, height: DEFAULT_HEIGHT };
+  if (cramped(free, corner)) {
+    return {
+      x: NEAR_EDGE,
+      y,
+      width: clearWidth(room, corner, DEFAULT_WIDTH),
+      height: DEFAULT_HEIGHT,
+    };
   }
   const middle = (selected.left + selected.right) / 2;
   return {
