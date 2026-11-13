@@ -517,11 +517,13 @@ export class Workspace {
       if (src.parts !== undefined) {
         view = await this.view(src.id, joinedFrom(src), carried);
       } else if (src.raw === undefined) {
-        // By path, pinned to the saved version where there is one.
+        // By path, pinned to the saved version where there is one, and
+        // indexed by its saved index where that still holds.
         view = await this.view(
           src.id,
           fileAt(src.name, src.path ?? '', src.version),
           carried,
+          { saved: this.cache.get(src.id) },
         );
       } else {
         view = await View.open({
@@ -587,9 +589,11 @@ export class Workspace {
     id: string,
     ref: SourceRef,
     carried: Carried | undefined,
-    ask: Pick<OpenAsk, 'signal' | 'extending'> & { whole?: boolean } = {},
+    ask: Pick<OpenAsk, 'signal' | 'extending' | 'saved'> & {
+      whole?: boolean;
+    } = {},
   ): Promise<View> {
-    const { whole = false, signal, extending } = ask;
+    const { whole = false, signal, extending, saved } = ask;
     // The source's time counts from before its file is opened, so a bucket's
     // first answer is in it.
     const began = performance.now();
@@ -625,6 +629,7 @@ export class Workspace {
       parts: 'parts' in ref ? ref : undefined,
       signal,
       extending,
+      saved,
     });
     view.connection = this.through(ref);
     if ('parts' in ref) {

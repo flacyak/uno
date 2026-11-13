@@ -2,7 +2,8 @@
  * @fileoverview Measures what a reopen of a saved workspace reads of the
  * source it points at, a file on disk and an object in a bucket: with no
  * chart, until its index is complete, and with a bars and a scatter chart,
- * until both are complete too.
+ * until both are complete too. The save keeps the source's index, so the
+ * reopen reads only what shows the first rows, and what the charts fold.
  */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -39,12 +40,33 @@ const SMALL: Tuning = { ...TUNING, chunkBytes: 64 << 10 };
 const REPEATS = 8;
 const OBJECT = repeated(REPEATS);
 
+/** The byte that ends each of the source's rows. */
+const NEWLINE = '\n'.charCodeAt(0);
+
+/** The most a format sniff reads of the head of a file. */
+const SNIFF_AT_MOST = 64 << 10;
+/** The bytes of the source's first block, whose rows the columns are told from. */
+const FIRST_BLOCK = rowStart(TUNING.blockRows) - rowStart(0);
 /**
- * The least a reopen reads today, as a multiple of the source: all of it,
- * again, whether a chart reads it or not. A save keeps no index, so the
- * reopen indexes the source as the first open did.
+ * The most a reopen with no chart may read: the sniff and the first block,
+ * 116,602 bytes measured. The saved index stands for the rest.
  */
-const WHOLE_AGAIN = 1;
+const REOPEN_AT_MOST = SNIFF_AT_MOST + FIRST_BLOCK;
+/** And the most requests: one read each, and a HEAD first from a bucket. */
+const REQUESTS_AT_MOST = { disk: 2, bucket: 3 };
+/**
+ * The most a reopen with charts may read, as a multiple of the source: the
+ * charts' one pass, which reads each block once, and the sniff and first
+ * block before it. 1.06 measured.
+ */
+const CHARTED_AT_MOST = 1.07;
+
+/** rowStart is where data row `row` of the source starts. */
+function rowStart(row: number): number {
+  let at = OBJECT.indexOf(NEWLINE) + 1;
+  for (let r = 0; r < row; r++) at = OBJECT.indexOf(NEWLINE, at) + 1;
+  return at;
+}
 
 const HEADERS = sales.columns.map((c) => c.header);
 /** The fixture's column `col`, as a chart names it. */
@@ -198,19 +220,21 @@ const PLACES = [
 ] as const;
 
 for (const { where, open } of PLACES) {
-  test(`a reopen over a file in a ${where} with no chart reads it whole again`, async () => {
+  test(`a reopen over a file in a ${where} with no chart reads the sniff and the first block`, async () => {
     dir = await mkdtemp(join(tmpdir(), 'uno-reopen-'));
     place = await open(dir);
-    const times = measured(`reopen, ${where}`, await reopened(place, 0));
-    expect(times).toBeGreaterThanOrEqual(WHOLE_AGAIN);
+    const cost = await reopened(place, 0);
+    measured(`reopen, ${where}`, cost);
+    expect(cost.bytes).toBeLessThanOrEqual(REOPEN_AT_MOST);
+    expect(cost.requests).toBeLessThanOrEqual(REQUESTS_AT_MOST[where]);
   }, 60_000);
 
-  test(`a reopen over a file in a ${where} with a bars and a scatter chart reads it whole again`, async () => {
+  test(`a reopen over a file in a ${where} with a bars and a scatter chart reads it once, for the charts`, async () => {
     dir = await mkdtemp(join(tmpdir(), 'uno-reopen-'));
     place = await open(dir);
     const cost = await reopened(place, PLOTS.length);
     const times = measured(`reopen with charts, ${where}`, cost);
     record('reopen', metrics);
-    expect(times).toBeGreaterThanOrEqual(WHOLE_AGAIN);
+    expect(times).toBeLessThanOrEqual(CHARTED_AT_MOST);
   }, 60_000);
 }

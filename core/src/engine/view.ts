@@ -36,7 +36,7 @@ import type {
 } from '@store';
 import { hashOf, printAt } from './grown.ts';
 import type { Print } from './grown.ts';
-import { keyOf } from './key.ts';
+import { differs, keyOf } from './key.ts';
 import type { SourceKey } from './key.ts';
 import { indexPass } from './pass.ts';
 import { TALLY_MS } from './protocol.ts';
@@ -59,7 +59,7 @@ import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
-import { encodeBlocks } from './saved.ts';
+import { decodeBlocks, encodeBlocks } from './saved.ts';
 import { Tallies } from './tally.ts';
 import type { Block } from './tally.ts';
 import {
@@ -170,6 +170,8 @@ export interface OpenAsk {
   signal?: AbortSignal;
   /** The source an append extends. Its index is kept where it still holds. */
   extending?: View;
+  /** The row index a .uno saved of the source, taken where its key holds. */
+  saved?: SavedSource;
 }
 
 export class View {
@@ -322,7 +324,10 @@ export class View {
       was.index.start === format.dataStart
         ? RowIndex.seeded(was.index, source.size)
         : undefined;
-    v.index = seed ?? new RowIndex(format.dataStart, source.size, tuning);
+    v.index =
+      seed ??
+      v.restored(ask.saved, tuning) ??
+      new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.spanBytes = tuning.chunkBytes;
     v.schema = schemaOf(format, ask.parts);
@@ -879,6 +884,40 @@ export class View {
     } catch {
       // The charts fold from their first row, as over any new view.
     }
+  }
+
+  /**
+   * restored is the row index `saved` holds, complete, where it is of this
+   * view's file as the open measured it, read the same way by the same
+   * scanner. The blocks count as handed to the tap, so a chart reads them
+   * in runs, and a file on disk takes the print saved with them.
+   */
+  private restored(
+    saved: SavedSource | undefined,
+    tuning: Tuning,
+  ): RowIndex | undefined {
+    const key = this.key;
+    if (saved === undefined || key === undefined || !saved.complete) return;
+    if (saved.path !== this.path || differs(saved.key, key) !== undefined)
+      return;
+    const starts = decodeBlocks(saved.blocks);
+    if (starts === undefined) return;
+    const { dataStart } = this.format;
+    const { size } = this.source;
+    const { counted, complete } = saved;
+    const index = RowIndex.restored(
+      dataStart,
+      size,
+      tuning,
+      starts,
+      counted,
+      complete,
+    );
+    if (index === undefined) return;
+    this.tapped = index.begun;
+    if (this.printing)
+      Object.assign(this.print, { head: saved.head, tail: saved.tail });
+    return index;
   }
 
   /**
