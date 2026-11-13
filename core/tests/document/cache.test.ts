@@ -15,8 +15,13 @@ import {
   readContainer,
   writeDocument,
 } from '@document';
-import type { Document, SavedSource } from '@document';
-import { CACHE_DIR, CACHE_VERSION } from '@document/cache';
+import type { Document, HeldFile, SavedSource } from '@document';
+import {
+  CACHE_AT_MOST,
+  CACHE_DIR,
+  CACHE_SOURCE_AT_MOST,
+  CACHE_VERSION,
+} from '@document/cache';
 
 /** Fixed created time, so two saves can be compared byte for byte. */
 const CREATED = new Date('2026-11-01T09:00:00Z');
@@ -34,21 +39,24 @@ function saved(): SavedSource {
   };
 }
 
+/** orders.csv, at `path` under the id `id`. */
+function held(id = 'orders', path = ORDERS): HeldFile {
+  return {
+    id,
+    name: 'orders.csv',
+    path,
+    bytes: 2_040_109_871,
+    rows: 30_604_418,
+    cols: 11,
+    state: { active: { row: 0, col: 0 } },
+  };
+}
+
 /** A workspace of orders.csv, with `cache` as its saved index. */
 function workspace(cache?: Map<string, SavedSource>): Document {
   return {
     manifest: { ...newManifest(), created: CREATED, modified: CREATED },
-    sources: [
-      {
-        id: 'orders',
-        name: 'orders.csv',
-        path: ORDERS,
-        bytes: 2_040_109_871,
-        rows: 30_604_418,
-        cols: 11,
-        state: { active: { row: 0, col: 0 } },
-      },
-    ],
+    sources: [held()],
     active: 'orders',
     log: [],
     ...(cache === undefined ? {} : { cache }),
@@ -144,4 +152,43 @@ test('a cache this build cannot read is ignored and not written back', () => {
     const kept = again.filter((n) => n.startsWith(CACHE_DIR));
     expect(kept, why).toStrictEqual(why === 'a stray' ? [INDEX, BLOCKS] : []);
   }
+});
+
+/** Bytes left under a cap for a cache's index entry beside its blocks. */
+const INDEX_ROOM = 1 << 10;
+
+/** A cache whose blocks take `bytes`. */
+function sized(bytes: number): SavedSource {
+  return { ...saved(), blocks: new Uint8Array(bytes) };
+}
+
+/** A workspace of `count` copies of orders.csv, each with a cache of `bytes`. */
+function copies(count: number, bytes: number): Document {
+  const d = workspace();
+  d.sources = Array.from({ length: count }, (_, i) =>
+    held(`orders-${i}`, `/home/cpa/q4/orders-${i}.csv`),
+  );
+  d.active = d.sources[0]!.id;
+  d.cache = new Map(d.sources.map((s) => [s.id, sized(bytes)]));
+  return d;
+}
+
+test('a source whose cache passes its cap is saved without one', () => {
+  const read = (bytes: number) =>
+    readContainer('books.uno', writeDocument(copies(1, bytes)), AT).cache;
+  expect(read(CACHE_SOURCE_AT_MOST - INDEX_ROOM)?.size).toBe(1);
+  expect(read(CACHE_SOURCE_AT_MOST)).toBeUndefined();
+});
+
+test('the caches that would pass the workspace cap are saved without, in source order', () => {
+  const each = CACHE_SOURCE_AT_MOST - INDEX_ROOM;
+  const fit = Math.floor(CACHE_AT_MOST / CACHE_SOURCE_AT_MOST);
+  const d = copies(fit + 1, each);
+  const uno = writeDocument(d);
+  const kept = readContainer('books.uno', uno, AT).cache;
+  const ids = Array.from({ length: fit }, (_, i) => `orders-${i}`);
+  expect([...kept!.keys()]).toStrictEqual(ids);
+  expect([...d.cache!.keys()], 'the save says which went in').toStrictEqual(
+    ids,
+  );
 });

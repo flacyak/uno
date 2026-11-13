@@ -233,6 +233,8 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
  *
  * The measured manifest is written back onto `d.manifest`, so the next save
  * keeps the first save's `created` and callers can report what was written.
+ * `d.cache` is left holding the caches that went in, without any a cap left
+ * out.
  */
 export function writeDocument(d: Document): Uint8Array {
   if (d.sources.length === 0)
@@ -278,7 +280,8 @@ export function writeDocument(d: Document): Uint8Array {
     });
   }
 
-  entries.push(...cacheEntries(d));
+  const cache = cacheEntries(d);
+  entries.push(...cache.entries);
   // Extra entries go back in, in name order, so a saved file keeps the same
   // layout between saves.
   const named = new Set(entries.map((e) => e.name));
@@ -289,6 +292,7 @@ export function writeDocument(d: Document): Uint8Array {
 
   const out = pack(entries, mtime);
   d.manifest = m;
+  if (d.cache !== undefined) d.cache = cache.kept;
   return out;
 }
 
