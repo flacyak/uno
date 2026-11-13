@@ -146,10 +146,13 @@ test('a source opened from a path is pointed at, not copied', async () => {
     expect(s!.sha256, 'and nothing was hashed to say so').toBe('');
     expect(s!.bytes).toBe(bytes.length);
     expect(s!.rows).toBe(ROWS);
-    // When the file was written is measured at each open, and never saved.
+    // When the file was written and changed is measured at each open, and
+    // never saved.
     const manifest = strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!);
     expect(src.opened.link?.modified).toEqual(expect.any(Number));
     expect(manifest).not.toContain(`${src.opened.link?.modified}`);
+    expect(src.opened.link?.statusChanged).toEqual(expect.any(Number));
+    expect(manifest).not.toContain(`${src.opened.link?.statusChanged}`);
     expect(Object.keys(unzipSync(uno)).sort()).toEqual(
       [MANIFEST_ENTRY, STATE_ENTRY, LOG_ENTRY].sort(),
     );
@@ -199,6 +202,7 @@ test('a source beside the workspace is pointed at relative to it, and survives t
     expect(src.opened.link).toEqual({
       path: join(there, 'sales-q3.csv'),
       modified: expect.any(Number),
+      statusChanged: expect.any(Number),
     });
     expect(src.opened.edits).toHaveLength(1);
     expect((await src.rows(0, 1)).rows[0]![UNITS]).toBe('1204');
@@ -320,6 +324,7 @@ test('pointing a source at a file again replays its edits over it', async () => 
     expect(back.opened.link).toEqual({
       path: join(dir, 'elsewhere.csv'),
       modified: expect.any(Number),
+      statusChanged: expect.any(Number),
     });
     expect(back.opened.edits).toHaveLength(1);
     expect((await back.rows(0, ADS_ROWS)).rows.map((r) => r[COST])).toEqual([

@@ -53,6 +53,8 @@ export interface Entry {
   folder: boolean;
   bytes?: number;
   modified?: Date;
+  /** When a file on disk last changed in any way, from a stat of it alone. */
+  statusChanged?: Date;
   /** ETag, or S3 VersionId when the bucket keeps versions. */
   version?: string;
 }

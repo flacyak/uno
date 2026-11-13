@@ -1328,11 +1328,15 @@ function deepest(edits: readonly Edit[] | undefined): number {
 }
 
 /** linkTo builds a Link from a path and what its source says of the file. */
-function linkTo(path: string, { version, modified }: ByteSource): Link {
+function linkTo(
+  path: string,
+  { version, modified, statusChanged }: ByteSource,
+): Link {
   return {
     path,
     ...(version === undefined ? {} : { version }),
     ...(modified === undefined ? {} : { modified }),
+    ...(statusChanged === undefined ? {} : { statusChanged }),
   };
 }
 

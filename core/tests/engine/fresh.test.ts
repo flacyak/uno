@@ -3,12 +3,13 @@
  * stat of its path. The disk cases open and stat a real file.
  */
 
-import { mkdtemp, utimes, writeFile } from 'node:fs/promises';
+import { mkdtemp, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vite-plus/test';
 
 import { unchanged } from '@engine';
+import { modifiedMs, statusChangedMs } from '@store/disklister';
 import { connect, openOne } from './harness.ts';
 
 const ADS = 'Ad_Date,Cost\n2024-11-16,$12.50\n2024-11-17,$8.00\n';
@@ -43,6 +44,29 @@ test('a file is unchanged until it is touched or rewritten at another size', asy
     await writeFile(path, `${ADS}2024-11-18,$3.10\n`);
     await utimes(path, WRITTEN_S, WRITTEN_S);
     expect(await fresh(), 'rewritten at another size').toBe(false);
+  } finally {
+    done();
+  }
+});
+
+test('a rewrite that keeps the size and the modified time is seen by its change time', async () => {
+  const path = await written();
+  const { engine, done } = connect();
+  try {
+    const src = await openOne(engine, { name: 'ads.csv', path });
+    const was = await stat(path);
+    // One cent more, the same length, and the time put back, as a copy that
+    // keeps times (cp -p, rsync -t) leaves it. The kernel stamps the change
+    // time a clock tick at a time, so the rewrite goes on until it moves.
+    let now = was;
+    while (statusChangedMs(now) === statusChangedMs(was)) {
+      await writeFile(path, ADS.replace('$12.50', '$12.51'));
+      await utimes(path, WRITTEN_S, WRITTEN_S);
+      now = await stat(path);
+    }
+    expect([now.size, modifiedMs(now)]).toEqual([was.size, modifiedMs(was)]);
+    const entry = await engine.stat(path);
+    expect(unchanged(src.opened.link!, src.opened.size, entry)).toBe(false);
   } finally {
     done();
   }
