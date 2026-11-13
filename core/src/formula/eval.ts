@@ -97,7 +97,7 @@ function evalNode(
       for (let i = 0; i < count; i++) {
         if (errors[i] !== undefined) continue;
         const raw = cells[i] ?? '';
-        const v = parseNumber(raw);
+        const v = parseNumber(raw, 'point');
         if (v === undefined) {
           errors[i] = new NotNumberError(
             `${n.name} = ${quote(raw)}: not a number`,

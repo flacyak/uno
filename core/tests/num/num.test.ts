@@ -12,7 +12,7 @@ import { isNumber, parse, undress } from '@num';
 describe('isNumber rejects what a spreadsheet does not mean', () => {
   for (const v of ['12', '-3.5', '+7', '1e3', '0.0', '1234.00-', '(1234.00)']) {
     test(`accepts ${JSON.stringify(v)}`, () => {
-      expect(isNumber(v)).toBe(true);
+      expect(isNumber(v, 'point')).toBe(true);
     });
   }
 
@@ -33,7 +33,7 @@ describe('isNumber rejects what a spreadsheet does not mean', () => {
     '1e400',
   ]) {
     test(`refuses ${JSON.stringify(v)}`, () => {
-      expect(isNumber(v)).toBe(false);
+      expect(isNumber(v, 'point')).toBe(false);
     });
   }
 });
@@ -56,7 +56,7 @@ describe('undress takes off the costume and nothing else', () => {
 
   for (const [input, want] of cases) {
     test(`${JSON.stringify(input)} => ${JSON.stringify(want)}`, () => {
-      expect(undress(input)).toBe(want);
+      expect(undress(input, 'point')).toBe(want);
     });
   }
 });
@@ -98,7 +98,54 @@ describe('parse reads the number a person sees', () => {
 
   for (const [input, want] of cases) {
     test(`${JSON.stringify(input)} => ${want}`, () => {
-      expect(parse(input)).toBe(want);
+      expect(parse(input, 'point')).toBe(want);
     });
   }
+});
+
+// With the comma mark, the comma is the decimal mark, and full stops and
+// spaces separate thousands. A full stop anywhere but before a group of
+// three digits refuses the value, so it is never read as a separator by
+// mistake.
+describe('parse reads a number written with the comma mark', () => {
+  const cases: Array<[string, number | undefined]> = [
+    ['1,5', 1.5],
+    ['2,25', 2.25],
+    ['1 234,5', 1234.5],
+    ['1\u00a0234,5', 1234.5],
+    ['1\u202f234,5', 1234.5],
+    ['12,5%', 12.5],
+    ['1,5e3', 1500],
+    ['1 234,56 €', 1234.56],
+    ['(1 234,56)', -1234.56],
+    ['1 234,56-', -1234.56],
+    ['1.234,56', 1234.56],
+    ['1.234.567,8', 1234567.8],
+    ['1.234', 1234],
+    ['€1.234,56', 1234.56],
+    ['(1.234,56)', -1234.56],
+
+    ['1.5', undefined],
+    ['1.2345', undefined],
+    ['12.34,5', undefined],
+    ['1,234.56', undefined],
+    ['N/A', undefined],
+    ['', undefined],
+  ];
+
+  for (const [input, want] of cases) {
+    test(`${JSON.stringify(input)} => ${want}`, () => {
+      expect(parse(input, 'comma')).toBe(want);
+    });
+  }
+});
+
+describe('isNumber with the comma mark refuses thousands separators', () => {
+  test('a plain comma decimal is a number', () => {
+    expect(isNumber('1,5', 'comma')).toBe(true);
+  });
+  test('a spaced one is not, until undress takes the space off', () => {
+    expect(isNumber('1 234,5', 'comma')).toBe(false);
+    expect(isNumber(undress('1 234,5', 'comma'), 'comma')).toBe(true);
+  });
 });

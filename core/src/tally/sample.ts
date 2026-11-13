@@ -202,8 +202,8 @@ export class SampleFold {
 
   /** count counts a row, or takes one back when `sign` is -1. */
   private count(xCell: string, yCell: string, sign: 1 | -1): Point | undefined {
-    const x = parse(xCell);
-    const y = parse(yCell);
+    const x = parse(xCell, 'point');
+    const y = parse(yCell, 'point');
     if (x === undefined || y === undefined) {
       const word = (v: number | undefined, cell: string) =>
         v === undefined && cell !== '';
