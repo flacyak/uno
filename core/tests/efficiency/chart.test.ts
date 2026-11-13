@@ -47,6 +47,14 @@ const BESIDE_BUDGET = 1.1;
  * blocks of one byte length in a row (core/src/store/ahead.ts).
  */
 const AFTER_BUDGET = 1.05;
+/**
+ * The most requests charts made after the index may send: about one per
+ * chunk, as the index sends, since the pass reads runs of blocks of up to a
+ * chunk, each ending less than a block short of it. 31 measured.
+ */
+const AFTER_REQUESTS = Math.ceil(
+  OBJECT.length / (SMALL.chunkBytes - SMALL.blockBytes),
+);
 /** How far through the object the index is when charts are made partway. */
 const PARTWAY = 1 / 3;
 /**
@@ -206,6 +214,7 @@ test('charts made after the index fetch the object once more', async () => {
     { name: 'charts after index: requests', unit: 'requests', value: requests },
   );
   expect(times).toBeLessThanOrEqual(AFTER_BUDGET);
+  expect(requests).toBeLessThanOrEqual(AFTER_REQUESTS);
 }, 60_000);
 
 test('an edit of a cell fetches the block of its row at most, charted column or not, and one over a column no chart reads fetches nothing', async () => {
