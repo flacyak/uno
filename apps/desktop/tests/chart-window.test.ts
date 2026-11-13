@@ -14,6 +14,7 @@ import { m } from "@paraglide/messages";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
 import { summary } from "@renderer/chart/summary";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
+import { NO_CORNER } from "@renderer/chart/place";
 import type { Stage } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
 import { BARS, SHORT_ROWS, holding } from "./charted.ts";
@@ -48,6 +49,7 @@ const QUARTER_HOUR = 15;
 /** A layer for a window whose words are all a test reads. */
 const NO_LAYER: Stage = {
   room: () => ({ w: 0, h: 0 }),
+  corner: () => NO_CORNER,
   move: () => undefined,
   draw: () => undefined,
   raise: () => undefined,

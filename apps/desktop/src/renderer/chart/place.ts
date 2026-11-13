@@ -98,6 +98,55 @@ function along(fraction: number, free: number): number {
   return Math.min(Math.round(fraction * free), free);
 }
 
+/**
+ * The window's × over a room, in the room's CSS px: how far the room's right
+ * edge reaches under the strip the × keeps clear, the ×'s box, and how far a
+ * window's own × stands in from its box's top and right edges.
+ */
+export interface Corner {
+  reach: number;
+  cross: Rect;
+  inset: number;
+}
+
+/** A room with no × over it. */
+export const NO_CORNER: Corner = {
+  reach: 0,
+  cross: { x: NEAR_EDGE, y: NEAR_EDGE, width: 0, height: 0 },
+  inset: 0,
+};
+
+/**
+ * reachAt gives how far `corner` reaches under a window whose top stands `y`
+ * px down the room: all of its reach where the window's × would come within
+ * the gap of the window's × down the page, and none where it stands further
+ * down. The gap is the one a window stood in by the corner leaves between the
+ * two ×, across. Across, the reach is where that gap starts.
+ */
+function reachAt(y: number, room: Room, corner: Corner): number {
+  const { reach, cross, inset } = corner;
+  const gap = cross.x - (room.w - reach - inset);
+  return y + inset < cross.y + cross.height + gap ? reach : 0;
+}
+
+/**
+ * cramped says whether `free` px beside a window are too few for it to stand
+ * in by a `corner` that reaches into the room and keep its x past MIDDLE.
+ */
+function cramped(free: number, corner: number): boolean {
+  return corner > 0 && free <= STAND_IN_CORNERS * corner;
+}
+
+/** stoodIn gives the x a window with `free` px beside it stands at, in by `corner`. */
+function stoodIn(free: number, corner: number): number {
+  return Math.round(free - corner);
+}
+
+/** clearWidth gives how wide a window of up to `width` px stands at the left edge, clear of `corner`. */
+function clearWidth(room: Room, corner: number, width: number): number {
+  return fit(Math.floor(room.w - corner), MIN_WIDTH, width);
+}
+
 /** placed gives the rect a place draws in a room, whatever size the room is. */
 export function placed(place: ChartPlace, room: Room): Rect {
   const width = fit(place.width, MIN_WIDTH, room.w);
@@ -111,20 +160,52 @@ export function placed(place: ChartPlace, room: Room): Rect {
 }
 
 /**
+ * shown gives the rect a place shows in a room under `corner`: where it draws,
+ * unless its head stands near enough the top for its × to meet the window's,
+ * and it reaches into the corner. Then it stands clear as fresh stands a new
+ * window: in by the corner, or where its free px are no more than
+ * STAND_IN_CORNERS corners, at the left edge, as wide as the room leaves
+ * clear up to its own width. A window further down shows where it draws. The
+ * place stays as it is, so a room that grows again shows the window where it
+ * was put.
+ */
+export function shown(place: ChartPlace, room: Room, corner: Corner): Rect {
+  const rect = placed(place, room);
+  const reach = reachAt(rect.y, room, corner);
+  const free = room.w - rect.width;
+  const inset = stoodIn(free, reach);
+  if (reach <= 0 || rect.x <= inset) return rect;
+  if (cramped(free, reach)) {
+    return { ...rect, x: NEAR_EDGE, width: clearWidth(room, reach, rect.width) };
+  }
+  return { ...rect, x: inset };
+}
+
+/**
  * placeOf gives the place a rect stores in a room, held to the room and the
  * least size. A rect cannot show all of `was`, the place it came from, so a
  * side with no free px keeps its fraction, and a size or a side the rect leaves
- * as `was` draws it stays stored. A tucked window stores nothing: its rect has
- * no place.
+ * as `was` shows it under `corner` stays stored. A rect stood in by the
+ * corner, as far right as a window shows there, stores the far edge. A tucked
+ * window stores nothing: its rect has no place.
  */
-export function placeOf(rect: Rect, room: Room, was: ChartPlace): ChartPlace {
-  const drawn = placed(was, room);
+export function placeOf(
+  rect: Rect,
+  room: Room,
+  was: ChartPlace,
+  corner: Corner = NO_CORNER,
+): ChartPlace {
+  const drawn = shown(was, room, corner);
   const width = fit(rect.width, MIN_WIDTH, room.w);
   const height = fit(rect.height, MIN_HEIGHT, room.h);
   const keepsX = rect.x === drawn.x && width === drawn.width;
   const keepsY = rect.y === drawn.y && height === drawn.height;
+  const free = room.w - width;
+  const reach = reachAt(rect.y, room, corner);
+  const atCorner = reach > 0 && !cramped(free, reach) && rect.x === stoodIn(free, reach);
+  const movedX = atCorner ? FAR_EDGE : share(rect.x, free, was.x);
   return {
-    x: keepsX ? was.x : share(rect.x, room.w - width, was.x),
+    x: keepsX ? was.x : movedX,
     y: keepsY ? was.y : share(rect.y, room.h - height, was.y),
     width: width === drawn.width ? was.width : width,
     height: height === drawn.height ? was.height : height,
@@ -168,29 +249,42 @@ export function thin(room: Room): boolean {
  * middle is not in, flush to that half's outer edge. A room under twice the
  * window's width has it cross the middle.
  *
- * `corner` is how far the room's right edge reaches under the window's ×. A
- * new window on the right stands that far in, so its × stands clear. A
+ * `corner` is the window's × over the room. A new window on the right whose
+ * head stands near enough the top for its × to meet the window's stands in
+ * by as far as the room reaches under the ×, so its × stands clear. One the
+ * charts already there move further down keeps to the edge, its × clear. A
  * selected column that reaches past that inset is covered as little as the
  * corner allows: the window's × wins over it. It is stored as a fraction, so
  * it stands further in as the room grows and nearer the edge as it shrinks,
  * and stays on the right half.
  *
- * A room whose free px are no more than STAND_IN_CORNERS corners, where
- * standing in would bring the window's middle to the room's, as at 200% zoom
- * or in a 640 px window, has it stand at the left edge instead, as wide as the
- * room leaves clear of the corner, up to its own width. It covers the selected
- * column on either side, and at the left its × stays clear in a room of any size.
+ * Near the top, a room whose free px are no more than STAND_IN_CORNERS
+ * corners, where standing in would bring the window's middle to the room's,
+ * as at 200% zoom or in a 640 px window, has it stand at the left edge
+ * instead, as wide as the room leaves clear of the corner, up to its own
+ * width. It covers the selected column on either side, and at the left its ×
+ * stays clear in a room of any size.
  */
-export function fresh(n: number, selected: ColumnSpan, room: Room, corner = 0): ChartPlace {
+export function fresh(
+  n: number,
+  selected: ColumnSpan,
+  room: Room,
+  corner: Corner = NO_CORNER,
+): ChartPlace {
   const y = share(n * CASCADE_PX, room.h - DEFAULT_HEIGHT, NEAR_EDGE);
+  const reach = reachAt(along(y, room.h - DEFAULT_HEIGHT), room, corner);
   const free = room.w - DEFAULT_WIDTH;
-  if (corner > 0 && free <= STAND_IN_CORNERS * corner) {
-    const width = fit(Math.floor(room.w - corner), MIN_WIDTH, DEFAULT_WIDTH);
-    return { x: NEAR_EDGE, y, width, height: DEFAULT_HEIGHT };
+  if (cramped(free, reach)) {
+    return {
+      x: NEAR_EDGE,
+      y,
+      width: clearWidth(room, reach, DEFAULT_WIDTH),
+      height: DEFAULT_HEIGHT,
+    };
   }
   const middle = (selected.left + selected.right) / 2;
   return {
-    x: middle < room.w / 2 ? share(free - corner, free, FAR_EDGE) : NEAR_EDGE,
+    x: middle < room.w / 2 ? share(free - reach, free, FAR_EDGE) : NEAR_EDGE,
     y,
     width: DEFAULT_WIDTH,
     height: DEFAULT_HEIGHT,

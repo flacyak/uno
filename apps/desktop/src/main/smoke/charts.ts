@@ -13,6 +13,10 @@
  * (blank) in the caption's ink. A chart over what it cannot read says why in
  * its plot, with the button that mends it.
  *
+ * A window saved at the top of the sheet's right edge shows its × clear of the
+ * window's, at 100%, at 200% and in a narrow window it opens in, and stands
+ * where it was saved again with room again. One at the foot stays flush.
+ *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot. The last six open others:
  * one whose sums leave a window of the least width too little room for bars and
@@ -41,6 +45,8 @@ const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
 const SIGNED = process.env["UNO_SMOKE_SIGNED"] ?? "";
 const SIGNED_REGIONS = 4;
 const SIGNED_ROWS = 5;
+/** Its windows: one at the sheet's left edge and one at its right. */
+const SIGNED_WINDOWS = 2;
 
 /** The one it wrote of a scatter of the fixture's revenue against its units. */
 const SCATTERED = process.env["UNO_SMOKE_SCATTERED"] ?? "";
@@ -254,6 +260,28 @@ export const GEOMETRY = `
   const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
 `;
 
+/**
+ * Helpers: how far the room reaches under the window's ×, the gap a window
+ * stood in by that far leaves between its × and the window's, and what of any
+ * window's × comes within that gap of the window's both across and down, its
+ * rect beside the window's.
+ */
+export const CLEAR_X = `
+  const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
+  const reach = () => room().right - (innerWidth - corner());
+  const own = () => document.querySelector("#close").getBoundingClientRect();
+  // A window's × stands in from its box by its border and as far as the window's × stands down.
+  const inset = () => parseFloat(getComputedStyle(document.querySelector("#charts")).getPropertyValue("--window-border")) + parseFloat(getComputedStyle(document.querySelector("#close")).top);
+  const gap = () => own().left - (room().right - reach() - inset());
+  const rectOf = (at) => "[" + [at.left, at.top, at.width, at.height].join(", ") + "]";
+  const crossing = () => {
+    if (!(gap() > 0)) return "the gap measures " + gap() + " px, so this checks nothing";
+    const xs = [...document.querySelectorAll(".chart .chart-close")].map((x) => x.getBoundingClientRect());
+    const over = xs.find((x) => x.right > own().left - gap() && x.top < own().bottom + gap());
+    return over === undefined ? "" : "a window's × stands at " + rectOf(over) + ", within " + gap() + " px of the window's × at " + rectOf(own());
+  };
+`;
+
 /** What a window, its head and its × copy, by selector. */
 const COPIES = [
   { of: "the settings menu's box", copy: ".chart", from: ".settings", names: BOX_LOOK },
@@ -319,6 +347,7 @@ export const CHARTS: Check[] = [
     shot: "charts-layer",
     script: `
       ${GEOMETRY}
+      ${CLEAR_X}
       if (!(await arrives(() => windows().length === 2))) return "the windows are " + windows().length + " · " + JSON.stringify(text("#status-msg"));
       const scroller = document.querySelector(".grid-scroll");
       if (scroller.scrollWidth <= scroller.clientWidth || scroller.scrollHeight <= scroller.clientHeight) {
@@ -332,10 +361,13 @@ export const CHARTS: Check[] = [
       if (top.top !== rule()) return "the top window starts at " + top.top + ", and the header row's rule at " + rule();
       const edge = document.elementFromPoint((top.left + top.right) / 2, top.top);
       if (edge.closest(".chart") === null) return "the top window's border is under the " + edge.tagName;
-      if (top.right !== right) return "the top window ends at " + top.right + ", and the scrollbar starts at " + right;
+      // The top window stands in from the scrollbar by as far as the room reaches under the window's ×.
+      const clear = right - reach();
+      if (top.right !== clear) return "the top window ends at " + top.right + ", not " + clear + " before the scrollbar at " + right;
       if (foot.right !== right) return "the foot window ends at " + foot.right + ", and the scrollbar starts at " + right;
       if (foot.bottom !== bottom) return "the foot window ends at " + foot.bottom + ", and the scrollbar starts at " + bottom;
       if (top.top < close.bottom) return "the top window starts at " + top.top + ", beside the × to " + close.bottom;
+      if (crossing() !== "") return crossing();
       return unsaved() ? "opening the workspace marked it unsaved" : "";
     `,
   },
@@ -437,9 +469,10 @@ export const CHARTS: Check[] = [
       const grid = (x, y) => document.elementsFromPoint(x, y).some((hit) => hit.matches("td, th"));
       const meets = () => {
         const [top, foot] = windows();
-        const right = Math.round(top.right * devicePixelRatio);
+        // The top window stands in from the window's ×, and the foot meets the bar.
+        const right = Math.round(foot.right * devicePixelRatio);
         const bottom = Math.round(foot.bottom * devicePixelRatio);
-        const y = (top.top + top.bottom) / 2;
+        const y = (top.bottom + foot.bottom) / 2;
         const x = (foot.left + foot.right) / 2;
         return grid(middle(right - 1), y) && !grid(middle(right), y) && grid(x, middle(bottom - 1)) && !grid(x, middle(bottom));
       };
@@ -460,6 +493,16 @@ export const CHARTS: Check[] = [
         if (!within(at, room())) return "a window stands at " + edges(at) + " in a room at " + edges(room());
         if (at.height === HEAD + border()) return "a window is tucked in a room at " + edges(room());
       }
+      return unsaved() ? "the zoom marked the workspace unsaved" : "";
+    `,
+  },
+  {
+    name: "at 200% zoom a window saved at the sheet's right edge stands clear of the window's ×, and its place stays saved",
+    script: `
+      ${GEOMETRY}
+      ${CLEAR_X}
+      if (!(await until(() => reach() > 0))) return "the room reaches nothing under the window's ×, so this checks nothing";
+      if (!(await until(() => crossing() === ""))) return crossing();
       return unsaved() ? "the zoom marked the workspace unsaved" : "";
     `,
   },
@@ -577,10 +620,11 @@ export const CHARTS: Check[] = [
     window: {},
     script: `
       ${GEOMETRY}
+      ${CLEAR_X}
       document.querySelector("#panel-toggle").click();
       const back = () => {
         const [top, foot] = windows();
-        return top.height === ${DEFAULT_HEIGHT} && top.top === room().top && top.right === room().right && foot.bottom === room().bottom;
+        return top.height === ${DEFAULT_HEIGHT} && top.top === room().top && top.right === room().right - reach() && foot.bottom === room().bottom;
       };
       if (!(await until(back))) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       return unsaved() ? "going back marked the workspace unsaved" : "";
@@ -806,6 +850,43 @@ export const CHARTS: Check[] = [
 
 /** A check near the run's end, as it opens a workspace in place of the one the others read. */
 export const CHART_SIGNED: Check[] = [
+  {
+    name: "a 640 px window with the panel closed, for a workspace to open in",
+    window: { width: NARROW_WIDTH },
+    script: `
+      if (!document.querySelector("#panel").hidden) return "the panel is open";
+      return (await until(() => innerWidth === ${NARROW_WIDTH})) ? "" : "the page is " + innerWidth + "px wide";
+    `,
+  },
+  {
+    name: "a workspace saved with a window at the sheet's right edge opens in a narrow window with its × clear of the window's, and stays saved",
+    send: ["menu:open-path", SIGNED],
+    shot: "chart-reopened-narrow",
+    script: `
+      ${GEOMETRY}
+      ${CLEAR_X}
+      // Its first window's bars draw once its charts stand in place of the last workspace's.
+      const tracks = () => document.querySelectorAll(".chart-bar-track").length;
+      const opened = () => document.querySelector(".ws.open .name")?.textContent === "signed";
+      if (!(await arrives(() => opened() && tracks() === ${SIGNED_REGIONS}))) return "the plot draws " + tracks() + " bars";
+      if (windows().length !== ${SIGNED_WINDOWS}) return "the windows are " + windows().length;
+      if (!(await until(() => reach() > 0))) return "the room reaches nothing under the window's ×, so this checks nothing";
+      if (!(await until(() => crossing() === ""))) return crossing();
+      return unsaved() ? "opening the workspace marked it unsaved" : "";
+    `,
+  },
+  {
+    name: "back at full width, the window from the right edge stands in by the corner from it again, and the workspace stays saved",
+    window: {},
+    script: `
+      ${GEOMETRY}
+      ${CLEAR_X}
+      const far = () => windows()[${SIGNED_WINDOWS} - 1];
+      const back = () => innerWidth > ${NARROW_WIDTH} && far().right === room().right - reach();
+      if (!(await until(back))) return "the window stands at " + edges(far()) + " in a room at " + edges(room()) + ", reaching " + reach() + " px under the ×";
+      return unsaved() ? "the resize marked the workspace unsaved" : crossing();
+    `,
+  },
   {
     name: "a sum with long values on both sides of zero keeps its bars at the least width, and its values inside their tracks",
     send: ["menu:open-path", SIGNED],

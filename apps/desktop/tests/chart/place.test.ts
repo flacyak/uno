@@ -21,7 +21,9 @@ import {
   NUDGE_PX,
   overfull,
   placed,
+  NO_CORNER,
   placeOf,
+  shown,
   stackHeight,
   stretched,
   STAND_IN_CORNERS,
@@ -29,7 +31,7 @@ import {
   tucked,
   tucks,
 } from "@renderer/chart/place";
-import type { Rect, Room } from "@renderer/chart/place";
+import type { Corner, Rect, Room } from "@renderer/chart/place";
 import type { ColumnSpan } from "@renderer/grid/view";
 import type { Press } from "@renderer/keys";
 
@@ -64,6 +66,33 @@ const HEAD = 29;
 
 /** A window's border at 100% zoom. */
 const BORDER = 1;
+
+/** `--corner`, the strip the window's × centres in, and `--x-size`, a ×'s width. */
+const STRIP = 34;
+const X_SIZE = 20;
+
+/** `--x-inset`: how far into its band a × stands. */
+const X_INSET = 4;
+
+/**
+ * The window's × over `room`, as over the 1100 px window's: centred in the
+ * strip, `reach` of it over the room, in the header row above the room.
+ */
+function cornerOf(room: Room, reach = CORNER): Corner {
+  const cross = {
+    x: room.w - reach + (STRIP - X_SIZE) / 2,
+    y: X_INSET + BORDER - HEAD,
+    width: X_SIZE,
+    height: X_SIZE,
+  };
+  return { reach, cross, inset: BORDER + X_INSET };
+}
+
+/** #372's gap: how far a window stood in by the corner ends its × before the window's. */
+const GAP = (STRIP - X_SIZE) / 2 + BORDER + X_INSET;
+
+/** The first y down the room where a window's × stands more than GAP below the window's. */
+const NEAR_TOP = X_SIZE + GAP - HEAD;
 
 /** A 640 px window with both side columns open at 168 and 250 px, less the 12 px --bar. */
 const BOTH_SIDES_OPEN = 640 - 168 - 250 - 12;
@@ -207,7 +236,7 @@ test("a new window on the right stands as far in as the room reaches under the w
     const at = placed(place, room);
     return room.w - at.x - at.width;
   };
-  const place = fresh(0, columnAt(0), ROOM, CORNER);
+  const place = fresh(0, columnAt(0), ROOM, cornerOf(ROOM));
   expect(inset(place, ROOM)).toBeCloseTo(CORNER);
   // The inset is a share of the free px, so a narrower room has it nearer the
   // edge, and the window stands on a whole px of it.
@@ -229,11 +258,11 @@ test("past the band, the window's × wins over a selected column reaching into t
   ];
   for (const w of widths) {
     const room = { ...ROOM, w };
-    const at = placed(fresh(0, columnAt(0), room, CORNER), room);
+    const at = placed(fresh(0, columnAt(0), room, cornerOf(room)), room);
     expect(w - at.x - at.width).toBe(CORNER);
   }
   const reaching = { left: 0, right: ROOM.w - DEFAULT_WIDTH - CORNER / 2 };
-  expect(placed(fresh(0, reaching, ROOM, CORNER), ROOM).x).toBeCloseTo(
+  expect(placed(fresh(0, reaching, ROOM, cornerOf(ROOM)), ROOM).x).toBeCloseTo(
     ROOM.w - DEFAULT_WIDTH - CORNER,
   );
 });
@@ -255,7 +284,7 @@ test("a room too narrow for a new window to stand in by the corner has it stand 
   for (const w of widths) {
     const room = { ...ROOM, w };
     for (const column of [columnAt(0), columnAt(w - COLUMN_WIDTH)]) {
-      const at = placed(fresh(0, column, room, CORNER), room);
+      const at = placed(fresh(0, column, room, cornerOf(room)), room);
       expect([at.x, at.width]).toEqual([0, Math.min(DEFAULT_WIDTH, Math.floor(w - CORNER))]);
     }
     // With no × over the room, a new window goes flush right as before, filling a room under its width.
@@ -263,7 +292,87 @@ test("a room too narrow for a new window to stand in by the corner has it stand 
     expect([bare.x + bare.width, bare.width]).toEqual([w, Math.min(w, DEFAULT_WIDTH)]);
   }
   // At the left edge, the × stays clear in a room of any size.
-  expect(placed(fresh(0, columnAt(0), { ...ROOM, w: upper }, CORNER), ROOM).x).toBe(0);
+  expect(
+    placed(fresh(0, columnAt(0), { ...ROOM, w: upper }, cornerOf({ ...ROOM, w: upper })), ROOM).x,
+  ).toBe(0);
+});
+
+test("a window at the top of the right edge shows stood in by the corner, and stores where it was", () => {
+  const far = { ...PLACE, x: 1 };
+  const at = shown(far, ROOM, cornerOf(ROOM));
+  expect(at).toEqual({ ...placed(far, ROOM), x: ROOM.w - DEFAULT_WIDTH - CORNER });
+  // A rect as it shows stores the place it came from, and one moved down keeps its x.
+  expect(placeOf(at, ROOM, far, cornerOf(ROOM))).toEqual(far);
+  expect(placeOf({ ...at, y: CASCADE_PX }, ROOM, far, cornerOf(ROOM)).x).toBe(far.x);
+  // A drop in the corner stores where it ended, and shows clear of it.
+  const top = { ...RECT, y: 0 };
+  const dropped = placeOf({ ...top, x: ROOM.w - DEFAULT_WIDTH }, ROOM, PLACE, cornerOf(ROOM));
+  expect(shown(dropped, ROOM, cornerOf(ROOM)).x).toBe(at.x);
+  // A rect stopped by the corner, as an arrow leaves it, stores the far edge, where it shows.
+  expect(placeOf({ ...top, x: at.x }, ROOM, PLACE, cornerOf(ROOM)).x).toBe(1);
+  expect(placeOf({ ...top, x: at.x - NUDGE_PX }, ROOM, PLACE, cornerOf(ROOM)).x).toBeLessThan(1);
+});
+
+test("a window at the right edge whose × stands further than the gap below the window's stays where it is stored", () => {
+  const free = ROOM.h - DEFAULT_HEIGHT;
+  // The last px down a window's × comes within the gap of the window's, and the first past it.
+  for (const [y, reach] of [
+    [NEAR_TOP - 1, CORNER],
+    [NEAR_TOP, 0],
+    [CASCADE_PX, 0],
+    [free, 0],
+  ]) {
+    const place = { ...PLACE, x: 1, y: y / free };
+    const at = shown(place, ROOM, cornerOf(ROOM));
+    expect(at).toEqual({ ...placed(place, ROOM), x: ROOM.w - DEFAULT_WIDTH - reach });
+  }
+  // The bottom right stays flush to both edges, and a drop there stores the far edge.
+  const foot = { ...RECT, x: ROOM.w - DEFAULT_WIDTH, y: free };
+  expect(placeOf(foot, ROOM, PLACE, cornerOf(ROOM))).toEqual({ ...PLACE, x: 1, y: 1 });
+});
+
+test("a window at the top of the right edge in a room too narrow to stand in shows clear at the left", () => {
+  const upper = DEFAULT_WIDTH + STAND_IN_CORNERS * CORNER;
+  for (const w of [ZOOMED_ROOM_WIDTH, ZOOMED_ROOM_WIDTH + HALF_PX, upper]) {
+    const room = { ...ROOM, w };
+    const at = shown({ ...PLACE, x: 1 }, room, cornerOf(room));
+    expect([at.x, at.width]).toEqual([0, Math.min(DEFAULT_WIDTH, Math.floor(w - CORNER))]);
+  }
+});
+
+test("a window clear of the corner, or under no ×, shows where it draws", () => {
+  // A new window stands in exactly by the corner, in rooms past the band and between px.
+  for (const w of [ROOM.w, DEFAULT_WIDTH + STAND_IN_CORNERS * CORNER + 1, ROOM.w + HALF_PX]) {
+    const room = { ...ROOM, w };
+    const place = fresh(0, columnAt(0), room, cornerOf(room));
+    expect(shown(place, room, cornerOf(room))).toEqual(placed(place, room));
+  }
+  // One inserted in a narrower room stands further in once the room grows.
+  const half = { ...ROOM, w: ROOM.w / 2 };
+  const narrower = fresh(0, columnAt(0), half, cornerOf(half));
+  expect(shown(narrower, ROOM, cornerOf(ROOM))).toEqual(placed(narrower, ROOM));
+  for (const place of [PLACE, MOVED]) {
+    expect(shown(place, ROOM, cornerOf(ROOM))).toEqual(placed(place, ROOM));
+  }
+  const zoomed = { ...ROOM, w: ZOOMED_ROOM_WIDTH };
+  expect(shown({ ...PLACE, x: 1 }, zoomed, NO_CORNER)).toEqual(placed({ ...PLACE, x: 1 }, zoomed));
+});
+
+test("a window inserted in a wider room shows stood in by the corner in a narrower one", () => {
+  const place = fresh(0, columnAt(0), ROOM, cornerOf(ROOM));
+  const room = { ...ROOM, w: ROOM.w / 2 };
+  const at = shown(place, room, cornerOf(room));
+  expect(room.w - at.x - at.width).toBe(CORNER);
+});
+
+test("a new window the charts there move down from the top keeps to the edge, its × clear below", () => {
+  for (const n of [1, 3]) {
+    for (const w of [ROOM.w, ZOOMED_ROOM_WIDTH]) {
+      const room = { ...ROOM, w };
+      const at = placed(fresh(n, columnAt(0), room, cornerOf(room)), room);
+      expect(at.x + at.width).toBe(w);
+    }
+  }
 });
 
 test("each chart already there moves a new one down, as far as the room goes", () => {

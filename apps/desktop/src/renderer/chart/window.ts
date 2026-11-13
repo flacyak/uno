@@ -54,8 +54,8 @@ import {
   trouble,
 } from "./caption.ts";
 import { belowZero, fitGaps, fitLabels, past, pie } from "./pie.ts";
-import { dragged, nudged, placeOf, placed, stretched, tucks } from "./place.ts";
-import type { Rect, Room } from "./place.ts";
+import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
+import type { Corner, Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
 import { summary } from "./summary.ts";
 import type { Summary } from "./summary.ts";
@@ -127,6 +127,8 @@ let made = 0;
 export interface Stage {
   /** The room as it measures now. */
   room(): Room;
+  /** The window's × over the room, which a window near the top shows clear of. */
+  corner(): Corner;
   /** Stores where chart `id`'s window stands, for the next save to write. */
   move(id: string, place: ChartPlace): void;
   /** Stands every window where its chart says. */
@@ -665,7 +667,7 @@ export class ChartWindow {
     const room = this.stage.room();
     if (tucks(room)) return;
     zone.setPointerCapture(e.pointerId);
-    const from = placed(this.chart.place, room);
+    const from = shown(this.chart.place, room, this.stage.corner());
     this.hold = { pointer: e.pointerId, zone, x: e.clientX, y: e.clientY, from, follow };
   }
 
@@ -703,7 +705,8 @@ export class ChartWindow {
 
   /** store keeps `rect` as the chart's place. A tucked window's rect has none. */
   private store(rect: Rect, room: Room): void {
-    if (!tucks(room)) this.stage.move(this.chart.id, placeOf(rect, room, this.chart.place));
+    if (tucks(room)) return;
+    this.stage.move(this.chart.id, placeOf(rect, room, this.chart.place, this.stage.corner()));
   }
 
   /**
@@ -783,7 +786,7 @@ export class ChartWindow {
    */
   private nudge(press: Press): boolean {
     const room = this.stage.room();
-    const to = nudged(placed(this.chart.place, room), press, room);
+    const to = nudged(shown(this.chart.place, room, this.stage.corner()), press, room);
     if (to === undefined) return false;
     if (this.hold === undefined) this.store(to, room);
     this.stage.draw();

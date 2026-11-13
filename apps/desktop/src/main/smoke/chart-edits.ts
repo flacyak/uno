@@ -7,9 +7,10 @@
  * workspace unsaved. F2 opens the form again, Escape gives the window the keys
  * back, and Ctrl+Z there undoes nothing and says why. A click on the × arms it
  * and the second removes the chart, as two presses of Delete remove another.
- * A chart inserted with the panel closed then stands in from the room's right
- * edge, its × clear of the window's, and one inserted with it open flush. At
- * 200% zoom, in a room narrower than a new window, and in a 640 px window, in
+ * With the windows removed, so each new one is the first, at the top of the
+ * room, a chart inserted with the panel closed then stands in from the room's
+ * right edge, its × clear of the window's, and one inserted with it open
+ * flush. At 200% zoom, in a room narrower than a new window, and in a 640 px window, in
  * a room too narrow for one to stand in by the corner, one stands at the left
  * edge, clear of the window's ×. In a 720 px window, over a first column that
  * reaches into the inset, one stands in by the corner all the same.
@@ -62,6 +63,25 @@ const INSERT = `
   };
 `;
 
+/** The presses of Delete that remove a window: the first arms its ×. */
+const REMOVE_PRESSES = 2;
+
+/**
+ * A helper that removes every window, so a chart inserted next is the first
+ * and stands at the top of the room, where its × would meet the window's.
+ */
+const REMOVE_ALL = `
+  const removeAll = async () => {
+    for (const box of document.querySelectorAll(".chart")) {
+      for (let i = 0; i < ${REMOVE_PRESSES}; i++) {
+        box.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+      }
+      if (!(await until(() => !box.isConnected))) return false;
+    }
+    return true;
+  };
+`;
+
 /**
  * A window at full zoom whose room, with the panel closed, is past the band
  * where a new window stands at the left, and narrow enough that the first
@@ -74,7 +94,7 @@ const PAST_BAND_WIDTH = 720;
  * window's ×, and selects the first column, on the room's left half, so a new
  * chart goes to the right. It waits for a room that `fits`, a condition on
  * `room()`, `column()` and `reach()`, how far the room reaches under the
- * corner. A chart inserted there stands clear of the corner: at the left edge
+ * corner. With every window removed, a chart inserted there stands clear of the corner: at the left edge
  * where its free px are no more than STAND_IN_CORNERS corners, as wide as the
  * room leaves clear up to a new window's width, and past that stood in by the
  * corner. Its × is clear of the window's.
@@ -88,6 +108,8 @@ function clearOfCorner(name: string, shape: Check["window"], fits: string, shot:
       ${GEOMETRY}
       ${FORM}
       ${INSERT}
+      ${REMOVE_ALL}
+      if (!(await removeAll())) return "a window stayed";
       // The strip the window's × keeps clear at its top right.
       const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
       const reach = () => room().right - (innerWidth - corner());
@@ -228,13 +250,16 @@ export const CHART_EDITS: Check[] = [
     `,
   },
   {
-    // The panel closes, so the room reaches under the window's ×, and opens
-    // again for a second insert and the checks that follow.
+    // The windows go, so the chart inserted is the first, at the top. The panel
+    // closes, so the room reaches under the window's ×, and opens again for a
+    // second insert and the checks that follow.
     name: "a chart inserted at the far edge keeps its × clear of the window's, and stands flush with the panel open",
     script: `
       ${GEOMETRY}
       ${FORM}
       ${INSERT}
+      ${REMOVE_ALL}
+      if (!(await removeAll())) return "a window stayed";
       const own = document.querySelector("#close").getBoundingClientRect();
       const open = room().right;
       document.querySelector("#panel-toggle").click();
