@@ -13,9 +13,9 @@
  * (blank) in the caption's ink. A chart over what it cannot read says why in
  * its plot, with the button that mends it.
  *
- * A window saved at the sheet's right edge shows its × clear of the window's,
- * at 100%, at 200% and in a narrow window it opens in, and stands where it was
- * saved again with room again.
+ * A window saved at the top of the sheet's right edge shows its × clear of the
+ * window's, at 100%, at 200% and in a narrow window it opens in, and stands
+ * where it was saved again with room again. One at the foot stays flush.
  *
  * They open the workspace smoke.js wrote, whose two charts stand at the sheet's
  * right edge, one at the top and one at the foot. The last six open others:
@@ -261,18 +261,24 @@ export const GEOMETRY = `
 `;
 
 /**
- * Helpers: how far the room reaches under the window's ×, and what of any
- * window's × reaches the window's own, its rect beside the window's.
+ * Helpers: how far the room reaches under the window's ×, the gap a window
+ * stood in by that far leaves between its × and the window's, and what of any
+ * window's × comes within that gap of the window's both across and down, its
+ * rect beside the window's.
  */
 export const CLEAR_X = `
   const corner = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"));
   const reach = () => room().right - (innerWidth - corner());
   const own = () => document.querySelector("#close").getBoundingClientRect();
+  // A window's × stands in from its box by its border and as far as the window's × stands down.
+  const inset = () => parseFloat(getComputedStyle(document.querySelector("#charts")).getPropertyValue("--window-border")) + parseFloat(getComputedStyle(document.querySelector("#close")).top);
+  const gap = () => own().left - (room().right - reach() - inset());
   const rectOf = (at) => "[" + [at.left, at.top, at.width, at.height].join(", ") + "]";
   const crossing = () => {
+    if (!(gap() > 0)) return "the gap measures " + gap() + " px, so this checks nothing";
     const xs = [...document.querySelectorAll(".chart .chart-close")].map((x) => x.getBoundingClientRect());
-    const over = xs.find((x) => x.right >= own().left);
-    return over === undefined ? "" : "a window's × stands at " + rectOf(over) + ", over the window's × at " + rectOf(own());
+    const over = xs.find((x) => x.right > own().left - gap() && x.top < own().bottom + gap());
+    return over === undefined ? "" : "a window's × stands at " + rectOf(over) + ", within " + gap() + " px of the window's × at " + rectOf(own());
   };
 `;
 
@@ -355,10 +361,10 @@ export const CHARTS: Check[] = [
       if (top.top !== rule()) return "the top window starts at " + top.top + ", and the header row's rule at " + rule();
       const edge = document.elementFromPoint((top.left + top.right) / 2, top.top);
       if (edge.closest(".chart") === null) return "the top window's border is under the " + edge.tagName;
-      // Each stands in from the scrollbar by as far as the room reaches under the window's ×.
+      // The top window stands in from the scrollbar by as far as the room reaches under the window's ×.
       const clear = right - reach();
       if (top.right !== clear) return "the top window ends at " + top.right + ", not " + clear + " before the scrollbar at " + right;
-      if (foot.right !== clear) return "the foot window ends at " + foot.right + ", not " + clear + " before the scrollbar at " + right;
+      if (foot.right !== right) return "the foot window ends at " + foot.right + ", and the scrollbar starts at " + right;
       if (foot.bottom !== bottom) return "the foot window ends at " + foot.bottom + ", and the scrollbar starts at " + bottom;
       if (top.top < close.bottom) return "the top window starts at " + top.top + ", beside the × to " + close.bottom;
       if (crossing() !== "") return crossing();
@@ -455,27 +461,22 @@ export const CHARTS: Check[] = [
   },
   {
     // A window's last device px stands over the grid, and the next on the bar.
-    // The panel opens, so the room reaches under no × and a window meets the
-    // bar on the right, and closes again after.
     name: "at the View menu's 158%, a window meets both scrollbars with no grid past it",
     window: { zoom: MENU_ZOOM },
     script: `
       ${GEOMETRY}
-      await openPanel();
       const middle = (px) => (px + 0.5) / devicePixelRatio;
       const grid = (x, y) => document.elementsFromPoint(x, y).some((hit) => hit.matches("td, th"));
       const meets = () => {
         const [top, foot] = windows();
-        const right = Math.round(top.right * devicePixelRatio);
+        // The top window stands in from the window's ×, and the foot meets the bar.
+        const right = Math.round(foot.right * devicePixelRatio);
         const bottom = Math.round(foot.bottom * devicePixelRatio);
-        const y = (top.top + top.bottom) / 2;
+        const y = (top.bottom + foot.bottom) / 2;
         const x = (foot.left + foot.right) / 2;
         return grid(middle(right - 1), y) && !grid(middle(right), y) && grid(x, middle(bottom - 1)) && !grid(x, middle(bottom));
       };
-      const met = await until(() => innerWidth < ${MENU_ZOOM_WIDTH} && meets());
-      document.querySelector("#panel-toggle").click();
-      if (!(await until(() => document.querySelector("#panel").hidden))) return "the panel stayed open";
-      if (met) return "";
+      if (await until(() => innerWidth < ${MENU_ZOOM_WIDTH} && meets())) return "";
       return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
     `,
   },

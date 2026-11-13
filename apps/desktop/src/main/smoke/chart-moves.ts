@@ -9,7 +9,8 @@
  * selects nothing.
  *
  * They follow CHARTS, so the first window stands at the top of the room's right
- * edge and the second at its foot, and each picks up where the last left it.
+ * edge, in from it clear of the window's ×, and the second at its foot, and
+ * each picks up where the last left it.
  */
 
 import {
@@ -19,7 +20,7 @@ import {
   MIN_WIDTH,
   NUDGE_PX,
 } from "@renderer/chart/place";
-import { BORDER_IN, GEOMETRY, RECT_SLACK } from "./charts.ts";
+import { BORDER_IN, CLEAR_X, GEOMETRY, RECT_SLACK } from "./charts.ts";
 import type { Check, Input } from "./check.ts";
 import { RIGHT_CLICK } from "./sidebar.ts";
 
@@ -118,6 +119,9 @@ export function pressing(
 /** Helpers: the first window, and whether it stands where a check wants it. */
 const MOVES = `
   ${GEOMETRY}
+  ${CLEAR_X}
+  // Where the first window shows from the top of the room's right edge, clear of the window's ×.
+  const edge = () => room().right - reach();
   const first = () => windows()[0];
   const near = (a, b) => Math.abs(a - b) < ${RECT_SLACK};
   const stands = (want) => Object.entries(want).every(([side, at]) => near(first()[side], at));
@@ -172,7 +176,7 @@ export const CHART_MOVES: Check[] = [
     drag: { selector: HEAD, by: CARRY },
     script: `
       ${MOVES}
-      return wait({ right: room().right + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a move");
+      return wait({ right: edge() + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a move");
     `,
   },
   {
@@ -195,7 +199,7 @@ export const CHART_MOVES: Check[] = [
       if (!resized) return "the room stayed at " + edges(room());
       const whole = (px) => near(px, Math.round(px));
       if (!whole(now.x) || !whole(now.y)) return "the window stands between px, at " + now.x + " " + now.y + " in the room";
-      return wait({ right: room().right + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a resize");
+      return wait({ right: edge() + ${CARRY.x}, top: room().top + ${CARRY.y} }, "a resize");
     `,
   },
   {
@@ -203,8 +207,8 @@ export const CHART_MOVES: Check[] = [
     drag: { selector: GRIP, by: STRETCH },
     script: `
       ${MOVES}
-      const corner = { left: room().right + ${CARRY.x - DEFAULT_WIDTH}, top: room().top + ${CARRY.y} };
-      return wait({ ...corner, width: ${DEFAULT_WIDTH + STRETCH.x}, height: ${DEFAULT_HEIGHT + STRETCH.y} }, "a resize");
+      const topLeft = { left: edge() + ${CARRY.x - DEFAULT_WIDTH}, top: room().top + ${CARRY.y} };
+      return wait({ ...topLeft, width: ${DEFAULT_WIDTH + STRETCH.x}, height: ${DEFAULT_HEIGHT + STRETCH.y} }, "a resize");
     `,
   },
   {
