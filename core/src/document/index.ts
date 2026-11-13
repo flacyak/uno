@@ -43,6 +43,7 @@ export type {
   SourcePart,
   State,
 } from './document.ts';
+export type { SavedSource } from './cache.ts';
 export {
   against,
   baseOf,

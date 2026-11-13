@@ -19,6 +19,7 @@ import type { Edit } from '@sheet';
 import type { Sheet } from '@sheet';
 import { extensionOf } from '@ingest';
 import type { FileRef, HeaderMode } from '@store';
+import type { SavedSource } from './cache.ts';
 import type { CarriedChart, Chart } from './chart.ts';
 import { against, baseOf, dirOf, relativeTo } from './path.ts';
 
@@ -370,6 +371,8 @@ export interface Document {
   charts?: readonly Chart[];
   /** The charts this build cannot read, written back after `charts`. */
   carriedCharts?: readonly CarriedChart[];
+  /** The saved row index of each pointed-at source that has one, by id. */
+  cache?: Map<string, SavedSource>;
 
   /**
    * Where the .uno itself is, so a source under the same folder is stored
