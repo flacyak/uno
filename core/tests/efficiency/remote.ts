@@ -178,6 +178,11 @@ const KEY = '2025/big.csv';
 export interface Remote {
   door: Door;
   engine: Engine;
+  /**
+   * another connects one more engine over the same bucket and Door, as a
+   * second run of the app would be, closed with the rest.
+   */
+  another(): Engine;
   /** open asks the engine for the object. The caller lets its reads through. */
   open(): Promise<SourceHandle>;
   close(): Promise<void>;
@@ -212,14 +217,22 @@ export async function served(
     fetch: door.fetch,
   });
   const single = [diskProvider(), s3];
-  const { engine, done } = connect(tuning, [...single, multiProvider(single)]);
+  const providers = [...single, multiProvider(single)];
+  const { engine, done } = connect(tuning, providers);
+  const others: Array<() => void> = [];
   return {
     door,
     engine,
+    another() {
+      const other = connect(tuning, providers);
+      others.push(other.done);
+      return other.engine;
+    },
     async close() {
       door.release();
       await door.quiet();
       done();
+      for (const other of others) other();
       await b.close();
     },
   };
