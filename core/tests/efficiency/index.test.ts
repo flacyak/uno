@@ -51,8 +51,14 @@ const MB = 1 << 20;
 /** Milliseconds in a second. */
 const SECOND_MS = 1000;
 
-/** The least MB per second the scan, and the whole pass, must manage. */
+/** The least MB per second the scan must manage. */
 const THROUGHPUT_FLOOR_MB_S = 150;
+/**
+ * The most the whole pass through the engine may take, as a multiple of the
+ * bare read and scan of the same bytes in the same run, so a machine busy
+ * with other work slows both alike. 1.07 measured on an idle machine.
+ */
+const PASS_OVER_SCAN_BUDGET = 1.5;
 /**
  * The most scan time may be, as a multiple of a loop that only counts
  * newlines in the same bytes.
@@ -271,9 +277,7 @@ test('the index pass scans bytes at disk speed and keeps little per row', async 
     },
   );
   expect(answered).toBeLessThanOrEqual(passMs * WINDOW_WAIT_FRACTION);
-  expect(src.size / MB / (passMs / SECOND_MS)).toBeGreaterThanOrEqual(
-    THROUGHPUT_FLOOR_MB_S,
-  );
+  expect(passMs / (readMs + scanMs)).toBeLessThanOrEqual(PASS_OVER_SCAN_BUDGET);
 
   record('index', metrics);
 }, 120_000);
