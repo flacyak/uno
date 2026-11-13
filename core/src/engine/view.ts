@@ -895,17 +895,18 @@ export class View {
   }
 
   /**
-   * restored is the row index `saved` holds, complete, where it is of this
-   * view's file as the open measured it, read the same way by the same
-   * scanner. The blocks count as handed to the tap, so a chart reads them
-   * in runs, and a file on disk takes the print saved with them.
+   * restored is the row index `saved` holds, where it is of this view's file
+   * as the open measured it, read the same way by the same scanner. One a
+   * save took partway goes on from its last block. The blocks count as
+   * handed to the tap, so a chart reads them in runs, and a file on disk
+   * takes the print saved with them.
    */
   private restored(
     saved: SavedSource | undefined,
     tuning: Tuning,
   ): RowIndex | undefined {
     const key = this.key;
-    if (saved === undefined || key === undefined || !saved.complete) return;
+    if (saved === undefined || key === undefined) return;
     if (saved.path !== this.path || differs(saved.key, key) !== undefined)
       return;
     const starts = decodeBlocks(saved.blocks);

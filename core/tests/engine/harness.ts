@@ -84,9 +84,12 @@ export function slowed(provider: Provider, ms: number): Provider {
       handles: (ref) => files.handles(ref),
       async open(ref) {
         const source = await files.open(ref);
+        const { size, version, modified, statusChanged } = source;
         return {
-          size: source.size,
-          version: source.version,
+          size,
+          version,
+          modified,
+          statusChanged,
           async read(offset, length) {
             await sleep(ms);
             return source.read(offset, length);

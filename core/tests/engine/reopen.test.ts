@@ -30,17 +30,21 @@ import type { Served } from '@core-tests/efficiency/remote';
 import { ROWS } from '@core-tests/testdata/sales-q3';
 import {
   FIXTURE,
+  TINY,
   bytes,
   connect,
   counted,
   everyRow,
   indexed,
   openOne,
+  slowed,
 } from './harness.ts';
 
 /** The most a sniff reads, and the fixture's first block of rows. */
 const SNIFF_AT_MOST = 64 << 10;
 const FIRST_BLOCK_AT_MOST = 64 << 10;
+/** Milliseconds each read waits, so a save lands while the index runs. */
+const SLOW_MS = 5;
 
 let dir: string | undefined;
 let s: Served | undefined;
@@ -203,4 +207,51 @@ test('a reopen over an object uploaded again since the save reads it whole', asy
   const from = s.door.asked.length;
   await reopen(s.another(), uno);
   expect(bytesOf(s.door.asked, from)).toBeGreaterThanOrEqual(bytes.length);
+});
+
+test('a reopen of a workspace saved partway through its index goes on from the last block the save closed', async () => {
+  const disk = await onDisk();
+  try {
+    const slow = connect(TINY, [slowed(diskProvider(), SLOW_MS)]);
+    const src = await openOne(slow.engine, {
+      name: 'sales-q3.csv',
+      path: disk.csv,
+    });
+    const place = { source: src.id, cells: [], at: disk.uno };
+    const saved = await slow.engine.save(place, 0);
+    slow.done();
+    await writeFile(disk.uno, saved);
+    const index = JSON.parse(
+      strFromU8(unzipSync(saved)[`cache/${src.id}/index.json`]!),
+    );
+    expect(index.complete, 'the save came partway').toBe(false);
+
+    const first = connect(TINY, [diskProvider(), blobProvider()]);
+    const whole = await openOne(first.engine, {
+      name: 'sales-q3.csv',
+      path: disk.csv,
+    });
+    await indexed(whole);
+    const rows = await everyRow(whole);
+    first.done();
+
+    const engine = connect(TINY, [
+      counted(diskProvider(), disk.csv, disk.asked),
+      blobProvider(),
+    ]);
+    try {
+      const again = await reopen(engine.engine, disk.uno);
+      const read = bytesOf(disk.asked, 0);
+      expect(again.progress.rows).toBe(ROWS);
+      expect(
+        read,
+        'the rows the save had indexed are not read again',
+      ).toBeLessThan(bytes.length);
+      expect(await everyRow(again)).toStrictEqual(rows);
+    } finally {
+      engine.done();
+    }
+  } finally {
+    disk.close();
+  }
 });
