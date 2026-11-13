@@ -24,8 +24,8 @@ import type { ColumnSpan } from "@renderer/grid/view";
 import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
-import { fresh, overfull, shown, stackHeight, thin, tucked, tucks } from "./place.ts";
-import type { Room } from "./place.ts";
+import { fresh, NO_CORNER, overfull, shown, stackHeight, thin, tucked, tucks } from "./place.ts";
+import type { Corner, Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
 
@@ -157,12 +157,28 @@ export class ChartLayer implements Stage {
     return fresh(this.charts.all.length, inRoom, this.room(), this.corner());
   }
 
-  /** corner gives how far the room's right edge reaches under the window's ×. */
-  corner(): number {
-    const { right } = this.root.getBoundingClientRect();
+  /**
+   * corner gives the window's × over the room, in the room's px, or NO_CORNER
+   * on a page with no ×. A window's own × stands in from its box's top and
+   * right edges by its border and `--x-inset`, which the window's × stands
+   * down from the top.
+   */
+  corner(): Corner {
+    const box = this.root.getBoundingClientRect();
     // The × keeps `--corner` clear at the window's top right, 0 on a page with no ×.
     const kept = Number.parseFloat(getComputedStyle(this.root).getPropertyValue("--corner"));
-    return Number.isFinite(kept) ? Math.max(0, right - (innerWidth - kept)) : 0;
+    const reach = Number.isFinite(kept) ? Math.max(0, box.right - (innerWidth - kept)) : 0;
+    const close = document.getElementById("close");
+    if (reach <= 0 || close === null) return NO_CORNER;
+    const own = close.getBoundingClientRect();
+    const cross = {
+      x: own.left - box.left,
+      y: own.top - box.top,
+      width: own.width,
+      height: own.height,
+    };
+    const inset = borderWidth() + Number.parseFloat(getComputedStyle(close).top);
+    return { reach, cross, inset };
   }
 
   /** focus gives chart `id`'s window the keys, which raises it. */

@@ -55,7 +55,7 @@ import {
 } from "./caption.ts";
 import { belowZero, fitGaps, fitLabels, past, pie } from "./pie.ts";
 import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
-import type { Rect, Room } from "./place.ts";
+import type { Corner, Rect, Room } from "./place.ts";
 import { fitAlong, sampled, scatter } from "./scatter.ts";
 import { summary } from "./summary.ts";
 import type { Summary } from "./summary.ts";
@@ -127,8 +127,8 @@ let made = 0;
 export interface Stage {
   /** The room as it measures now. */
   room(): Room;
-  /** How far the room's right edge reaches under the window's ×, which a window shows clear of. */
-  corner(): number;
+  /** The window's × over the room, which a window near the top shows clear of. */
+  corner(): Corner;
   /** Stores where chart `id`'s window stands, for the next save to write. */
   move(id: string, place: ChartPlace): void;
   /** Stands every window where its chart says. */
