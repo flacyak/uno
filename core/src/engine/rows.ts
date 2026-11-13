@@ -8,6 +8,7 @@
 import type { Format } from '@ingest';
 import { Refusal } from '@said';
 import type { ByteSource } from '@store';
+import type { Starts } from './saved.ts';
 
 export interface Tuning {
   /** Bytes a pass reads at a time. */
@@ -79,6 +80,33 @@ export class RowIndex {
     index.blocks = last;
     index.counted = was.firsts[last]!;
     index.scanned = was.offsets[last]!;
+    return index;
+  }
+
+  /**
+   * restored is the index of `size` bytes from `start` a save wrote, or
+   * undefined where `starts` cannot be its blocks. One saved partway keeps
+   * every block but the last, and a pass from `scanned` reads that one on.
+   */
+  static restored(
+    start: number,
+    size: number,
+    tuning: Pick<Tuning, 'blockRows' | 'blockBytes'>,
+    { firsts, offsets }: Starts,
+    counted: number,
+    complete: boolean,
+  ): RowIndex | undefined {
+    const index = new RowIndex(start, size, tuning);
+    const last = firsts.length - 1;
+    if (last < 0 || offsets[0] !== start || offsets[last]! >= size)
+      return undefined;
+    if (firsts[0] !== 0 || counted <= firsts[last]!) return undefined;
+    index.firsts = firsts;
+    index.offsets = offsets;
+    index.blocks = complete ? last + 1 : last;
+    index.counted = complete ? counted : firsts[last]!;
+    index.scanned = complete ? size : offsets[last]!;
+    index.complete = complete;
     return index;
   }
 
