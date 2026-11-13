@@ -46,6 +46,16 @@ export function modifiedMs(stats: Stats): number {
   return Math.trunc(stats.mtimeMs);
 }
 
+/**
+ * statusChangedMs is when a file last changed in any way, in whole ms since
+ * 1970: its ctime. A write moves it, and so does setting the modified time
+ * back, and nothing outside the kernel can set it, so a rewrite that keeps
+ * the size and the modified time still moves it.
+ */
+export function statusChangedMs(stats: Stats): number {
+  return Math.trunc(stats.ctimeMs);
+}
+
 /** Row is one directory entry, classified. */
 interface Row {
   readonly name: string;
@@ -179,6 +189,7 @@ async function statEntry(path: string): Promise<Entry> {
     path,
     folder: st.isDirectory(),
     modified: new Date(modifiedMs(st)),
+    statusChanged: new Date(statusChangedMs(st)),
     ...(st.isDirectory() ? {} : { bytes: st.size }),
   };
 }

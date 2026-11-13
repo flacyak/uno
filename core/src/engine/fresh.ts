@@ -9,8 +9,9 @@ import type { Link } from './protocol.ts';
 /**
  * unchanged says whether `entry`, a stat of the link's path now, is the file
  * the source opened at `size` bytes. Where either side has a version, the
- * versions decide. Otherwise the size and the modified time do, and a file
- * that does not say when it was written is never unchanged.
+ * versions decide. Otherwise the size and the modified time do, and the
+ * change time where the open measured one. A file that does not say when it
+ * was written is never unchanged.
  */
 export function unchanged(link: Link, size: number, entry: Entry): boolean {
   if (link.version !== undefined || entry.version !== undefined) {
@@ -19,6 +20,8 @@ export function unchanged(link: Link, size: number, entry: Entry): boolean {
   return (
     link.modified !== undefined &&
     entry.bytes === size &&
-    entry.modified?.getTime() === link.modified
+    entry.modified?.getTime() === link.modified &&
+    (link.statusChanged === undefined ||
+      entry.statusChanged?.getTime() === link.statusChanged)
   );
 }

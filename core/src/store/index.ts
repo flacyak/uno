@@ -76,6 +76,8 @@ export interface ByteSource {
   readonly version?: string;
   /** When a file on disk was last written, in whole ms since 1970. */
   readonly modified?: number;
+  /** When a file on disk last changed in any way, in whole ms since 1970. */
+  readonly statusChanged?: number;
   /** Up to `length` bytes from `offset`. Fewer only at the end of the file. */
   read(offset: number, length: number): Promise<Uint8Array>;
   close(): Promise<void>;

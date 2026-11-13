@@ -60,10 +60,15 @@ export function reloaded(was: Tab, now: Tab): string {
   const moved = { now: bytes(now.bytes), was: bytes(was.bytes) };
   const modified = now.link?.modified;
   // The versions decide where either side has one, as in unchanged(). A file
-  // with neither that kept its size and modified time was not written since.
+  // with neither that kept its size, modified time and change time was not
+  // written since.
   const versioned = before !== undefined || after !== undefined;
+  const kept =
+    modified !== undefined &&
+    modified === was.link?.modified &&
+    now.link?.statusChanged === was.link?.statusChanged;
   let found: string;
-  if (!versioned && sized && modified !== undefined && modified === was.link?.modified) {
+  if (!versioned && sized && kept) {
     found = m.reload_no_change_on_disk();
   } else if (before === undefined || after === undefined) {
     found = sized ? m.reload_same_size() : m.reload_size_moved(moved);

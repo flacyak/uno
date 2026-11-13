@@ -76,6 +76,12 @@ export interface Link {
   modified?: number;
 
   /**
+   * When the file on disk last changed in any way, its ctime, in whole ms
+   * since 1970. Measured at the open, and never saved.
+   */
+  statusChanged?: number;
+
+  /**
    * Why this source is absent: its file is missing, or failed to open. The
    * source keeps its id, edits and place in the log, and
    * `relink` gives it a file again.

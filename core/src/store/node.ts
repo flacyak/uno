@@ -20,7 +20,7 @@ import { compareStrings, parseTime } from '@go';
 import type { AuthMode, Connection } from '@library';
 import { covering } from '@library';
 import type { Provider } from '@plugin';
-import { diskLister, modifiedMs } from './disklister.ts';
+import { diskLister, modifiedMs, statusChangedMs } from './disklister.ts';
 import type { ByteSource, FileHandler, FileStore } from './index.ts';
 import { isRemote, readAll } from './index.ts';
 import {
@@ -84,6 +84,7 @@ export async function nodeSource(path: string): Promise<ByteSource> {
   const fh = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   let size: number;
   let modified: number;
+  let statusChanged: number;
   try {
     const st = await fh.stat();
     if (!st.isFile()) {
@@ -93,6 +94,7 @@ export async function nodeSource(path: string): Promise<ByteSource> {
     }
     size = st.size;
     modified = modifiedMs(st);
+    statusChanged = statusChangedMs(st);
   } catch (err) {
     await fh.close();
     throw err;
@@ -101,6 +103,7 @@ export async function nodeSource(path: string): Promise<ByteSource> {
   return {
     size,
     modified,
+    statusChanged,
     async read(offset: number, length: number): Promise<Uint8Array> {
       const want = Math.max(0, Math.min(length, size - offset));
       const buf = new Uint8Array(want);
