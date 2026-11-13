@@ -132,6 +132,20 @@ export class Tallies {
   }
 
   /**
+   * lacks is where the rows that pending charts whose fold ends at `from`
+   * lack from there on end: at the run each folded ahead, or past the last
+   * row. `from` itself where no pending chart's fold ends at `from`.
+   */
+  lacks(from: number): number {
+    let end = from;
+    for (const t of this.charts.values()) {
+      if (t.done || t.rows !== from) continue;
+      end = Math.max(end, t.ahead?.[0] ?? Number.POSITIVE_INFINITY);
+    }
+    return end;
+  }
+
+  /**
    * fold adds `block`, the rows from `from` to `end`, to every pending chart
    * that can take it: as its next block, or ahead of the pass behind it.
    * `shown` returns what a column of the block shows, by row.

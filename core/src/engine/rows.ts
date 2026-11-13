@@ -244,13 +244,34 @@ export class Pages {
     return pending;
   }
 
+  /**
+   * span reads blocks `first` to `last` as one range, and returns what reads
+   * each one's source rows out of it, none of them kept. A pass through many
+   * blocks in a row asks for a few large ranges instead of one per block, and
+   * decodes each block as it comes to it.
+   */
+  async span(
+    first: number,
+    last: number,
+  ): Promise<(block: number) => string[][]> {
+    const [start] = this.index.bytesOf(first);
+    const [, end] = this.index.bytesOf(last);
+    const bytes = await this.source.read(start, end - start);
+    return (block) => {
+      const [from, to] = this.index.bytesOf(block);
+      return this.checked(block, bytes.subarray(from - start, to - start));
+    };
+  }
+
   private async decode(block: number): Promise<string[][]> {
     const [start, end] = this.index.bytesOf(block);
-    const [from, to] = this.index.rowsOf(block);
-    const records = this.format.decode(
-      await this.source.read(start, end - start),
-    );
+    return this.checked(block, await this.source.read(start, end - start));
+  }
 
+  /** checked decodes `bytes`, the bytes of `block`, as its source rows. */
+  private checked(block: number, bytes: Uint8Array): string[][] {
+    const [from, to] = this.index.rowsOf(block);
+    const records = this.format.decode(bytes);
     // A block with a different row count than the index recorded means the
     // file was rewritten while open.
     if (records.length !== to - from) {

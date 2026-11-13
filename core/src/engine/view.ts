@@ -213,6 +213,19 @@ export class View {
   private tallying: AbortController | undefined;
   /** How many blocks the index pass has handed the tap, folded or left. */
   private tapped = 0;
+  /** The most bytes the charts' pass reads at once, as the index pass does. */
+  private spanBytes = 0;
+  /**
+   * The span the charts' pass read last, kept so a pass started again for a
+   * chart that just came takes it instead of asking for it again.
+   */
+  private spanned:
+    | {
+        first: number;
+        last: number;
+        rows: Promise<(block: number) => string[][]>;
+      }
+    | undefined;
   /** When the tap's slice began. It yields every SLICE_MS, like the pass. */
   private tapSlice = Date.now();
   /** Edits undo took back, newest last, for redo. A new edit empties it. */
@@ -283,6 +296,7 @@ export class View {
         : undefined;
     v.index = seed ?? new RowIndex(format.dataStart, source.size, tuning);
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
+    v.spanBytes = tuning.chunkBytes;
     v.schema = schemaOf(format, ask.parts);
     if (was !== undefined && seed !== undefined) {
       // The charts of `was` go on from the rows the seed kept, so the tap
@@ -860,7 +874,10 @@ export class View {
     this.tallying = undefined;
     if (this.held !== undefined) return;
     const first = this.tallies.from();
-    if (first === undefined) return;
+    if (first === undefined) {
+      this.spanned = undefined;
+      return;
+    }
     const abort = new AbortController();
     this.tallying = abort;
     this.tallyBlocks(first, abort.signal)
@@ -904,12 +921,25 @@ export class View {
 
       const block = index.blockOf(row);
       const [from, end] = index.rowsOf(block);
-      if (this.tallies.wants(from)) {
-        const { shown } = await this.blockRows(block);
-        if (signal.aborted) return;
-        this.tallies.fold(block, from, end, shown);
-      }
       row = end;
+      if (this.tallies.wants(from)) {
+        const last = this.spanFrom(block);
+        const was = this.spanned;
+        const again = was?.first === block && was.last === last;
+        const rows = again ? was.rows : this.pages.span(block, last);
+        this.spanned = { first: block, last, rows };
+        const recordsOf = await rows;
+        if (signal.aborted) return;
+        for (let b = block; b <= last; b++) {
+          const records = recordsOf(b);
+          const [at, to] = index.rowsOf(b);
+          const files = await this.files(at, records.length);
+          this.tallies.fold(b, at, to, (col) =>
+            this.shownIn(col, at, records, files),
+          );
+          row = to;
+        }
+      }
 
       const now = Date.now();
       if (now - told >= TALLY_MS) {
@@ -918,7 +948,27 @@ export class View {
       }
       if (now - slice >= SLICE_MS) slice = await turn();
     }
+    this.spanned = undefined;
     this.postTallies();
+  }
+
+  /**
+   * spanFrom is the last block of the run from `first` that the charts' pass
+   * reads at once: blocks the tap has been handed and a chart lacks, in a
+   * row, within spanBytes, `first` always among them.
+   */
+  private spanFrom(first: number): number {
+    const index = this.index;
+    const [start] = index.bytesOf(first);
+    const lacks = this.tallies.lacks(index.rowsOf(first)[0]);
+    let last = first;
+    while (last + 1 < Math.min(this.tapped, index.begun)) {
+      const [from] = index.rowsOf(last + 1);
+      const [, end] = index.bytesOf(last + 1);
+      if (from >= lacks || end - start > this.spanBytes) break;
+      last++;
+    }
+    return last;
   }
 
   /**
