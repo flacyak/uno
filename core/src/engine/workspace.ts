@@ -293,15 +293,23 @@ export class Workspace {
    * A source over several files is relinked part for part. Each part is
    * held to the extent the save recorded, and every part is opened before
    * the source is swapped.
+   *
+   * With `grown`, a file on disk pointed at again that grew by an append
+   * keeps its index, and only its last block and the rows after it are read.
    */
-  relink(id: string, ref: SourceRef): Promise<Opened> {
+  relink(id: string, ref: SourceRef, grown = false): Promise<Opened> {
     return this.serially(async () => {
       const was = this.need(id);
       const to = pointedTo(was, ref);
       const carried: Carried = { container: '', edits: was.log };
+      const again = was instanceof View && 'path' in to && to.path === was.path;
+      const extending = grown && again ? was : undefined;
       let view: View;
       try {
-        view = await this.view(id, to, carried, { whole: 'parts' in to });
+        view = await this.view(id, to, carried, {
+          whole: 'parts' in to,
+          extending,
+        });
       } catch (err) {
         if (!this.nowCovered(was, to)) throw err;
         const now = was.missing(saidOf(err));

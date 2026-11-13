@@ -129,14 +129,20 @@ export class Engine {
    * it. The old handle and any Band over it should be dropped.
    *
    * A source that was waiting for its bucket to be connected may still come
-   * back absent; its link says why.
+   * back absent; its link says why. With `grown`, a file on disk that grew
+   * by an append reads only its new rows, and any other change in full.
    */
-  async relink(source: SourceHandle, ref: SourceRef): Promise<SourceHandle> {
+  async relink(
+    source: SourceHandle,
+    ref: SourceRef,
+    grown = false,
+  ): Promise<SourceHandle> {
     const r = await this.ask('relinked', (id) => ({
       t: 'relink',
       id,
       source: source.id,
       ref,
+      ...(grown ? { grown } : {}),
     }));
     return this.adopt(r.opened);
   }

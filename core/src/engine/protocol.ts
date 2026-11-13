@@ -339,7 +339,8 @@ export type Request =
    * Point a source at a different file. The source keeps its id, edits and
    * place in the log. The log is replayed over the new file.
    */
-  | { t: 'relink'; id: number; source: string; ref: SourceRef }
+  /** `grown` reads only the rows a file on disk gained by an append. */
+  | { t: 'relink'; id: number; source: string; ref: SourceRef; grown?: true }
   /**
    * Add files at the end of a source that reads several files as one. Every
    * existing row keeps its number, so the log is unchanged.
