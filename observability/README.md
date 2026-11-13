@@ -31,6 +31,7 @@ Each total is first sent from zero, at the moment it began, so an engine that se
 | `uno_engine_request_milliseconds_bucket` | time from a request arriving to its answer being posted  | `request`, `outcome`        |
 | `uno_engine_index_milliseconds_bucket`   | time from a source being opened to its last row counted  | `place`                     |
 | `uno_engine_indexed_bytes_total`         | bytes of the sources that finished indexing              | `place`                     |
+| `uno_engine_cache_dropped_total`         | sources a save wrote without their row index, over a cap |                             |
 | `uno_s3_requests_total`                  | requests the engine made to S3                           | `method`, `outcome`         |
 | `uno_s3_received_bytes_total`            | bytes S3 answered with                                   |                             |
 

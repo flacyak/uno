@@ -189,7 +189,9 @@ test('a workspace whose charts have all gone saves as one that never had any', a
     await engine.remove(sources[1]!);
 
     const entries = Object.keys(unzipSync(await saved(engine)));
-    expect(entries.sort()).toEqual(
+    // The saved row index of each source is not a chart's.
+    const charts = entries.filter((e) => !e.startsWith('cache/'));
+    expect(charts.sort()).toEqual(
       [MANIFEST_ENTRY, STATE_ENTRY, LOG_ENTRY].sort(),
     );
   } finally {

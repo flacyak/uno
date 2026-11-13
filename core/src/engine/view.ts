@@ -7,6 +7,7 @@
  */
 
 import type { Chart, HeldFile, HeldPart, HeldParts } from '@document';
+import type { SavedSource } from '@document';
 import { trimSpace } from '@go';
 import { headerOf, labelOf, openFormat } from '@ingest';
 import type { Format } from '@ingest';
@@ -35,6 +36,8 @@ import type {
 } from '@store';
 import { hashOf, printAt } from './grown.ts';
 import type { Print } from './grown.ts';
+import { keyOf } from './key.ts';
+import type { SourceKey } from './key.ts';
 import { indexPass } from './pass.ts';
 import { TALLY_MS } from './protocol.ts';
 import type {
@@ -56,6 +59,7 @@ import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
+import { encodeBlocks } from './saved.ts';
 import { Tallies } from './tally.ts';
 import type { Block } from './tally.ts';
 import {
@@ -250,6 +254,12 @@ export class View {
   /** The print of a file on disk, as the index pass handed it its blocks. */
   private readonly print: Partial<Print> = {};
 
+  /** What the open measured of a file a path points at alone, which a save
+   * keeps its index under. Undefined for any other source. */
+  private key: SourceKey | undefined;
+  /** The block starts a save last wrote, kept while no block begins. */
+  private encoded: { begun: number; blocks: Uint8Array } | undefined;
+
   private constructor(
     id: string,
     name: string,
@@ -295,6 +305,9 @@ export class View {
 
     v.source = source;
     v.format = format;
+    // Bytes a .uno carries index at memory speed, so they keep no index.
+    const alone = path !== '' && !ask.parts && carried?.raw === undefined;
+    v.key = alone ? keyOf(source, format, tuning) : undefined;
     // The scanner finds records by the delimiter alone, so over the same
     // bytes from the same first data record it finds the ones `was` found.
     // Several files are extended by parts held to their extents. One file is
@@ -1179,6 +1192,21 @@ export class View {
    * source, otherwise 0. */
   get carries(): number {
     return this.path === '' && this.parts === undefined ? this.size : 0;
+  }
+
+  /**
+   * saved is what a save keeps of the row index of a file a path points at
+   * alone: every block begun so far, and the key it holds for.
+   */
+  saved(): SavedSource | undefined {
+    const index = this.index;
+    if (this.key === undefined) return undefined;
+    if (this.encoded?.begun !== index.begun)
+      this.encoded = { begun: index.begun, blocks: encodeBlocks(index) };
+    const { head, tail } = this.print;
+    const { counted, complete } = index;
+    const kept = { counted, complete, head, tail, blocks: this.encoded.blocks };
+    return { path: this.path, key: this.key, ...kept };
   }
 
   /** The current edit log. */

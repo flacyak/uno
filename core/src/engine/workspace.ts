@@ -31,6 +31,7 @@ import type {
   Held,
   HeldParts,
   Logged,
+  SavedSource,
   State,
 } from '@document';
 import type { Edit } from '@sheet';
@@ -62,7 +63,7 @@ import { Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import type { Meeting, Unconnected } from '@store/s3';
 import type { Tuning } from './rows.ts';
-import { unmeasured } from './telemetry.ts';
+import { CACHE_DROPPED, SOURCES, unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { View } from './view.ts';
 import type { Carried, OpenAsk, Origin, Part } from './view.ts';
@@ -205,6 +206,9 @@ export class Workspace {
   private extra = new Map<string, Uint8Array>();
   /** Each source's saved state from the .uno, carried into the next save. */
   private readonly states = new Map<string, State>();
+  /** Each source's saved row index from the .uno, which a save keeps for a
+   * source that did not open. */
+  private cache = new Map<string, SavedSource>();
   /** The workspace's charts by id, oldest first. */
   private readonly charts = new Map<string, Chart>();
   /** The charts carried as their JSON into the next save: those this build
@@ -415,6 +419,7 @@ export class Workspace {
       await file.close();
     }
     const doc = readContainer(ref.name, bytes, at);
+    this.cache = doc.cache ?? new Map();
 
     // Every source opens at once, and each is kept in the document's order.
     const opened = await Promise.all(
@@ -660,6 +665,7 @@ export class Workspace {
     const sources = [...this.sources.values()];
     this.sources.clear();
     this.states.clear();
+    this.cache.clear();
     this.charts.clear();
     this.carriedCharts = [];
     this.trail = [];
@@ -789,6 +795,12 @@ export class Workspace {
       this.refuseWhere(held, place.at);
 
       const places = new Map(place.charts?.map((c) => [c.id, c.place]));
+      const cache = new Map(
+        sources.flatMap((s) => {
+          const saved = s instanceof View ? s.saved() : this.cache.get(s.id);
+          return saved === undefined ? [] : [[s.id, saved] as const];
+        }),
+      );
       const doc: Document = {
         manifest: { ...newManifest(), created: this.created },
         sources: held,
@@ -801,11 +813,23 @@ export class Workspace {
           return isPlace(told) ? { ...chart, place: told } : chart;
         }),
         carriedCharts: this.carriedCharts,
+        cache,
         extra: this.extra,
         at: place.at,
       };
       const bytes = writeDocument(doc);
       this.created = doc.manifest.created;
+      // A cache over a cap is left out with no word to the person, who loses
+      // only the time its next open takes.
+      const dropped = cache.size - (doc.cache?.size ?? 0);
+      if (dropped > 0) {
+        this.telemetry({
+          name: CACHE_DROPPED,
+          kind: 'count',
+          unit: SOURCES,
+          value: dropped,
+        });
+      }
       for (const src of held) this.states.set(src.id, src.state);
       return bytes;
     });
