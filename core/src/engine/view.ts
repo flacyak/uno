@@ -33,6 +33,8 @@ import type {
   PartsRef,
   SingleRef,
 } from '@store';
+import { hashOf, printAt } from './grown.ts';
+import type { Print } from './grown.ts';
 import { indexPass } from './pass.ts';
 import { TALLY_MS } from './protocol.ts';
 import type {
@@ -230,6 +232,11 @@ export class View {
   /** How long the open had taken when the index completed, final from then on. */
   private took: number | undefined;
 
+  /** Whether the view keeps a print: a file on disk, read alone. */
+  private printing = false;
+  /** The print of a file on disk, as the index pass handed it its blocks. */
+  private readonly print: Partial<Print> = {};
+
   private constructor(
     id: string,
     name: string,
@@ -252,6 +259,8 @@ export class View {
     const { id, name, path, source, port, tuning, carried, began } = ask;
     const telemetry = ask.telemetry ?? unmeasured;
     const v = new View(id, name, path, port, began);
+    // A file on disk keeps a print, so a refresh can tell an append.
+    v.printing = path !== '' && !ask.parts && source.version === undefined;
     v.carried = carried?.raw;
     v.parts = ask.parts;
 
@@ -275,9 +284,15 @@ export class View {
     v.format = format;
     // The scanner finds records by the delimiter alone, so over the same
     // bytes from the same first data record it finds the ones `was` found.
+    // Several files are extended by parts held to their extents. One file is
+    // extended only where it grew by an append, and is read afresh otherwise.
     const was = ask.extending;
+    const grew =
+      was !== undefined &&
+      (was.parts !== undefined || (await was.grewInto(source)));
     const seed =
-      was?.format.delimiter === format.delimiter &&
+      grew &&
+      was.format.delimiter === format.delimiter &&
       was.index.start === format.dataStart
         ? RowIndex.seeded(was.index, source.size)
         : undefined;
@@ -292,6 +307,8 @@ export class View {
       v.schema.rows = was.index.readable();
       v.schema.replay(carried?.edits ?? []);
       await v.adopt(was);
+      // The pass hands on from the last block, and the first is as it was.
+      v.print.head = was.print.head;
     }
 
     // A cancel fails the wait below with its refusal, kept ahead of the
@@ -838,6 +855,20 @@ export class View {
   }
 
   /**
+   * grewInto says whether `source` is this view's file on disk with rows
+   * appended: larger, with its first and last blocks as they were when this
+   * view's index completed. A middle rewritten beside an append is not seen
+   * here, and a refresh by hand reads the whole file.
+   */
+  private async grewInto(source: ByteSource): Promise<boolean> {
+    const { head, tail } = this.print;
+    if (head === undefined || tail === undefined) return false;
+    if (source.size <= this.index.size) return false;
+    const now = await printAt(source, this.index).catch(() => undefined);
+    return now?.head === head && now.tail === tail;
+  }
+
+  /**
    * reclaim takes the charts `now` adopted back, for an open of `now` that
    * failed after adopt, and folds them afresh: the tap of `now` may have
    * folded rows of the blocks it read again into them, which this view
@@ -928,6 +959,9 @@ export class View {
    */
   private async tap(block: number, bytes: () => Uint8Array): Promise<void> {
     this.tapped = block + 1;
+    if (this.printing && block === 0) this.print.head = hashOf(bytes());
+    if (this.printing && this.index.complete && block === this.index.begun - 1)
+      this.print.tail = hashOf(bytes());
     if (this.tallies.from() === undefined) return;
     const [from, end] = this.index.rowsOf(block);
     try {

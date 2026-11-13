@@ -164,7 +164,7 @@ export function serve(
     },
     relink: async (m) => ({
       t: 'relinked',
-      opened: await workspace.relink(m.source, m.ref),
+      opened: await workspace.relink(m.source, m.ref, m.grown === true),
     }),
     append: async (m) => ({
       t: 'appended',
