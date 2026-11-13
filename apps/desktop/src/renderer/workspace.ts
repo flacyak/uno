@@ -82,9 +82,12 @@ export function reloaded(was: Tab, now: Tab): string {
   return parts.join(" · ");
 }
 
-/** A relink or append in flight: the files it reads, and the tab it brings. */
+/**
+ * A relink or append in flight: the files it reads, and the tab it brings. A
+ * grow is a schedule's relink, which reads only what an append added.
+ */
 interface Pointing {
-  readonly kind: "relink" | "append";
+  readonly kind: "relink" | "grow" | "append";
   readonly refs: readonly SourceRef[];
   readonly fresh: Promise<Tab>;
 }
@@ -410,11 +413,12 @@ export class Workspace {
 
   /**
    * Points a tab at a different file. The tab is replaced by a new one that
-   * keeps its sidebar position, selected cell and saved log.
+   * keeps its sidebar position, selected cell and saved log. With `grown`, a
+   * file on disk that grew by an append reads only its new rows.
    */
-  relink(tab: Tab, ref: SourceRef): Promise<Tab> {
-    return this.point(tab, "relink", [ref], async () =>
-      this.replace(tab, await this.engine.relink(tab.source, ref)),
+  relink(tab: Tab, ref: SourceRef, grown = false): Promise<Tab> {
+    return this.point(tab, grown ? "grow" : "relink", [ref], async () =>
+      this.replace(tab, await this.engine.relink(tab.source, ref, grown)),
     );
   }
 
@@ -436,7 +440,9 @@ export class Workspace {
     start: () => Promise<Tab>,
   ): Promise<Tab> {
     const was = this.pointing.get(tab.id);
-    if (was?.kind === kind && sameFiles(was.refs, refs)) return was.fresh;
+    // A grow joins a relink of the same file, which reads at least as much.
+    const joins = was?.kind === kind || (kind === "grow" && was?.kind === "relink");
+    if (was !== undefined && joins && sameFiles(was.refs, refs)) return was.fresh;
     const now: Pointing = { kind, refs, fresh: start() };
     this.pointing.set(tab.id, now);
     try {
@@ -519,8 +525,9 @@ export class Workspace {
   /**
    * Checks a source of one file for its charts' schedule with one stat, and
    * reads the file again only when it changed, with Reload's ref so the two
-   * join in flight. Cell edits no save has recorded hold a changed file for a
-   * refresh by hand, since a rewritten file can put their rows elsewhere.
+   * join in flight, and only its new rows when it grew by an append. Cell
+   * edits no save has recorded hold a changed file for a refresh by hand,
+   * since a rewritten file can put their rows elsewhere.
    * Saved edits replay over it as they do on Reload: the hold is for work the
    * person has not kept yet. One still indexing, waiting on its bucket, which
    * it asks nothing, or with no file of its own, waits.
@@ -536,7 +543,7 @@ export class Workspace {
     if (unchanged(link, tab.bytes, await this.engine.stat(link.path))) return { t: "same" };
     const edits = tab.unsavedCells;
     if (edits > 0) return { t: "held", edits };
-    await this.relink(tab, { name: baseOf(link.path), path: link.path });
+    await this.relink(tab, { name: baseOf(link.path), path: link.path }, true);
     return { t: "read" };
   }
 
