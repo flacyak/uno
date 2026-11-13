@@ -434,22 +434,43 @@ export class View {
     return { generation, rows, raws };
   }
 
-  /** columns infers each column's kind from the sample rows, with the log applied. */
+  /**
+   * columns infers each column's kind and decimal mark from the sample rows,
+   * with the log applied. A chart that reads a column whose mark changed
+   * folds again with the mark now, as does one over a formula that reads it.
+   * Such a formula's column is inferred again with the mark now too.
+   */
   private async columns(): Promise<ColumnInfo[]> {
+    let columns = await this.inferred();
+    const marks = columns.map((c) => c.mark);
+    const was = this.schema.marks;
+    const changed = marks.flatMap((mark, col) =>
+      mark === was[col] ? [] : [col],
+    );
+    let refolded = false;
+    if (changed.length > 0) {
+      this.schema.marks = marks;
+      const readers = changed.flatMap((col) => this.schema.readersOf(col));
+      if (readers.length > 0) columns = await this.inferred();
+      refolded = this.tallies.refold(new Set(readers));
+    }
+    if (this.tallies.remark(marks) || refolded) this.tally();
+    return columns;
+  }
+
+  /** inferred infers each column's kind and decimal mark from the sample rows. */
+  private async inferred(): Promise<ColumnInfo[]> {
     const source = await this.pages.rows(0, SAMPLE_ROWS);
     const files = await this.files(0, source.length);
     const schema = this.schema;
     const shown = finishRows(schema, 0, source, files).map((f) => f.shown);
 
     return schema.headers.map((header, col) => {
-      const { kind, flagged } = inferKind(
-        shown.length,
-        (row) => shown[row]![col] ?? '',
-      );
+      const inferred = inferKind(shown.length, (row) => shown[row]![col] ?? '');
       const binding = schema.binding(col);
       return binding === undefined
-        ? { header, kind, flagged }
-        : { header, kind, flagged, binding };
+        ? { header, ...inferred }
+        : { header, ...inferred, binding };
     });
   }
 
@@ -629,11 +650,13 @@ export class View {
    * the charts by its row, from what it showed before to what it shows now;
    * an edit over a whole column folds again the charts that read what it
    * changed. A moved chart hears its tally again from a pass, started when
-   * none runs.
+   * none runs. The columns are inferred first, so a chart over a column
+   * whose decimal mark the edit changed folds again and is not moved.
    */
   private async changed(e: Edit, edited: Edited | undefined): Promise<Changed> {
     this.generation++;
     this.recognise();
+    const columns = await this.columns();
     if (e.row === NO_ROW) {
       const cols = new Set([e.col, ...this.schema.readersOf(e.col)]);
       if (this.tallies.refold(cols)) this.tally();
@@ -646,11 +669,7 @@ export class View {
         .catch((err: unknown) => this.unread(err, moved));
       if (this.tallying === undefined) this.tally();
     }
-    return {
-      edit: e,
-      generation: this.generation,
-      columns: await this.columns(),
-    };
+    return { edit: e, generation: this.generation, columns };
   }
 
   /** refuseInView throws while the view is in view mode. */
@@ -1029,7 +1048,8 @@ export class View {
    *
    * An "unparsed" match tests a date column with isDate and a numeric or
    * flagged column with isNumber. A "not-number" match tests any column with
-   * parse, as a chart's fold reads its cells. A blank cell is skipped.
+   * parse, as a chart's fold reads its cells. Both read numbers with the
+   * column's decimal mark. A blank cell is skipped.
    */
   private async matcher(
     req: FindRequest,
@@ -1038,17 +1058,18 @@ export class View {
       const text = req.match.text;
       return text === '' ? undefined : (shown) => shown.includes(text);
     }
-    if (req.match.t === 'not-number') {
-      return (shown) => shown !== '' && parse(shown, 'point') === undefined;
-    }
-
     const column = (await this.columns())[req.col];
     if (column === undefined) return undefined;
+    const { mark } = column;
+    if (req.match.t === 'not-number') {
+      return (shown) => shown !== '' && parse(shown, mark) === undefined;
+    }
+
     const parses =
       column.kind === 'date'
         ? isDate
         : column.kind === 'num' || column.flagged
-          ? (v: string) => isNumber(v, 'point')
+          ? (v: string) => isNumber(v, mark)
           : undefined;
     if (parses === undefined) return undefined;
     return (shown) => {

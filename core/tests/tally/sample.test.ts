@@ -9,8 +9,12 @@ import { read } from '@ingest';
 import { parse } from '@num';
 import { byRank } from '@tally/rank';
 import { SCATTER_POINTS_AT_MOST, SampleFold } from '@tally/sample';
+
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
 import { REVENUE, UNITS, bytes } from '@core-tests/testdata/sales-q3';
+
+/** Both columns read with the point mark. */
+const POINTS = { x: 'point', y: 'point' } as const;
 
 /** A row's x cell and y cell. */
 type Row = [string, string];
@@ -38,7 +42,7 @@ function rowsOf(blocks: number[]): number[] {
 
 /** folded folds `rows` in the order `order` gives. */
 function folded(rows: Row[], order = [...rows.keys()]): SampleFold {
-  const fold = new SampleFold();
+  const fold = new SampleFold(POINTS);
   for (const row of order) fold.add(blockOf(row), row, ...rows[row]!);
   return fold;
 }
@@ -59,14 +63,14 @@ test('a sample fold sends the points of the rows of least rank', () => {
   // A row's y is twice its x, or blank.
   const y = (r: number) => (r % BLANK_EVERY === 0 ? '' : `${2 * r}`);
   const ranked = [...Array(ROWS).keys()].sort(byRank);
-  const fold = new SampleFold();
+  const fold = new SampleFold(POINTS);
   for (let r = 0; r < ROWS; r++) fold.add(blockOf(r), r, `${r}`, y(r));
   // A row left out keeps its place in the sample, with no point.
   const sampled = ranked.slice(0, SCATTER_POINTS_AT_MOST);
   const x = sampled.filter((r) => y(r) !== '');
   expect(fold.snapshot()).toMatchObject({ x, y: x.map((r) => 2 * r) });
   // Rows that all read as numbers fill the sample, whatever their order.
-  const full = new SampleFold();
+  const full = new SampleFold(POINTS);
   for (const r of ranked) full.add(blockOf(r), r, `${r}`, `${r}`);
   expect(full.snapshot().x).toHaveLength(SCATTER_POINTS_AT_MOST);
 });
@@ -79,7 +83,7 @@ test('a sample fold reads the same block by block, in any order', () => {
     const rows = Array.from({ length: ROWS }, (): Row => [cell(), cell()]);
     const blocks = [...Array(BLOCKS).keys()];
     const whole = folded(rows).snapshot();
-    const merged = new SampleFold();
+    const merged = new SampleFold(POINTS);
     for (const block of shuffled(blocks, random)) {
       // A block can come as two folds, cut at any row.
       const own = rowsOf([block]);
@@ -117,7 +121,7 @@ test('a sample fold of revenue against units reads the sales sheet', () => {
   expect(sample.least).toEqual({ x: 180, y: 7200 });
   expect(sample.most).toEqual({ x: 2600, y: 104000 });
   // A fold with nothing plotted reads its least and most as 0.
-  const none = new SampleFold().snapshot();
+  const none = new SampleFold(POINTS).snapshot();
   expect(none).toMatchObject({ least: { x: 0, y: 0 }, most: { x: 0, y: 0 } });
 });
 
@@ -158,7 +162,7 @@ test('an edit that takes a least or most marks its block to fold again', () => {
   for (const row of taken) edit(fold, rows, row, line()[row]!);
   expect(fold.stale()).toEqual(blocks);
   // A fold that takes this one in takes its marks too.
-  const into = new SampleFold();
+  const into = new SampleFold(POINTS);
   into.merge(fold);
   expect(into.stale()).toEqual(blocks);
   // Until they are folded again, their least and most take in every row.
@@ -167,4 +171,10 @@ test('an edit that takes a least or most marks its block to fold again', () => {
   for (const b of blocks) fold.refold(b, folded(rows, rowsOf([b])));
   expect(fold.stale()).toEqual([]);
   expect(fold.snapshot()).toEqual(folded(rows).snapshot());
+});
+
+test('a fold reads x and y with the decimal marks of their columns', () => {
+  const fold = new SampleFold({ x: 'comma', y: 'point' });
+  fold.add(0, 0, '1,5', '1,234.5');
+  expect(fold.snapshot()).toMatchObject({ x: [1.5], y: [1234.5] });
 });

@@ -115,13 +115,14 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   const coverage =
     rows === ROWS ? WHOLE : { rows, total: rows, complete: true };
   if (plot.t === 'scatter') {
-    const fold = new SampleFold();
+    const fold = new SampleFold({ x: 'point', y: 'point' });
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
     return { t: 'sample', plot, coverage, ...fold.snapshot() };
   }
   const { by, sum } = plot;
-  const fold = new GroupsFold(sum === undefined ? 'rows' : 'sum');
+  const fold =
+    sum === undefined ? new GroupsFold() : new GroupsFold('sum', 'point');
   for (let r = 0; r < rows; r++) {
     fold.add(cell(r, by), sum === undefined ? '' : cell(r, sum));
   }
@@ -284,6 +285,28 @@ test('a chart folds each block from the first it lacks, and one attached later l
   expect(tallies.from()).toBe(ROWS);
   tallies.attach({ ...REGION_ROWS, plot: REGION_REVENUE.plot }, HEADERS);
   expect(tallies.from()).toBe(0);
+});
+
+test('a chart over a column whose decimal mark changed folds again from its first row, with the mark now, and one over the others keeps its fold', () => {
+  const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+  const tallies = folded(charts);
+  const marks = HEADERS.map(() => 'point' as const);
+  expect(tallies.remark(marks)).toBe(false);
+  expect(tallies.from()).toBe(ROWS);
+  const comma = marks.map((m, col) => (col === UNITS ? 'comma' : m));
+  expect(tallies.remark(comma)).toBe(true);
+  expect(tallies.from()).toBe(0);
+  const rows = tallies
+    .read(ROWS, true)
+    .map(([id, t]) => [id, t.t === 'unread' ? undefined : t.coverage.rows]);
+  expect(rows).toEqual([
+    [REGION_ROWS.id, ROWS],
+    [REGION_REVENUE.id, ROWS],
+    [UNITS_REVENUE.id, 0],
+  ]);
+  // Attached again, the scatter keeps the fold it made with the mark now.
+  tallies.attach(UNITS_REVENUE, HEADERS);
+  expect(tallies.remark(comma)).toBe(false);
 });
 
 test('charts folded a block at a time read as the pure fold of every row, and are pending until read complete', () => {
@@ -877,6 +900,81 @@ test('an edit over a whole column folds the charts that read it again, through a
     await src.rows(0, 1);
     const ids = new Set(heard.all.slice(settled).map(([chart]) => chart));
     expect([...ids]).toEqual([channel.id, units.id]);
+  } finally {
+    done();
+  }
+});
+
+test('a chart sums a column with the decimal mark its sample shows, and folds again when an edit changes the mark', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const csv =
+      'region;amount\nNorth;1,5\nNorth;2,25\nSouth;1.234,56\nSouth;0,75\n';
+    const blob = new Blob([csv]);
+    const src = await openOne(engine, { name: 'eu.csv', blob });
+    expect(src.opened.columns[1]!.mark).toBe('comma');
+    const at = (col: number, header: string) => ({ col, header });
+    const plot: Plot = { t: 'bars', by: at(0, 'region'), sum: at(1, 'amount') };
+    const heard = new Heard(src);
+    const sums = async (change: () => Promise<unknown>) => {
+      const last = heard.of(REGION_ROWS.id);
+      await change();
+      const tally = await last;
+      if (tally.t !== 'groups') throw new Error(`heard ${tally.t}`);
+      return tally.groups.map(({ value, sum }) => [value, sum]);
+    };
+    const chart = { ...REGION_ROWS, source: src.id, plot };
+    expect(await sums(() => engine.chart(chart))).toEqual([
+      ['South', 1235.31],
+      ['North', 3.75],
+    ]);
+    // A point decimal in the sample makes the column read as it always has.
+    engine.mode(true);
+    const set = { op: Op.Set, row: 0, col: 1, now: '0.5' };
+    expect(await sums(() => src.edit(set))).toEqual([
+      ['North', 225.5],
+      ['South', 76.23456],
+    ]);
+  } finally {
+    done();
+  }
+});
+
+test('a chart over a formula sums what it computes from a column with its decimal mark, and folds again when an edit changes the mark', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const blob = new Blob(['region;amount;double\nNorth;1,5;\nSouth;2,25;\n']);
+    const src = await openOne(engine, { name: 'eu.csv', blob });
+    engine.mode(true);
+    const bind = { op: Op.Bind, row: NO_ROW, col: 2, now: 'amount * 2' };
+    const { columns } = await src.edit(bind);
+    expect(columns.map((c) => [c.kind, c.mark])).toEqual([
+      ['text', 'point'],
+      ['num', 'comma'],
+      ['num', 'point'],
+    ]);
+    const at = (col: number, header: string) => ({ col, header });
+    const plot: Plot = { t: 'bars', by: at(0, 'region'), sum: at(2, 'double') };
+    const heard = new Heard(src);
+    const sums = async (change: () => Promise<unknown>) => {
+      const last = heard.of(REGION_ROWS.id);
+      await change();
+      const tally = await last;
+      if (tally.t !== 'groups') throw new Error(`heard ${tally.t}`);
+      return tally.groups.map(({ value, sum }) => [value, sum]);
+    };
+    const chart = { ...REGION_ROWS, source: src.id, plot };
+    expect(await sums(() => engine.chart(chart))).toEqual([
+      ['South', 4.5],
+      ['North', 3],
+    ]);
+    // South's row is not edited, but what its formula reads is.
+    const set = { op: Op.Set, row: 0, col: 1, now: '0.5' };
+    expect(await sums(() => src.edit(set))).toEqual([
+      ['South', 450],
+      ['North', 1],
+    ]);
+    expect((await src.rows(1, 1)).rows).toEqual([['South', '2,25', '450']]);
   } finally {
     done();
   }

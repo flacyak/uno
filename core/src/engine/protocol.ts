@@ -10,6 +10,7 @@
 
 import type { Chart, ChartPlace, Plot } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
+import type { Mark } from '@num';
 import type { Change } from '@pattern';
 import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
@@ -27,6 +28,8 @@ export interface ColumnInfo {
   header: string;
   kind: Kind;
   flagged: boolean;
+  /** The decimal mark the column's numbers are read with, from its sample. */
+  mark: Mark;
   /** The formula expression bound to the column, if any. */
   binding?: string;
 }

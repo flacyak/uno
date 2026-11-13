@@ -256,6 +256,7 @@
   "typed_before_reread": "nothing was written · the file was read again while you typed",
   "yank_clipboard_refused": "yanked, but the system clipboard refused it",
   "column_flagged_hint": "looks numeric, does not parse",
+  "column_decimal_comma_hint": "numbers use a decimal comma: 1,5 is one and a half",
   "offer_ambiguous": "another rule fits these examples too",
   "find_column_is_text": "{column} is text · every value in it parses",
   "nothing_searched": "nothing searched yet",

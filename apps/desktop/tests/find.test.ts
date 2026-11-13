@@ -49,7 +49,14 @@ class Held {
 /** A workspace of `held`'s columns, whose finds `held` holds. */
 function workspaceOf(held: Held): Workspace {
   return {
-    rows: { columns: held.headers.map((header) => ({ header, kind: "num", flagged: false })) },
+    rows: {
+      columns: held.headers.map((header) => ({
+        header,
+        kind: "num",
+        flagged: false,
+        mark: "point",
+      })),
+    },
     get active(): Tab {
       return held.active;
     },

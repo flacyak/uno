@@ -15,11 +15,21 @@ import {
   evaluateColumn,
   parse,
 } from '@formula';
+import type { Mark } from '@num';
 
-// A Row backed by a plain object, standing in for a sheet.
-function row(cells: Record<string, string>): Row {
-  return { value: (col) => cells[col] };
+// A Row backed by a plain object, standing in for a sheet. A column reads
+// with the point mark unless `marks` names another.
+function row(
+  cells: Record<string, string>,
+  marks: Record<string, Mark> = {},
+): Row {
+  return { value: (col) => cells[col], mark: (col) => marks[col] ?? 'point' };
 }
+
+test('a column reads with its decimal mark', () => {
+  const cells = row({ amount: '1.234,5', rate: '0.5' }, { amount: 'comma' });
+  expect(evaluate(parse('amount * rate'), cells)).toBe(617.25);
+});
 
 // evaluate follows precedence and brackets, and reads decorated numbers.
 describe('evaluate computes what was written', () => {
@@ -103,7 +113,10 @@ describe('evaluateColumn computes every row as one row would', () => {
     cost: ['31.20', 'x', '5', '8'],
     zero: ['0', '0', '0', '2'],
   };
-  const src = { column: (name: string) => cols[name] };
+  const src = {
+    column: (name: string) => cols[name],
+    mark: (): Mark => 'point',
+  };
   const at = (i: number) =>
     row(Object.fromEntries(Object.entries(cols).map(([k, v]) => [k, v[i]!])));
 

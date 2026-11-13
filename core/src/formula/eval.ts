@@ -5,16 +5,19 @@
 
 import { quote } from '@go';
 import { unreachable } from '@never';
+import type { Mark } from '@num';
 import { parse as parseNumber } from '@num';
 import type { Formula, Node } from './ast.ts';
 import { text } from './ast.ts';
 
 /**
  * Row is one row of cells, read by column name. `value` returns the cell as
- * stored, or undefined for an unknown column.
+ * stored, or undefined for an unknown column, and `mark` the decimal mark
+ * the column's numbers are read with.
  */
 export interface Row {
   value(col: string): string | undefined;
+  mark(col: string): Mark;
 }
 
 /**
@@ -38,10 +41,12 @@ export interface Column {
 /**
  * Columns is the source a column formula reads. `column` returns every cell
  * of the named column over the rows being computed, as stored, or undefined
- * for an unknown column.
+ * for an unknown column, and `mark` the decimal mark its numbers are read
+ * with.
  */
 export interface Columns {
   column(name: string): readonly string[] | undefined;
+  mark(name: string): Mark;
 }
 
 /**
@@ -71,6 +76,7 @@ export function evaluate(f: Formula, row: Row): number {
       const v = row.value(name);
       return v === undefined ? undefined : [v];
     },
+    mark: (name) => row.mark(name),
   });
   if (errors[0] !== undefined) throw errors[0];
   return values[0]!;
@@ -94,10 +100,11 @@ function evalNode(
         for (let i = 0; i < count; i++) errors[i] ??= err;
         return out;
       }
+      const mark = src.mark(n.name);
       for (let i = 0; i < count; i++) {
         if (errors[i] !== undefined) continue;
         const raw = cells[i] ?? '';
-        const v = parseNumber(raw, 'point');
+        const v = parseNumber(raw, mark);
         if (v === undefined) {
           errors[i] = new NotNumberError(
             `${n.name} = ${quote(raw)}: not a number`,

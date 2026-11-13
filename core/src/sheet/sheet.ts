@@ -8,6 +8,7 @@
 
 import type { Formula } from '@formula';
 import { evaluate } from '@formula';
+import type { Mark } from '@num';
 import type { Program } from '@program';
 import { text as programText } from '@program';
 import type { Edit } from './edit.ts';
@@ -29,6 +30,8 @@ export interface Column {
    * thousands separators. The recogniser acts on it.
    */
   flagged: boolean;
+  /** The decimal mark the column's numbers are read with. */
+  mark: Mark;
 }
 
 /**
@@ -65,6 +68,7 @@ export class Sheet {
       header: h,
       kind: 'text' as Kind,
       flagged: false,
+      mark: 'point' as Mark,
     }));
     this.infer();
   }
@@ -220,6 +224,7 @@ export class Sheet {
 
     this.inferColumn(e.col);
     for (const col of this.schema.computedColumns()) this.inferColumn(col);
+    this.remark();
   }
 
   /**
@@ -270,23 +275,40 @@ export class Sheet {
           const i = this.schema.indexOf(name);
           return i === undefined ? undefined : (shown[i] ?? '');
         },
+        mark: (name) => this.schema.markOf(name),
       }),
     );
   }
 
   /**
-   * infer re-reads every column's sample and sets its kind.
+   * infer re-reads every column's sample and sets its kind and mark.
    */
   private infer(): void {
     for (let col = 0; col < this.columns.length; col++) this.inferColumn(col);
+    this.remark();
+  }
+
+  /**
+   * remark gives the schema each column's decimal mark. Where one changed,
+   * the rows are finished again, as a formula reads a column's cells with
+   * its mark, and the computed columns' kinds are re-read.
+   */
+  private remark(): void {
+    const marks = this.columns.map((c) => c.mark);
+    const was = this.schema.marks;
+    if (marks.every((mark, col) => mark === was[col])) return;
+    this.schema.marks = marks;
+    this.finished = [];
+    for (const col of this.schema.computedColumns()) this.inferColumn(col);
   }
 
   private inferColumn(col: number): void {
-    const { kind, flagged } = inferKind(this.rowData.length, (row) =>
+    const { kind, flagged, mark } = inferKind(this.rowData.length, (row) =>
       this.display(row, col),
     );
     const c = this.columns[col]!;
     c.kind = kind;
     c.flagged = flagged;
+    c.mark = mark;
   }
 }

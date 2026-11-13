@@ -24,7 +24,7 @@ import type { Tap } from '@engine/pass';
 import { openFormat } from '@ingest';
 import type { Format } from '@ingest';
 import { isNumber } from '@num';
-import { NO_ROW, Op } from '@sheet';
+import { NO_ROW, Op, SAMPLE_ROWS } from '@sheet';
 import type { Provider } from '@plugin';
 import { sources } from '@plugin';
 import { blobSource } from '@store';
@@ -60,12 +60,14 @@ test('the engine reads the fixture the way read does', async () => {
     const src = await openOne(engine, { name: 'sales-q3.csv', path: FIXTURE });
     const opened = src.opened;
     expect(saidIn(opened.label)).toBe("UTF-8 · delimiter ','");
-    // Same columns as `read`: units is text flagged as numeric.
+    // Same columns as `read`: units is text flagged as numeric, its 1,204
+    // read either way, so with the point mark.
     expect(opened.columns).toEqual(sales.columns);
     expect(opened.columns[UNITS]).toEqual({
       header: 'units',
       kind: 'text',
       flagged: true,
+      mark: 'point',
     });
 
     await indexed(src);
@@ -227,6 +229,26 @@ test('a find for what a tally could not read as a number passes formatted number
     await src.edit({ op: Op.Set, row: far, col: UNITS, now: 'n/a' });
     expect((await notNumber(-1)).row).toBe(far);
     expect((await notNumber(far)).row).toBe(null);
+  } finally {
+    done();
+  }
+});
+
+test('a find for what a tally could not read as a number reads the column with its decimal mark', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    // The sample's 1,5 sets the comma mark, so 1.5 past it is no number.
+    const sampled = Array<string>(SAMPLE_ROWS).fill('North;1,5');
+    const rows = [...sampled, 'South;1.234,56', 'West;1.5'];
+    const csv = ['region;amount', ...rows, ''].join('\n');
+    const blob = new Blob([csv]);
+    const src = await openOne(engine, { name: 'eu.csv', blob });
+    await indexed(src);
+    const find = (t: 'not-number' | 'unparsed') =>
+      src.find({ col: 1, from: -1, dir: 1, match: { t } });
+    expect((await find('not-number')).row).toBe(SAMPLE_ROWS + 1);
+    // 1.234,56 is a number, but a formatted one.
+    expect((await find('unparsed')).row).toBe(SAMPLE_ROWS);
   } finally {
     done();
   }

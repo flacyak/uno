@@ -156,6 +156,31 @@ test('inferKind does not flag genuinely mixed columns', () => {
   expect(s.columns[0]!.flagged).toBe(false);
 });
 
+// A column reads with the comma mark when its sample shows the comma as the
+// decimal mark somewhere and the point nowhere.
+test('inferKind names the decimal mark from the sample', () => {
+  const cases: Array<[string, string[], string, boolean, string]> = [
+    ['comma decimals', ['1,5', '2,25', '12'], 'num', false, 'comma'],
+    ['with separators', ['1,5', '1.234,56', '1 234,5'], 'text', true, 'comma'],
+    ['grouped once', ['1.234.567', '12'], 'text', true, 'comma'],
+    ['ambiguous only', ['1,234', '987'], 'text', true, 'point'],
+    ['point decimals', ['1,234.56', '0.5'], 'text', true, 'point'],
+    ['mixed', ['1,5', '0.5'], 'text', true, 'point'],
+    ['words', ['1,5 ea', 'N/A'], 'text', false, 'point'],
+  ];
+
+  for (const [name, values, kind, flagged, mark] of cases) {
+    const s = new Sheet(
+      't.csv',
+      ['amount'],
+      values.map((v) => [v]),
+    );
+    expect(s.columns[0]!.kind, name).toBe(kind);
+    expect(s.columns[0]!.flagged, name).toBe(flagged);
+    expect(s.columns[0]!.mark, name).toBe(mark);
+  }
+});
+
 // Date detection accepts only the listed layouts.
 describe('isDate is the written layouts and not whatever Date can parse', () => {
   const dates = [

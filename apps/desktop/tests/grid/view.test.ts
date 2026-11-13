@@ -36,7 +36,12 @@ afterEach(() => {
 function sheet(total: number, cols = 2): Rows {
   const kind: Kind = "text";
   return {
-    columns: Array.from({ length: cols }, (_, c) => ({ header: `c${c}`, kind, flagged: false })),
+    columns: Array.from({ length: cols }, (_, c) => ({
+      header: `c${c}`,
+      kind,
+      flagged: false,
+      mark: "point",
+    })),
     rows: () => total,
     cols: () => cols,
     display: (row, col) => `${row},${col}`,
@@ -294,4 +299,20 @@ test("a blank header is drawn as the column's place, and dressed as a name the f
   // Every column still has its badge, and the body row has all its cells.
   expect(scroller.querySelectorAll("thead th .badge").length).toBe(3);
   expect(scroller.querySelector("tbody tr")?.children.length).toBe(4);
+});
+
+test("a kind badge says on hover that its column does not parse, or reads a decimal comma", () => {
+  const { view, scroller } = make(200);
+  const rows = sheet(10, 3);
+  const columns = [...rows.columns];
+  columns[1] = { ...columns[1]!, kind: "num", mark: "comma" };
+  columns[2] = { ...columns[2]!, flagged: true, mark: "comma" };
+  view.show({ ...rows, columns }, false);
+
+  const badges = [...scroller.querySelectorAll<HTMLElement>("thead th .badge")];
+  expect(badges.map((badge) => badge.title)).toEqual([
+    "",
+    m.column_decimal_comma_hint(),
+    `${m.column_flagged_hint()} · ${m.column_decimal_comma_hint()}`,
+  ]);
 });

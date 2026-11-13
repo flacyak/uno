@@ -271,6 +271,7 @@ describe('a source with a _file column', () => {
       header: FILE_COLUMN,
       kind: 'text',
       flagged: false,
+      mark: 'point',
     });
 
     // The other cells are unchanged.

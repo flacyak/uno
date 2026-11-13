@@ -17,5 +17,5 @@ export {
 export type { Finished } from './pipeline.ts';
 export { NO_ROW, Op, editEquals } from './edit.ts';
 export type { Edit } from './edit.ts';
-export { SAMPLE_ROWS, inferKind, isDate } from './kind.ts';
+export { SAMPLE_ROWS, inferKind, inferMark, isDate } from './kind.ts';
 export type { Inferred, Kind } from './kind.ts';
