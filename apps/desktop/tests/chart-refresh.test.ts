@@ -162,6 +162,8 @@ test("r twice, and the head's button after it, send one relink between them", as
   r();
   box().querySelector<HTMLButtonElement>(".chart-refresh")!.click();
   expect(relink).toHaveBeenCalledOnce();
+  // A refresh by hand reads the whole file, however it changed.
+  expect(relink.mock.calls[0]![2]).toBe(false);
   expect(await counts(ROWS + 2)).toBe(true);
   relink.mockRestore();
 });
@@ -287,6 +289,7 @@ test("a schedule opens nothing over the file as it was read, and draws the rewri
 
   await appendFile(csv, ADDED_ROW);
   const before = message();
+  const relink = vi.spyOn(Engine.prototype, "relink");
   // A sleep, or a page held back while hidden, moves the wall clock past the
   // next check before its timer fires.
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -296,6 +299,9 @@ test("a schedule opens nothing over the file as it was read, and draws the rewri
   expect(await counts(ROWS + 1)).toBe(true);
   expect(paths()).toStrictEqual([csv]);
   expect([message(), shell.unsaved]).toStrictEqual([before, false]);
+  // The schedule asks for only the rows the append added.
+  expect(relink.mock.calls.map((call) => call[2])).toStrictEqual([true]);
+  relink.mockRestore();
   refresh.mockRestore();
 });
 
