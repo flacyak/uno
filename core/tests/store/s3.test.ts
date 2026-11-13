@@ -8,10 +8,19 @@
 
 import { createHash, createHmac } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vite-plus/test';
 
 import { readContainer } from '@document';
 import { Refusal } from '@said';
@@ -25,6 +34,7 @@ import {
   signV4,
 } from '@store/s3';
 import { awsCredentials, diskProvider } from '@store/node';
+import { s3Lister } from '@store/s3lister';
 import {
   bytes,
   connect,
@@ -946,6 +956,43 @@ describe('a request that fails on the way is sent again', () => {
     await s3.open(at('2025/other.csv'));
     expect(hosts.at(-1)).toBe(`${BUCKET}.s3.${HOME_REGION}.amazonaws.com`);
     expect(hosts).toHaveLength(3);
+  });
+});
+
+describe('a request S3 never answers', () => {
+  /** How long each send waits here, short so the test is quick. */
+  const REPLY_MS = 50;
+
+  test('is given up a send at a time, three times, and leaves no connection open', async () => {
+    const open = new Set<Socket>();
+    let made = 0;
+    // Takes every connection and never says a word on it.
+    const silent = createServer((socket) => {
+      made++;
+      open.add(socket);
+      socket.on('close', () => open.delete(socket));
+      socket.resume();
+    });
+    await new Promise<void>((listening) =>
+      silent.listen(0, '127.0.0.1', listening),
+    );
+    const { port } = silent.address() as AddressInfo;
+    const lister = s3Lister({
+      credentials: () => Promise.resolve(KEYS),
+      endpoint: `http://127.0.0.1:${port}`,
+      replyMs: REPLY_MS,
+    });
+    try {
+      // The scheduled check of an object is this stat: one HEAD.
+      await expect(
+        lister.stat(`s3://${BUCKET}/2025/sales-q3.csv`),
+      ).rejects.toThrow('S3 did not answer in 0.05 s');
+      expect(made).toBe(3);
+      await vi.waitFor(() => expect(open.size).toBe(0));
+    } finally {
+      for (const socket of open) socket.destroy();
+      silent.close();
+    }
   });
 });
 

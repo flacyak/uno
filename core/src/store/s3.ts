@@ -69,6 +69,11 @@ export interface S3Options {
    * waits on included. AHEAD by default. 1 reads one at a time.
    */
   ahead?: number;
+  /**
+   * How long one send waits for S3 to begin its reply before it is given up,
+   * its connection closed, and sent again. REPLY_MS by default.
+   */
+  replyMs?: number;
 }
 
 /** Where an object is, whichever way its URL was written. */
@@ -166,6 +171,14 @@ const BACKOFF_MS = 200;
 const MOVES = 1;
 /** How much of an error reply is read when looking for the region in it. */
 const REFUSAL_BYTES = 64 << 10;
+/**
+ * How long one send waits for the reply to begin. S3 begins a reply in well
+ * under a second. Three sends that wait this long, with the backoff between
+ * them, give up in about 30.6 s, about when the schedule's check stops
+ * waiting.
+ */
+const REPLY_MS = 10_000;
+const MS_PER_SECOND = 1000;
 
 /**
  * s3Provider is a bucket plugged in as one thing: s3Files and s3Lister. Every
@@ -238,6 +251,7 @@ type Address = (region: string, signed: boolean) => URL;
  */
 export function s3Requests(opts: S3Options): S3Requests {
   const go = opts.fetch ?? fetch;
+  const replyMs = opts.replyMs ?? REPLY_MS;
   /** The region each bucket was found in, once it has said. */
   const regions = new Map<string, string>();
 
@@ -248,9 +262,10 @@ export function s3Requests(opts: S3Options): S3Requests {
     extra: Record<string, string>,
     creds: Signing,
     region: string,
+    signal?: AbortSignal,
   ): Promise<Response> {
     if ('unsigned' in creds)
-      return go(at(region, false), { method, headers: extra });
+      return go(at(region, false), { method, headers: extra, signal });
     const url = at(region, true);
     const headers = signV4(
       {
@@ -263,12 +278,13 @@ export function s3Requests(opts: S3Options): S3Requests {
       's3',
       new Date(),
     );
-    return go(url, { method, headers });
+    return go(url, { method, headers, signal });
   }
 
   /**
    * attempt asks for the credentials and sends once. It fails as a
-   * NetworkFailure where fetch threw, as a Moved where a 301 or 400 names
+   * NetworkFailure where fetch threw or the reply did not begin in
+   * `replyMs`, which aborts the fetch and closes its connection, as a Moved where a 301 or 400 names
    * another region, which it remembers first, and as a ServerFailure for a
    * 5xx. Every other reply is the answer.
    */
@@ -284,10 +300,21 @@ export function s3Requests(opts: S3Options): S3Requests {
       const creds = yield* Effect.promise(() => opts.credentials(loc));
       const region = regions.get(loc.bucket) ?? creds.region;
       const res = yield* Effect.tryPromise({
-        try: () => send(at, method, extra, creds, region),
+        try: (signal) => send(at, method, extra, creds, region, signal),
         catch: (cause) =>
           new NetworkFailure({ cause, message: messageOf(cause) }),
-      });
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.millis(replyMs),
+          orElse: () =>
+            Effect.fail(
+              new NetworkFailure({
+                cause: undefined,
+                message: `S3 did not answer in ${replyMs / MS_PER_SECOND} s`,
+              }),
+            ),
+        }),
+      );
 
       // A 301 or 400 may say the bucket is in another region.
       if (res.status === 301 || res.status === 400) {
