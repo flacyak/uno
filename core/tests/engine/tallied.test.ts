@@ -3,6 +3,8 @@
  * points at, as its tally reads it, and the folds of a fixed workspace are
  * pinned to TALLY_VERSION, a formula column's among them. A reopen whose
  * edits and fold version match draws each chart complete without a pass.
+ * One saved partway through its index folds each chart on as the pass reads
+ * past the save, and leaves the pass its turn.
  */
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -15,6 +17,8 @@ import { LOG_ENTRY } from '@document';
 import type { Chart, Plot } from '@document';
 import type { Engine, SourceHandle, Tally } from '@engine';
 import { hashOf } from '@engine/grown';
+import { decodeBlocks } from '@engine/saved';
+import type { Provider } from '@plugin';
 import { NO_ROW, Op } from '@sheet';
 import { GroupsFold, SampleFold, TALLY_VERSION } from '@tally';
 import { CHANNEL, REGION, REVENUE, UNITS } from '@core-tests/testdata/sales-q3';
@@ -29,6 +33,7 @@ import {
   indexed,
   openOne,
   sales,
+  slowed,
 } from './harness.ts';
 
 const HEADERS = sales.columns.map((c) => c.header);
@@ -43,6 +48,10 @@ const PLOTS: Plot[] = [
   { t: 'scatter', x: column(UNITS), y: column(REVENUE) },
 ];
 const encoder = new TextEncoder();
+/** Milliseconds each read waits, so a save lands while the index runs. */
+const SLOW_MS = 5;
+/** Milliseconds a read past the save waits, so the charts reach the save's end first. */
+const BEHIND_MS = 50;
 
 let dir: string | undefined;
 afterEach(async () => {
@@ -250,5 +259,60 @@ test('a reopen of a file grown by an append keeps the fold of each chart but its
     expect(share(asked)).toBeLessThan(UNCHARTED_SHARE);
   } finally {
     fresh.done();
+  }
+});
+
+/** `provider`, with each read at or past `from` waiting `ms` first. */
+function behind(provider: Provider, from: number, ms: number): Provider {
+  const { files } = provider;
+  return {
+    ...provider,
+    files: {
+      label: files.label,
+      handles: (ref) => files.handles(ref),
+      async open(ref) {
+        const source = await files.open(ref);
+        return {
+          ...source,
+          async read(offset, length) {
+            if (offset >= from) await new Promise((r) => setTimeout(r, ms));
+            return source.read(offset, length);
+          },
+          close: () => source.close(),
+        };
+      },
+    },
+  };
+}
+
+test('a reopen saved partway through its index folds each chart on as the pass reads past the save', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'uno-tallied-'));
+  const csv = join(dir, 'sales-q3.csv');
+  await copyFile(FIXTURE, csv);
+  const at = join(dir, 'q3.uno');
+  const slow = connect(TINY, [slowed(diskProvider(), SLOW_MS)]);
+  const src = await openOne(slow.engine, { name: 'sales-q3.csv', path: csv });
+  for (const chart of charts(src.id)) await slow.engine.chart(chart);
+  const uno = await slow.engine.save({ source: src.id, cells: [], at }, 0);
+  slow.done();
+  await writeFile(at, uno);
+  const entries = unzipSync(uno);
+  const index = JSON.parse(strFromU8(entries[`cache/${src.id}/index.json`]!));
+  expect(index.complete, 'the save came partway').toBe(false);
+  const past = decodeBlocks(entries[`cache/${src.id}/blocks.bin`]!)!.offsets.at(
+    -1,
+  )!;
+
+  const engine = connect(TINY, [
+    behind(diskProvider(), past, BEHIND_MS),
+    blobProvider(),
+  ]);
+  try {
+    const again = await openOne(engine.engine, { name: 'q3.uno', path: at });
+    const heard = tallied(again);
+    await indexed(again);
+    expect((await heard).size).toBe(PLOTS.length);
+  } finally {
+    engine.done();
   }
 });
