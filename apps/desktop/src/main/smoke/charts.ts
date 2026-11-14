@@ -889,7 +889,9 @@ export const CHART_SIGNED: Check[] = [
   },
   {
     name: "a sum with long values on both sides of zero keeps its bars at the least width, and its values inside their tracks",
-    send: ["menu:open-path", SIGNED],
+    // The workspace the narrow window opened. Opening it again would race this
+    // check: the bars it waits for are drawn already, and the open would land
+    // under the next check's find.
     shot: "chart-signed",
     script: `
       const tracks = () => [...document.querySelectorAll(".chart-bar-track")];

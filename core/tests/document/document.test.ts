@@ -952,6 +952,29 @@ describe("a workspace's charts", () => {
     expect(back.carriedCharts).toStrictEqual([NEWER]);
   });
 
+  // A key a later build adds to a kind this one draws is carried whole, so
+  // this build neither draws the chart without it nor saves it back without it.
+  test('carry one whose plot has a key this build does not read', () => {
+    const plot = { ...PER_REGION.plot, split: { col: 2, header: 'rep' } };
+    const split = { ...SAVED, id: 'c2', plot };
+    const entries = unzipSync(writeDocument(charted()));
+    const text = JSON.stringify({
+      version: CHARTS_VERSION,
+      charts: [SAVED, split],
+    });
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.charts).toStrictEqual([SAVED]);
+    expect(back.carriedCharts).toStrictEqual([
+      {
+        id: 'c2',
+        source: 'sales',
+        place: SAVED.place,
+        json: JSON.stringify(split),
+      },
+    ]);
+  });
+
   test.each([
     ['is not JSON', `{"version":${CHARTS_VERSION},`],
     ['is a newer version', `{"version":${CHARTS_VERSION + 1},"charts":[]}`],

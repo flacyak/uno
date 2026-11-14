@@ -7,6 +7,7 @@
  */
 
 import type {
+  CarriedPlace,
   Changed,
   ColumnInfo,
   EditRequest,
@@ -55,6 +56,8 @@ export interface Added {
   carriedIds: string[];
   /** The sources of those charts, which take them when they go. */
   carriedOver: string[];
+  /** Those charts whose records give a place, where their windows stood. */
+  carriedPlaces: CarriedPlace[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
@@ -111,6 +114,7 @@ export class Engine {
         charts: added.charts ?? [],
         carriedIds: added.carriedIds ?? [],
         carriedOver: added.carriedOver ?? [],
+        carriedPlaces: added.carriedPlaces ?? [],
         chartsNote: added.chartsNote,
       };
     } finally {

@@ -267,7 +267,7 @@ function hasRoom(scroller: Element, dx: number, dy: number): boolean {
 }
 
 /** standAt puts a window at `rect`, in the layer's CSS px. */
-function standAt(box: HTMLElement, rect: Rect): void {
+export function standAt(box: HTMLElement, rect: Rect): void {
   box.style.left = `${rect.x}px`;
   box.style.top = `${rect.y}px`;
   box.style.width = `${rect.width}px`;

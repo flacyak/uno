@@ -15,7 +15,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { GroupsTally, SampleTally, Skipped } from "@engine";
+import type { CarriedPlace, GroupsTally, SampleTally, Skipped } from "@engine";
 import { BLANK_ROWS, REGION, REVENUE, ROWS, UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
@@ -103,6 +103,7 @@ type HeldKeys = Pick<WheelEventInit, "ctrlKey" | "shiftKey">;
 /** What the layer reads of a workspace's charts, for a test to change. */
 interface Model {
   all: readonly Chart[];
+  carried: readonly CarriedPlace[];
   sourceLabel(source: string): string | undefined;
   move: (id: string, place: ChartPlace) => void;
   heard: (id: string) => Heard | undefined;
@@ -215,6 +216,7 @@ function drawn({ style }: HTMLElement): Rect {
 function modelOf(...charts: Chart[]): Model {
   const model: Model = {
     all: charts,
+    carried: [],
     sourceLabel: () => undefined,
     heard: () => undefined,
     move: vi.fn((id: string, place: ChartPlace) => {
@@ -718,6 +720,24 @@ test("a room too short tucks them too, and each goes back to its place with the 
     placed(FLUSH.place, ROOM),
     placed(INSIDE.place, ROOM),
   ]);
+});
+
+test("a chart this build cannot draw stands under the others at its place, out of a tucked stack", () => {
+  const { layer, model } = shown(FLUSH);
+  model.carried = [{ id: "c9", source: SOURCE, place: MOVED }];
+  layer.draw();
+  const carried = (): HTMLElement | null => document.querySelector<HTMLElement>(".chart-carried");
+  expect(root().firstElementChild).toBe(carried());
+  expect(drawn(carried()!)).toStrictEqual(placed(MOVED, ROOM));
+
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(carried()!.hidden).toBe(true);
+  resize(ROOM);
+  expect(carried()!.hidden).toBe(false);
+
+  model.carried = [];
+  layer.draw();
+  expect(carried()).toBeNull();
 });
 
 test("the layer says while it tucks, so heads can join into one stack", () => {

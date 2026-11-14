@@ -8,7 +8,7 @@
  * a Web Worker, or a MessageChannel.
  */
 
-import type { Chart, ChartPlace, Plot } from '@document';
+import type { CarriedChart, Chart, ChartPlace, Plot } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Mark } from '@num';
 import type { Change } from '@pattern';
@@ -137,6 +137,9 @@ export interface PartInfo {
   path: string;
 }
 
+/** Where the window of a chart this build carries and cannot show stood. */
+export type CarriedPlace = Required<Omit<CarriedChart, 'json'>>;
+
 /** What an open added to the workspace, in display order. An older engine
  * leaves out the cells, the charts and all that follows them. */
 export interface Opening {
@@ -154,6 +157,9 @@ export interface Opening {
   /** The sources of those charts, which take them when they go. Empty
    * otherwise. */
   carriedOver?: string[];
+  /** Those charts whose records give a place, where their windows stood.
+   * Empty otherwise. */
+  carriedPlaces?: CarriedPlace[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }

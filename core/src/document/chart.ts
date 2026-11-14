@@ -77,5 +77,8 @@ export interface CarriedChart {
   id: string;
   /** The source it names, or '' for none, so it can go with its source. */
   source: string;
+  /** Where its window stood, when the record gives a place a read takes, so
+   * its window can stand there and say a newer uno made it. */
+  place?: ChartPlace;
   json: string;
 }
