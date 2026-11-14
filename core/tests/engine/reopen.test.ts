@@ -126,12 +126,30 @@ test('a reopen whose key holds reads the sniff and the first block, and serves e
     const src = await reopen(disk.engine(), disk.uno);
     expect(src.progress.rows).toBe(ROWS);
     expect(disk.asked.length - from, 'the sniff, then the first block').toBe(2);
+    expect(
+      [first.progress.unkept, src.progress.unkept],
+      'a save keeps the index read, and nothing the save held whole',
+    ).toStrictEqual([true, false]);
     expect(bytesOf(disk.asked, from)).toBeLessThanOrEqual(
       SNIFF_AT_MOST + FIRST_BLOCK_AT_MOST,
     );
     expect(await everyRow(src)).toStrictEqual(rows);
   } finally {
     disk.close();
+  }
+});
+
+test('an index of bytes with no file behind them is one no save keeps', async () => {
+  const c = connect(TUNING, [blobProvider()]);
+  try {
+    const src = await openOne(c.engine, {
+      name: 'sales-q3.csv',
+      blob: new Blob([bytes]),
+    });
+    await indexed(src);
+    expect(src.progress.unkept).toBe(false);
+  } finally {
+    c.done();
   }
 });
 
@@ -285,6 +303,7 @@ test('a reopen of a workspace saved partway through its index goes on from the l
       const again = await reopen(engine.engine, disk.uno);
       const read = bytesOf(disk.asked, 0);
       expect(again.progress.rows).toBe(ROWS);
+      expect(again.progress.unkept, 'a save keeps the rest').toBe(true);
       expect(
         read,
         'the rows the save had indexed are not read again',

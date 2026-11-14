@@ -30,6 +30,7 @@ const OPENED: Opened = {
     readable: 0,
     rows: 0,
     complete: true,
+    unkept: false,
     elapsedMs: 0,
   },
   edits: [],
