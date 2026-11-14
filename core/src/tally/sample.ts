@@ -166,6 +166,15 @@ export class SampleFold {
     this.kept.delete(row);
   }
 
+  /**
+   * forget takes back a row as remove does, for a block that refold empties
+   * and that folds again whole, so it leaves no block stale.
+   */
+  forget(row: number, xCell: string, yCell: string): void {
+    this.count(xCell, yCell, -1);
+    this.kept.delete(row);
+  }
+
   /** merge takes in what `other` folded, of rows this fold has not. */
   merge(other: SampleFold): void {
     this.plotted += other.plotted;

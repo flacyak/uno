@@ -224,6 +224,18 @@ test("an edit of a read back page's least or most folds each of its blocks again
   expect(fold.snapshot()).toStrictEqual(whole.snapshot());
 });
 
+test('a read back page gives a block back to fold again whole, and leaves no block stale', () => {
+  const rows = range(0, PAGED_ROWS);
+  const fold = SampleFold.restored(throughJson(scattered(rows).saved()))!;
+  const block = PAGE_BLOCKS + 1;
+  const alone = range(block * BLOCK_ROWS, (block + 1) * BLOCK_ROWS);
+  for (const row of alone) fold.forget(row, ...paged(row));
+  fold.refold(block, new SampleFold(POINTS));
+  expect(fold.stale()).toEqual([]);
+  scattered(alone, fold);
+  expect(fold.snapshot()).toStrictEqual(scattered(rows).snapshot());
+});
+
 test('a save that holds no scatter fold reads back as none', () => {
   const saved = scattered(range(0, BLOCK_ROWS)).saved();
   const page = saved.pages[0]!;

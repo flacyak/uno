@@ -6,7 +6,7 @@
  */
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vite-plus/test';
@@ -78,6 +78,11 @@ async function charted(engine: Engine) {
   dir = await mkdtemp(join(tmpdir(), 'uno-tallied-'));
   const csv = join(dir, 'sales-q3.csv');
   await copyFile(FIXTURE, csv);
+  return chartedAt(engine, csv);
+}
+
+/** chartedAt charts the file at `csv` as charted does. */
+async function chartedAt(engine: Engine, csv: string) {
   const src = await openOne(engine, { name: 'sales-q3.csv', path: csv });
   await indexed(src);
   engine.mode(true);
@@ -85,7 +90,7 @@ async function charted(engine: Engine) {
   const heard = tallied(src);
   for (const chart of charts(src.id)) await engine.chart(chart);
   const tallies = await heard;
-  const at = join(dir, 'q3.uno');
+  const at = join(dir!, 'q3.uno');
   const uno = await engine.save({ source: src.id, cells: [], at }, 0);
   return { src, tallies, uno, at };
 }
@@ -156,6 +161,7 @@ type Asked = Array<{ offset: number | undefined; length: number }>;
  */
 async function reopened(
   change: (entries: Record<string, Uint8Array>, source: string) => void,
+  grow?: (csv: string) => Promise<void>,
 ) {
   const first = connect(TINY);
   const asked: Asked = [];
@@ -165,6 +171,7 @@ async function reopened(
     change(entries, src.id);
     await writeFile(at, zipSync(entries));
     const csv = join(dir!, 'sales-q3.csv');
+    await grow?.(csv);
     const again = connect(TINY, [
       counted(diskProvider(), csv, asked),
       blobProvider(),
@@ -226,4 +233,22 @@ test('a chart whose fold read a column with another decimal mark folds again, an
   expect(again.get('c0')).toStrictEqual(tallies.get('c0'));
   const plotted = (t?: Tally) => (t?.t === 'sample' ? t.plotted : 0);
   expect(plotted(again.get('c2'))).toBe(plotted(tallies.get('c2')) + 1);
+});
+
+test('a reopen of a file grown by an append keeps the fold of each chart but its last block, and folds the new rows', async () => {
+  const appended = '2025-09-30,Atlantis,Ada,web,7,700.00\n'.repeat(3);
+  const { tallies, again, asked } = await reopened(
+    () => undefined,
+    (csv) => appendFile(csv, appended),
+  );
+  const fresh = connect(TINY);
+  try {
+    const grown = join(dir!, 'sales-q3.csv');
+    const { tallies: whole } = await chartedAt(fresh.engine, grown);
+    expect(again).toStrictEqual(whole);
+    expect(again).not.toStrictEqual(tallies);
+    expect(share(asked)).toBeLessThan(UNCHARTED_SHARE);
+  } finally {
+    fresh.done();
+  }
 });

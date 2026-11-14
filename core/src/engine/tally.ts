@@ -76,6 +76,8 @@ export class Tallies {
   private kept: Readonly<Record<string, unknown>> = {};
   /** The rows the index a save kept holds, which no kept fold passes. */
   private readable = 0;
+  /** The last block of that index, which a grown file reads again. */
+  private gone: { block: number; rows: Block } | undefined;
   /** Each column's decimal mark, by place, as `remark` was last told. */
   private marks: readonly Mark[] = [];
 
@@ -104,11 +106,18 @@ export class Tallies {
 
   /**
    * restore keeps `saved`, the folds a save kept by chart id, for the charts
-   * attach finds them for, over an index a save kept of `readable` rows.
+   * attach finds them for, over an index a save kept of `readable` rows. Of
+   * a file grown since, each fold gives back the rows of `gone`, the last
+   * block, which the view reads again with the rows that follow.
    */
-  restore(saved: Readonly<Record<string, unknown>>, readable: number): void {
+  restore(
+    saved: Readonly<Record<string, unknown>>,
+    readable: number,
+    gone?: { block: number; rows: Block },
+  ): void {
     this.kept = saved;
     this.readable = readable;
+    this.gone = gone;
   }
 
   /**
@@ -134,10 +143,16 @@ export class Tallies {
     };
     if (t.t === 'sample') {
       const back = SampleFold.restored(fold);
-      return back && { ...t, ...on, fold: back };
+      return back && this.givenBack({ ...t, ...on, fold: back });
     }
     const back = GroupsFold.restored(fold);
-    return back && { ...t, ...on, fold: back };
+    return back && this.givenBack({ ...t, ...on, fold: back });
+  }
+
+  /** givenBack is `t` without the rows of the block restore said is gone. */
+  private givenBack(t: Tallying): Tallying {
+    if (this.gone !== undefined) giveBack(t, this.gone.block, this.gone.rows);
+    return t;
   }
 
   /**
@@ -300,16 +315,8 @@ export class Tallies {
    * chart reads the same columns.
    */
   adopt(was: Tallies, block: number, last: Block): void {
-    const kept = last.from;
     for (const [id, t] of was.charts) {
-      // A fold takes blocks whole, so one that holds the block's first row
-      // holds the block.
-      if (holds(t, kept)) unfold(t, block, last);
-      t.rows = Math.min(t.rows, kept);
-      if (t.ahead !== undefined) {
-        const [from, end] = t.ahead;
-        t.ahead = from < kept ? [from, Math.min(end, kept)] : undefined;
-      }
+      giveBack(t, block, last);
       t.done = false;
       this.charts.set(id, t);
     }
@@ -504,6 +511,23 @@ function sample(
 }
 
 /**
+ * giveBack takes the rows of `block`, `last`, out of `t`'s fold where it
+ * holds them, for a view that reads the block again with the rows that
+ * follow, so the fold holds the rows before it alone.
+ */
+function giveBack(t: Tallying, block: number, last: Block): void {
+  const kept = last.from;
+  // A fold takes blocks whole, so one that holds the block's first row
+  // holds the block.
+  if (holds(t, kept)) unfold(t, block, last);
+  t.rows = Math.min(t.rows, kept);
+  if (t.ahead !== undefined) {
+    const [from, end] = t.ahead;
+    t.ahead = from < kept ? [from, Math.min(end, kept)] : undefined;
+  }
+}
+
+/**
  * unfold takes the rows of `block` out of `t`'s fold, as they showed, so
  * the block can be folded again whole. A sample's extent of the block is
  * empty until then.
@@ -513,7 +537,7 @@ function unfold(t: Tallying, block: number, { from, end, shown }: Block): void {
     const xs = shown(t.x);
     const ys = shown(t.y);
     for (let row = from; row < end; row++) {
-      t.fold.remove(block, row, xs(row), ys(row));
+      t.fold.forget(row, xs(row), ys(row));
     }
     t.fold.refold(block, new SampleFold(t.fold.marks));
   } else {

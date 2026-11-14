@@ -938,13 +938,31 @@ export class View {
       if (saved.charts) this.tallies.restore(saved.charts, index.readable());
       return { index, from: 'saved' };
     }
-    const now = await printAt(this.source, index).catch(() => undefined);
-    if (now === undefined || now.head !== print.head || now.tail !== print.tail)
-      return;
+    const last = index.begun - 1;
+    const read = (block: number) => {
+      const [start, end] = index.bytesOf(block);
+      return this.source.read(start, end - start);
+    };
+    const [head, tail] = await Promise.all([read(0), read(last)]).catch(
+      () => [],
+    );
+    if (head === undefined || tail === undefined) return;
+    if (hashOf(head) !== print.head || hashOf(tail) !== print.tail) return;
     const seed = RowIndex.seeded(index, bytes);
+    if (seed === undefined) return;
     // The pass hands on from the last block, and the first is as it was.
     this.print.head = print.head;
-    return seed === undefined ? undefined : { index: seed, from: 'appended' };
+    // The charts take the folds the save kept, each giving back the rows of
+    // the last block as they showed, which the pass reads again.
+    const [from, end] = index.rowsOf(last);
+    const records = this.format.decode(tail);
+    if (saved.charts && records.length === end - from) {
+      const shown = (col: number) =>
+        this.shownIn(col, from, records, undefined);
+      const gone = { block: last, rows: { from, end, shown } };
+      this.tallies.restore(saved.charts, end, gone);
+    }
+    return { index: seed, from: 'appended' };
   }
 
   /**
