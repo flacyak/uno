@@ -327,15 +327,15 @@ export class View {
         ? RowIndex.seeded(was.index, source.size)
         : undefined;
     const restored =
-      seed === undefined ? v.restored(ask.saved, tuning) : undefined;
+      seed === undefined ? await v.restored(ask.saved, tuning) : undefined;
     v.index =
-      seed ?? restored ?? new RowIndex(format.dataStart, source.size, tuning);
-    v.from =
-      seed !== undefined
-        ? 'appended'
-        : restored !== undefined
-          ? 'saved'
-          : 'read';
+      seed ??
+      restored?.index ??
+      new RowIndex(format.dataStart, source.size, tuning);
+    v.from = seed !== undefined ? 'appended' : (restored?.from ?? 'read');
+    // The blocks a save kept count as handed to the tap, so a chart reads
+    // them in runs.
+    if (restored !== undefined) v.tapped = restored.index.begun;
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.spanBytes = tuning.chunkBytes;
     v.schema = schemaOf(format, ask.parts);
@@ -897,36 +897,52 @@ export class View {
   /**
    * restored is the row index `saved` holds, where it is of this view's file
    * as the open measured it, read the same way by the same scanner. One a
-   * save took partway goes on from its last block. The blocks count as
-   * handed to the tap, so a chart reads them in runs, and a file on disk
-   * takes the print saved with them.
+   * save took partway goes on from its last block. A file on disk that grew
+   * by an append since the save keeps every block but the last, as the
+   * schedule's refresh of it does, and the pass reads on from there. A file
+   * on disk takes the print saved with the blocks.
    */
-  private restored(
+  private async restored(
     saved: SavedSource | undefined,
     tuning: Tuning,
-  ): RowIndex | undefined {
+  ): Promise<{ index: RowIndex; from: IndexFrom } | undefined> {
     const key = this.key;
-    if (saved === undefined || key === undefined) return;
-    if (saved.path !== this.path || differs(saved.key, key) !== undefined)
+    if (saved === undefined || key === undefined || saved.path !== this.path)
       return;
+    // An append moves the size and the times alone, and only on disk.
+    const { bytes, modified, statusChanged } = key;
+    const moved = { ...saved.key, bytes, modified, statusChanged };
+    const was = saved.key['bytes'];
+    const grew =
+      this.printing &&
+      saved.complete &&
+      typeof was === 'number' &&
+      was < bytes &&
+      differs(moved, key) === undefined;
+    if (!grew && differs(saved.key, key) !== undefined) return;
     const starts = decodeBlocks(saved.blocks);
     if (starts === undefined) return;
-    const { dataStart } = this.format;
-    const { size } = this.source;
-    const { counted, complete } = saved;
     const index = RowIndex.restored(
-      dataStart,
-      size,
+      this.format.dataStart,
+      grew ? was : bytes,
       tuning,
       starts,
-      counted,
-      complete,
+      saved.counted,
+      saved.complete,
     );
     if (index === undefined) return;
-    this.tapped = index.begun;
-    if (this.printing)
-      Object.assign(this.print, { head: saved.head, tail: saved.tail });
-    return index;
+    const print = { head: saved.head, tail: saved.tail };
+    if (!grew) {
+      if (this.printing) Object.assign(this.print, print);
+      return { index, from: 'saved' };
+    }
+    const now = await printAt(this.source, index).catch(() => undefined);
+    if (now === undefined || now.head !== print.head || now.tail !== print.tail)
+      return;
+    const seed = RowIndex.seeded(index, bytes);
+    // The pass hands on from the last block, and the first is as it was.
+    this.print.head = print.head;
+    return seed === undefined ? undefined : { index: seed, from: 'appended' };
   }
 
   /**
