@@ -84,11 +84,49 @@ export function slowed(provider: Provider, ms: number): Provider {
       handles: (ref) => files.handles(ref),
       async open(ref) {
         const source = await files.open(ref);
+        const { size, version, modified, statusChanged } = source;
         return {
-          size: source.size,
-          version: source.version,
+          size,
+          version,
+          modified,
+          statusChanged,
           async read(offset, length) {
             await sleep(ms);
+            return source.read(offset, length);
+          },
+          close: () => source.close(),
+        };
+      },
+    },
+  };
+}
+
+/**
+ * counted is `provider` with every read of the file at `path` noted in
+ * `asked`, and nothing else changed.
+ */
+export function counted(
+  provider: Provider,
+  path: string,
+  asked: Array<{ offset: number | undefined; length: number }>,
+): Provider {
+  const { files } = provider;
+  return {
+    ...provider,
+    files: {
+      label: files.label,
+      handles: (ref) => files.handles(ref),
+      async open(ref) {
+        const source = await files.open(ref);
+        if (!('path' in ref) || ref.path !== path) return source;
+        const { size, version, modified, statusChanged } = source;
+        return {
+          size,
+          version,
+          modified,
+          statusChanged,
+          read(offset, length) {
+            asked.push({ offset, length });
             return source.read(offset, length);
           },
           close: () => source.close(),

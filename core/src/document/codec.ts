@@ -66,6 +66,7 @@ import {
   sourceId,
   storedPath,
 } from './document.ts';
+import { CACHE_DIR, cacheEntries, readCache } from './cache.ts';
 import { baseOf } from './path.ts';
 
 const decoder = new TextDecoder('utf-8');
@@ -142,12 +143,14 @@ export function readContainer(
   });
 
   const chartsRead = readCharts(entries[CHARTS_ENTRY]);
+  const cache = readCache(entries, m, at);
   return {
     manifest: m,
     sources,
     active,
     log,
     ...chartsRead,
+    ...(cache === undefined ? {} : { cache }),
     extra: readExtra(entries, m, chartsRead !== undefined),
     at,
   };
@@ -230,6 +233,8 @@ function heldParts(src: PartsSource, state: State, at: string): HeldParts {
  *
  * The measured manifest is written back onto `d.manifest`, so the next save
  * keeps the first save's `created` and callers can report what was written.
+ * `d.cache` is left holding the caches that went in, without any a cap left
+ * out.
  */
 export function writeDocument(d: Document): Uint8Array {
   if (d.sources.length === 0)
@@ -275,6 +280,8 @@ export function writeDocument(d: Document): Uint8Array {
     });
   }
 
+  const cache = cacheEntries(d);
+  entries.push(...cache.entries);
   // Extra entries go back in, in name order, so a saved file keeps the same
   // layout between saves.
   const named = new Set(entries.map((e) => e.name));
@@ -285,6 +292,7 @@ export function writeDocument(d: Document): Uint8Array {
 
   const out = pack(entries, mtime);
   d.manifest = m;
+  if (d.cache !== undefined) d.cache = cache.kept;
   return out;
 }
 
@@ -714,7 +722,9 @@ function readExtra(
 
   const extra = new Map<string, Uint8Array>();
   for (const [key, bytes] of Object.entries(entries)) {
-    if (known.has(key) || key.endsWith('/')) continue;
+    // A cache this build did not read is one it cannot, and is not kept.
+    if (known.has(key) || key.endsWith('/') || key.startsWith(CACHE_DIR))
+      continue;
     extra.set(key, bytes);
   }
   return extra;

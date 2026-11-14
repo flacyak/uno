@@ -40,6 +40,9 @@ import {
 /** A carry limit the 240 KB fixture fits under, and one it overflows. */
 const ROOMY = 1 << 20;
 const CRAMPED = 1 << 10;
+/** The most a .uno that points at the fixture takes: its manifest, state,
+ * log, and the fixture's saved row index. 1,358 bytes measured. */
+const POINTED_AT_MOST = 2 << 10;
 
 /** A second, small export of another shape. */
 const ADS =
@@ -138,8 +141,8 @@ test('a source opened from a path is pointed at, not copied', async () => {
     await indexed(src);
     const uno = await engine.save(at(src, 0, 0), CRAMPED);
 
-    // Under a limit far smaller than the source.
-    expect(uno.length).toBeLessThan(CRAMPED);
+    // Far smaller than the source, under a limit smaller still.
+    expect(uno.length).toBeLessThan(POINTED_AT_MOST);
     const [s] = listed(uno);
     expect(s!.path).toBe(FIXTURE);
     expect(s!.entry, 'nothing was copied in').toBe('');
@@ -153,8 +156,12 @@ test('a source opened from a path is pointed at, not copied', async () => {
     expect(manifest).not.toContain(`${src.opened.link?.modified}`);
     expect(src.opened.link?.statusChanged).toEqual(expect.any(Number));
     expect(manifest).not.toContain(`${src.opened.link?.statusChanged}`);
+    // Its row index is kept beside, so a reopen need not index it again.
+    const cache = ['index.json', 'blocks.bin'].map(
+      (f) => `cache/${src.id}/${f}`,
+    );
     expect(Object.keys(unzipSync(uno)).sort()).toEqual(
-      [MANIFEST_ENTRY, STATE_ENTRY, LOG_ENTRY].sort(),
+      [MANIFEST_ENTRY, STATE_ENTRY, LOG_ENTRY, ...cache].sort(),
     );
 
     const back = readContainer('sales-q3.uno', uno);

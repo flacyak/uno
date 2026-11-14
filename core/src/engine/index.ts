@@ -80,6 +80,7 @@ export {
 export type {
   Attributes,
   Collector,
+  IndexFrom,
   Kind,
   Measurement,
   Payload,

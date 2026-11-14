@@ -7,6 +7,7 @@
  */
 
 import type { Chart, HeldFile, HeldPart, HeldParts } from '@document';
+import type { SavedSource } from '@document';
 import { trimSpace } from '@go';
 import { headerOf, labelOf, openFormat } from '@ingest';
 import type { Format } from '@ingest';
@@ -35,6 +36,8 @@ import type {
 } from '@store';
 import { hashOf, printAt } from './grown.ts';
 import type { Print } from './grown.ts';
+import { differs, keyOf } from './key.ts';
+import type { SourceKey } from './key.ts';
 import { indexPass } from './pass.ts';
 import { TALLY_MS } from './protocol.ts';
 import type {
@@ -56,6 +59,7 @@ import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
+import { decodeBlocks, encodeBlocks } from './saved.ts';
 import { Tallies } from './tally.ts';
 import type { Block } from './tally.ts';
 import {
@@ -65,7 +69,7 @@ import {
   MILLISECONDS,
   unmeasured,
 } from './telemetry.ts';
-import type { Telemetry } from './telemetry.ts';
+import type { IndexFrom, Telemetry } from './telemetry.ts';
 
 /** Minimum milliseconds between progress messages. */
 const PROGRESS_MS = 100;
@@ -166,6 +170,8 @@ export interface OpenAsk {
   signal?: AbortSignal;
   /** The source an append extends. Its index is kept where it still holds. */
   extending?: View;
+  /** The row index a .uno saved of the source, taken where its key holds. */
+  saved?: SavedSource;
 }
 
 export class View {
@@ -244,11 +250,19 @@ export class View {
 
   /** How long the open had taken when the index completed, final from then on. */
   private took: number | undefined;
+  /** Where the index came from, said with its measurements. */
+  private from: IndexFrom = 'read';
 
   /** Whether the view keeps a print: a file on disk, read alone. */
   private printing = false;
   /** The print of a file on disk, as the index pass handed it its blocks. */
   private readonly print: Partial<Print> = {};
+
+  /** What the open measured of a file a path points at alone, which a save
+   * keeps its index under. Undefined for any other source. */
+  private key: SourceKey | undefined;
+  /** The block starts a save last wrote, kept while no block begins. */
+  private encoded: { begun: number; blocks: Uint8Array } | undefined;
 
   private constructor(
     id: string,
@@ -295,6 +309,9 @@ export class View {
 
     v.source = source;
     v.format = format;
+    // Bytes a .uno carries index at memory speed, so they keep no index.
+    const alone = path !== '' && !ask.parts && carried?.raw === undefined;
+    v.key = alone ? keyOf(source, format, tuning) : undefined;
     // The scanner finds records by the delimiter alone, so over the same
     // bytes from the same first data record it finds the ones `was` found.
     // Several files are extended by parts held to their extents. One file is
@@ -309,7 +326,16 @@ export class View {
       was.index.start === format.dataStart
         ? RowIndex.seeded(was.index, source.size)
         : undefined;
-    v.index = seed ?? new RowIndex(format.dataStart, source.size, tuning);
+    const restored =
+      seed === undefined ? v.restored(ask.saved, tuning) : undefined;
+    v.index =
+      seed ?? restored ?? new RowIndex(format.dataStart, source.size, tuning);
+    v.from =
+      seed !== undefined
+        ? 'appended'
+        : restored !== undefined
+          ? 'saved'
+          : 'read';
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.spanBytes = tuning.chunkBytes;
     v.schema = schemaOf(format, ask.parts);
@@ -355,7 +381,7 @@ export class View {
         if (index.complete) {
           // The clock stops here, once: the pass reports completion one time.
           v.took = performance.now() - v.began;
-          const attributes = { place: ask.origin };
+          const attributes = { place: ask.origin, index: v.from };
           telemetry({
             name: INDEX,
             kind: 'duration',
@@ -869,6 +895,41 @@ export class View {
   }
 
   /**
+   * restored is the row index `saved` holds, where it is of this view's file
+   * as the open measured it, read the same way by the same scanner. One a
+   * save took partway goes on from its last block. The blocks count as
+   * handed to the tap, so a chart reads them in runs, and a file on disk
+   * takes the print saved with them.
+   */
+  private restored(
+    saved: SavedSource | undefined,
+    tuning: Tuning,
+  ): RowIndex | undefined {
+    const key = this.key;
+    if (saved === undefined || key === undefined) return;
+    if (saved.path !== this.path || differs(saved.key, key) !== undefined)
+      return;
+    const starts = decodeBlocks(saved.blocks);
+    if (starts === undefined) return;
+    const { dataStart } = this.format;
+    const { size } = this.source;
+    const { counted, complete } = saved;
+    const index = RowIndex.restored(
+      dataStart,
+      size,
+      tuning,
+      starts,
+      counted,
+      complete,
+    );
+    if (index === undefined) return;
+    this.tapped = index.begun;
+    if (this.printing)
+      Object.assign(this.print, { head: saved.head, tail: saved.tail });
+    return index;
+  }
+
+  /**
    * grewInto says whether `source` is this view's file on disk with rows
    * appended: larger, with its first and last blocks as they were when this
    * view's index completed. A middle rewritten beside an append is not seen
@@ -1179,6 +1240,21 @@ export class View {
    * source, otherwise 0. */
   get carries(): number {
     return this.path === '' && this.parts === undefined ? this.size : 0;
+  }
+
+  /**
+   * saved is what a save keeps of the row index of a file a path points at
+   * alone: every block begun so far, and the key it holds for.
+   */
+  saved(): SavedSource | undefined {
+    const index = this.index;
+    if (this.key === undefined) return undefined;
+    if (this.encoded?.begun !== index.begun)
+      this.encoded = { begun: index.begun, blocks: encodeBlocks(index) };
+    const { head, tail } = this.print;
+    const { counted, complete } = index;
+    const kept = { counted, complete, head, tail, blocks: this.encoded.blocks };
+    return { path: this.path, key: this.key, ...kept };
   }
 
   /** The current edit log. */

@@ -51,8 +51,23 @@ export const INDEX = 'uno.engine.index';
 /** How many bytes a source that finished indexing holds. */
 export const INDEXED = 'uno.engine.indexed';
 
+/**
+ * Where a finished index came from, the `index` attribute of INDEX and
+ * INDEXED: read from the source, kept from the index before an append and
+ * read on from there, or restored from a save, which reads almost nothing.
+ * It keeps a restored index's near-zero time apart from a real one's.
+ */
+export type IndexFrom = 'read' | 'appended' | 'saved';
+
+/**
+ * How many sources a save wrote without their saved row index, because it
+ * would pass a cap. Each reads afresh on its next open.
+ */
+export const CACHE_DROPPED = 'uno.engine.cache.dropped';
+
 export const MILLISECONDS = 'ms';
 export const BYTES = 'By';
+export const SOURCES = '{source}';
 
 /** The upper bounds of the duration histogram buckets, in milliseconds. */
 export const DURATION_BOUNDS: readonly number[] = [

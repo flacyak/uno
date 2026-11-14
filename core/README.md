@@ -129,6 +129,7 @@ order of reads is the scenario's and not a race.
 | `save.test.ts`   | what a second save of bytes already carried costs             |
 | `append.test.ts` | requests and bytes to append to several files, charted or not |
 | `chart.test.ts`  | bytes charts fetch beside the index, after it, and on an edit |
+| `reopen.test.ts` | what a reopen of a saved workspace reads of its source        |
 
 Each file holds its numbers to a budget, which is what they are today, so a
 change that costs more fails.
