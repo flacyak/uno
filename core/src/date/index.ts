@@ -1,9 +1,12 @@
 /**
- * @fileoverview Package date counts the proleptic Gregorian calendar in
- * integers for the four-digit years 0000 to 9999.
+ * @fileoverview Package date reads the date a spreadsheet cell writes, as
+ * minutes since 1970-01-01 00:00 as written, and counts the proleptic
+ * Gregorian calendar in integers for the four-digit years 0000 to 9999.
  *
  * It is pure, and no `Date` is built, whose `Date.UTC` reads the years 0 to
- * 99 as 1900 to 1999.
+ * 99 as 1900 to 1999. readDate and the calendar share this file: under the
+ * test runner that holds readDate to its speed, a call between modules
+ * costs about as much as the read.
  */
 
 /** A calendar date: a year, a month from 1 to 12, and a day from 1. */
@@ -82,4 +85,96 @@ export function civilFromDays(days: number): Civil {
   let month = 1;
   while (day > monthDays(year, month)) day -= monthDays(year, month++);
   return { year, month, day };
+}
+
+/** How a date written 03/04/2024 reads: day first (3 April) or month first (4 March). */
+export type Order = 'day' | 'month';
+
+const HOUR_MINUTES = 60;
+const DAY_HOURS = 24;
+const DAY_MINUTES = DAY_HOURS * HOUR_MINUTES;
+/** A year is written in four digits, and a month or day in two at most. */
+const YEAR_DIGITS = 4;
+const FIELD_DIGITS = 2;
+const DECIMAL = 10;
+
+const code = (c: string): number => c.charCodeAt(0);
+const ZERO = code('0');
+const NINE = code('9');
+const POINT = code('.');
+const MINUS = code('-');
+const SLASH = code('/');
+
+/**
+ * readDate is `v` as minutes since 1970-01-01 00:00 as written, or undefined
+ * when it is not a date. A year-last date reads by `order`.
+ * It scans a character at a time, with no regular expression, since a chart
+ * reads every cell of its column.
+ */
+export function readDate(v: string, order: Order): number | undefined {
+  const from = 0;
+  const to = v.length;
+
+  // Three fields of digits: field1 ends at end1 and so on.
+  const field1 = readDigits(v, from, to);
+  const end1 = digitsStop;
+  const sep = v.charCodeAt(end1);
+  const yearLast =
+    end1 > from &&
+    end1 - from <= FIELD_DIGITS &&
+    isSeparator(sep) &&
+    isDigit(v.charCodeAt(end1 + 1));
+  if (end1 - from !== YEAR_DIGITS && !yearLast) return undefined;
+  if (!isSeparator(sep)) return undefined;
+  const field2 = readDigits(v, end1 + 1, to);
+  const end2 = digitsStop;
+  const length2 = end2 - end1 - 1;
+  if (length2 < 1 || length2 > FIELD_DIGITS) return undefined;
+
+  if (v.charCodeAt(end2) !== sep) return undefined;
+  const field3 = readDigits(v, end2 + 1, to);
+  const end3 = digitsStop;
+  const length3 = end3 - end2 - 1;
+  const fits = yearLast
+    ? length3 === YEAR_DIGITS
+    : length3 >= 1 && length3 <= FIELD_DIGITS;
+  if (!fits) return undefined;
+
+  if (end3 !== to) return undefined;
+  if (!yearLast) return minutes(field1, field2, field3);
+  return order === 'day'
+    ? minutes(field3, field2, field1)
+    : minutes(field3, field1, field2);
+}
+
+/** The minutes a real date starts at, or undefined when the date is not real. */
+function minutes(year: number, month: number, day: number): number | undefined {
+  if (!isReal(year, month, day)) return undefined;
+  return daysFromCivil(year, month, day) * DAY_MINUTES;
+}
+
+/**
+ * Where the last readDigits stopped. A field's number and its end come from
+ * one pass this way, with nothing allocated.
+ */
+let digitsStop = 0;
+
+/** The number the digits from `from` write, stopping at `to` or a non-digit. */
+function readDigits(v: string, from: number, to: number): number {
+  let n = 0;
+  let i = from;
+  for (; i < to && isDigit(v.charCodeAt(i)); i++) {
+    n = n * DECIMAL + (v.charCodeAt(i) - ZERO);
+  }
+  digitsStop = i;
+  return n;
+}
+
+/** Whether `c` separates a date's fields: a hyphen, a slash or a full stop. */
+function isSeparator(c: number): boolean {
+  return c === MINUS || c === SLASH || c === POINT;
+}
+
+function isDigit(c: number): boolean {
+  return c >= ZERO && c <= NINE;
 }
