@@ -3,6 +3,9 @@
  * and how a collector's address is read from the environment.
  */
 
+import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { expect, test } from 'vite-plus/test';
@@ -34,6 +37,7 @@ import type {
 } from '@engine';
 import { sources } from '@plugin';
 import type { Provider } from '@plugin';
+import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
 import {
   FIXTURE,
@@ -105,7 +109,7 @@ test('an engine says how long each request and each index took, and nothing abou
     expect(index).toMatchObject({
       kind: 'duration',
       unit: MILLISECONDS,
-      attributes: { place: 'disk' },
+      attributes: { place: 'disk', index: 'read' },
     });
     const size = await until(seen, (m) => m.name === INDEXED);
     expect(size).toMatchObject({
@@ -153,6 +157,38 @@ test('an index is measured by what its bytes were handed as, and nothing names t
     expect(said).not.toContain(FIXTURE);
   } finally {
     engine.close();
+  }
+});
+
+test('an index restored from a save is measured apart from one read from the file', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'uno-telemetry-'));
+  const csv = join(dir, 'sales-q3.csv');
+  const uno = join(dir, 'q3.uno');
+  await copyFile(FIXTURE, csv);
+  const providers = [diskProvider(), blobProvider()];
+  const first = measured(providers);
+  const again = measured(providers);
+  try {
+    const src = await openOne(first.engine, {
+      name: 'sales-q3.csv',
+      path: csv,
+    });
+    await indexed(src);
+    const saved = await first.engine.save(
+      { source: src.id, cells: [], at: uno },
+      0,
+    );
+    await writeFile(uno, saved);
+    await indexed(await openOne(again.engine, { name: 'q3.uno', path: uno }));
+
+    const from = (seen: Measurement[]) =>
+      seen.filter((m) => m.name === INDEX).map((m) => m.attributes?.['index']);
+    expect(from(first.seen)).toEqual(['read']);
+    expect(from(again.seen)).toEqual(['saved']);
+  } finally {
+    first.engine.close();
+    again.engine.close();
+    await rm(dir, { recursive: true, force: true });
   }
 });
 

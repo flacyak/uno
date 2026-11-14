@@ -69,7 +69,7 @@ import {
   MILLISECONDS,
   unmeasured,
 } from './telemetry.ts';
-import type { Telemetry } from './telemetry.ts';
+import type { IndexFrom, Telemetry } from './telemetry.ts';
 
 /** Minimum milliseconds between progress messages. */
 const PROGRESS_MS = 100;
@@ -250,6 +250,8 @@ export class View {
 
   /** How long the open had taken when the index completed, final from then on. */
   private took: number | undefined;
+  /** Where the index came from, said with its measurements. */
+  private from: IndexFrom = 'read';
 
   /** Whether the view keeps a print: a file on disk, read alone. */
   private printing = false;
@@ -324,10 +326,16 @@ export class View {
       was.index.start === format.dataStart
         ? RowIndex.seeded(was.index, source.size)
         : undefined;
+    const restored =
+      seed === undefined ? v.restored(ask.saved, tuning) : undefined;
     v.index =
-      seed ??
-      v.restored(ask.saved, tuning) ??
-      new RowIndex(format.dataStart, source.size, tuning);
+      seed ?? restored ?? new RowIndex(format.dataStart, source.size, tuning);
+    v.from =
+      seed !== undefined
+        ? 'appended'
+        : restored !== undefined
+          ? 'saved'
+          : 'read';
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.spanBytes = tuning.chunkBytes;
     v.schema = schemaOf(format, ask.parts);
@@ -373,7 +381,7 @@ export class View {
         if (index.complete) {
           // The clock stops here, once: the pass reports completion one time.
           v.took = performance.now() - v.began;
-          const attributes = { place: ask.origin };
+          const attributes = { place: ask.origin, index: v.from };
           telemetry({
             name: INDEX,
             kind: 'duration',

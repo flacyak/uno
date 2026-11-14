@@ -582,7 +582,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.95, sum by (le, place) (rate(uno_engine_index_milliseconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, place) (rate(uno_engine_index_milliseconds_bucket{index!=\"saved\"}[$__rate_interval])))",
           "legendFormat": "{{place}}",
           "editorMode": "code",
           "range": true
@@ -639,7 +639,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (place) (rate(uno_engine_indexed_bytes_total[$__rate_interval]))",
+          "expr": "sum by (place) (rate(uno_engine_indexed_bytes_total{index!=\"saved\"}[$__rate_interval]))",
           "legendFormat": "{{place}}",
           "editorMode": "code",
           "range": true
