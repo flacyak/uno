@@ -37,8 +37,8 @@ describe('parsePlot', () => {
     { t: 'bars', by: REGION, sum: REVENUE },
     { t: 'pie', by: NO_HEADER },
     { t: 'scatter', x: REVENUE, y: UNITS },
-  ])('reads %j, and leaves out a key it does not know', (plot) => {
-    expect(parsePlot(PLOT, { ...plot, colour: 'teal' })).toStrictEqual(plot);
+  ])('reads %j', (plot) => {
+    expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });
 
   test.each<[unknown, string]>([
@@ -47,6 +47,15 @@ describe('parsePlot', () => {
     [{ t: 'bars', by: { col: -1 } }, 'by: col is not a column number'],
     [{ t: 'pie', by: REGION, sum: { col: 4 } }, 'sum: header is not text'],
     [{ t: 'scatter', x: REVENUE }, 'y: col is not a column number'],
+    [
+      { t: 'bars', by: REGION, colour: 'teal' },
+      'this build does not read "colour"',
+    ],
+    [{ t: 'pie', by: REGION, x: REVENUE }, 'this build does not read "x"'],
+    [
+      { t: 'scatter', x: REVENUE, y: UNITS, by: REGION },
+      'this build does not read "by"',
+    ],
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parsePlot(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });

@@ -1066,7 +1066,8 @@ const COL: Expects<number> = { is: isByteCount, not: 'is not a column number' };
 /**
  * parseChart reads one chart from view/charts.json or from a `chart`
  * request, so the file and the wire accept the same records. `where` names
- * it in an error before its id is known. A key it does not read is left out.
+ * it in an error before its id is known. A key it does not read is left out,
+ * save in its plot.
  */
 export function parseChart(where: string, value: unknown): Chart {
   const o = asRecord(value);
@@ -1082,10 +1083,23 @@ export function parseChart(where: string, value: unknown): Chart {
   };
 }
 
+/** The keys each kind of plot reads. */
+const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
+  bars: ['t', 'by', 'sum'],
+  pie: ['t', 'by', 'sum'],
+  scatter: ['t', 'x', 'y'],
+};
+
+function isPlotKind(t: string): t is Plot['t'] {
+  return Object.hasOwn(PLOT_KEYS, t);
+}
+
 /**
  * parsePlot reads what a chart draws. Bars and pie name the `by` column whose
  * values they show, and may name a `sum` column to add up per value. Scatter
- * names its `x` and `y`.
+ * names its `x` and `y`. It refuses a kind or a key it does not know, so a
+ * later build's plot is carried whole and never drawn or saved without what
+ * it added.
  */
 export function parsePlot(where: string, value: unknown): Plot {
   const p = asRecord(value);
@@ -1094,16 +1108,16 @@ export function parsePlot(where: string, value: unknown): Plot {
     header: required(asRecord(p[key]), 'header', TEXT, `${where}: ${key}`),
   });
   const t = required(p, 't', TEXT, where);
-  switch (t) {
-    case 'bars':
-    case 'pie':
-      if (p['sum'] === undefined) return { t, by: column('by') };
-      return { t, by: column('by'), sum: column('sum') };
-    case 'scatter':
-      return { t, x: column('x'), y: column('y') };
-    default:
-      throw new Error(`${where}: this build cannot draw ${JSON.stringify(t)}`);
-  }
+  if (!isPlotKind(t))
+    throw new Error(`${where}: this build cannot draw ${JSON.stringify(t)}`);
+  const unread = Object.keys(p).find((key) => !PLOT_KEYS[t].includes(key));
+  if (unread !== undefined)
+    throw new Error(
+      `${where}: this build does not read ${JSON.stringify(unread)}`,
+    );
+  if (t === 'scatter') return { t, x: column('x'), y: column('y') };
+  if (p['sum'] === undefined) return { t, by: column('by') };
+  return { t, by: column('by'), sum: column('sum') };
 }
 
 /** parsePlace reads where a chart's window sits. */
