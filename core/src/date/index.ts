@@ -9,7 +9,7 @@
  * costs about as much as the read.
  */
 
-import { isSpace } from '@go';
+import { isSpace, trimSpace } from '@go';
 
 /** A calendar date: a year, a month from 1 to 12, and a day from 1. */
 export interface Civil {
@@ -92,6 +92,9 @@ export function civilFromDays(days: number): Civil {
 /** How a date written 03/04/2024 reads: day first (3 April) or month first (4 March). */
 export type Order = 'day' | 'month';
 
+/** The order a column's sample shows: one of them, or either when none decides. */
+export type ShownOrder = Order | 'either';
+
 const MINUTE_SECONDS = 60;
 const HOUR_MINUTES = 60;
 const DAY_HOURS = 24;
@@ -171,6 +174,37 @@ export function readDate(v: string, order: Order): number | undefined {
   return order === 'day'
     ? minutes(field3, field2, field1, time)
     : minutes(field3, field1, field2, time);
+}
+
+/**
+ * How a date written year last begins, as readDate tells it: a field of one
+ * or two digits, a separator, then a digit.
+ */
+const YEAR_LAST = /^\d{1,2}[-/.]\d/;
+
+/**
+ * inferOrder names the order a column's sampled `values` read in. A date
+ * written year last whose first field is over 12 reads only day first, and
+ * one whose second is over 12 only month first. The order is `day` when some
+ * value reads only day first and none only month first, `month` the other
+ * way round, and `either` when none decides or they disagree. It is
+ * undefined when no value is a date written year last.
+ */
+export function inferOrder(values: readonly string[]): ShownOrder | undefined {
+  let yearLast = false;
+  let dayOnly = false;
+  let monthOnly = false;
+  for (const v of values) {
+    if (!YEAR_LAST.test(trimSpace(v))) continue;
+    const day = readDate(v, 'day') !== undefined;
+    const month = readDate(v, 'month') !== undefined;
+    yearLast ||= day || month;
+    dayOnly ||= day && !month;
+    monthOnly ||= month && !day;
+  }
+  if (!yearLast) return undefined;
+  if (dayOnly === monthOnly) return 'either';
+  return dayOnly ? 'day' : 'month';
 }
 
 /** The minutes of a real date and `time`, or undefined when the date is not real. */

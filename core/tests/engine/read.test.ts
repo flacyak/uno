@@ -89,6 +89,19 @@ test('the engine reads the fixture the way read does', async () => {
   }
 });
 
+test('the engine names the order of each date column from its sample', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const csv =
+      'eu,us,iso\n03/04/2024,03/04/2024,2024-03-04\n13/04/2024,04/13/2024,2024-03-05\n';
+    const src = await openOne(engine, { name: 'd.csv', blob: new Blob([csv]) });
+    const orders = src.opened.columns.map((c) => c.order);
+    expect(orders).toEqual(['day', 'month', undefined]);
+  } finally {
+    done();
+  }
+});
+
 test('a band holds the rows around the viewport, and only those', async () => {
   const { engine, done } = connect(TINY);
   try {

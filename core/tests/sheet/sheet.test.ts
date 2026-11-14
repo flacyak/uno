@@ -181,6 +181,28 @@ test('inferKind names the decimal mark from the sample', () => {
   }
 });
 
+// A date column's order comes from its sample: a value that reads only day
+// first or only month first decides it.
+test('inferKind names the order of a date column from the sample', () => {
+  const s = new Sheet(
+    't.csv',
+    ['eu', 'us', 'undecided', 'iso', 'text'],
+    [
+      ['03/04/2024', '03/04/2024', '03/04/2024', '2024-03-04', '13/04/2024'],
+      ['13/04/2024', '04/13/2024', '04/03/2024', '2024-03-05', 'West'],
+    ],
+  );
+  const orders = s.columns.map((c) => c.order);
+  expect(orders).toEqual(['day', 'month', 'either', undefined, undefined]);
+  expect(s.columns.map((c) => 'order' in c)).toEqual([
+    true,
+    true,
+    true,
+    false,
+    false,
+  ]);
+});
+
 // Date detection accepts only the listed layouts.
 describe('isDate is the written layouts and not whatever Date can parse', () => {
   const dates = [

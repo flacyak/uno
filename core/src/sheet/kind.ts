@@ -3,7 +3,8 @@
  * open: text, number or date, whether it is flagged, and its decimal mark.
  */
 
-import { readDate } from '@date';
+import type { ShownOrder } from '@date';
+import { inferOrder, readDate } from '@date';
 import { trimSpace } from '@go';
 import type { Mark } from '@num';
 import { isNumber, markShown, parse, undress } from '@num';
@@ -25,6 +26,11 @@ export interface Inferred {
   flagged: boolean;
   /** The decimal mark every reader of the column's numbers reads with. */
   mark: Mark;
+  /**
+   * How a date column's dates written year last read, as `inferOrder` names
+   * it. Absent when the column is not dates or writes none year last.
+   */
+  order?: ShownOrder;
 }
 
 /**
@@ -57,7 +63,11 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
 
   const seen = values.length;
   if (seen === 0) return { kind: 'text', flagged: false, mark };
-  if (dates === seen) return { kind: 'date', flagged: false, mark };
+  if (dates === seen) {
+    const order = inferOrder(values);
+    const date: Inferred = { kind: 'date', flagged: false, mark };
+    return order === undefined ? date : { ...date, order };
+  }
   if (nums === seen) return { kind: 'num', flagged: false, mark };
   if (nums + formatted === seen) return { kind: 'text', flagged: true, mark };
   return { kind: 'text', flagged: false, mark };
