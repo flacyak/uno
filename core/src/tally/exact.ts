@@ -2,6 +2,8 @@
  * @fileoverview A sum with nothing rounded until it is read.
  */
 
+import { isRecord } from './saved.ts';
+
 // Whole UNITs are counted apart, and no partial reaches one, so no sum in
 // add comes near the largest double, which is under 4 UNITs.
 const UNIT_EXPONENT = 1022;
@@ -11,6 +13,12 @@ const STEP_EXPONENT = -1074;
 // Number() rounds a bigint to a double's 53 bits, ties to even. Those 53, one
 // to round on, and one set when any bit below is set, round as the whole does.
 const ROUNDING_BITS = 55;
+
+/** SavedSum is every bit of an ExactSum, as a save writes it. */
+export interface SavedSum {
+  partials: number[];
+  units: number;
+}
 
 /**
  * ExactSum adds finite numbers with no rounding, as Python's math.fsum does,
@@ -58,6 +66,30 @@ export class ExactSum {
     this.units += units;
   }
 
+  /** saved is what the sum holds, which `restored` reads back as it was. */
+  saved(): SavedSum {
+    return { partials: this.partials.slice(0, this.count), units: this.units };
+  }
+
+  /**
+   * restored is the sum `saved` holds, or undefined where it is not one: a
+   * partial that is not a finite number short of a UNIT and other than 0,
+   * or a count of UNITs that is not whole.
+   */
+  static restored(saved: unknown): ExactSum | undefined {
+    if (!isRecord(saved)) return undefined;
+    const { partials, units } = saved;
+    if (typeof units !== 'number' || !Number.isSafeInteger(units))
+      return undefined;
+    if (!Array.isArray(partials) || !partials.every(isPartial))
+      return undefined;
+    const sum = new ExactSum();
+    sum.partials.push(...partials);
+    sum.count = partials.length;
+    sum.units = units;
+    return sum;
+  }
+
   /** value is the sum rounded to the nearest double, ties to even. */
   value(): number {
     if (this.units !== 0) {
@@ -91,6 +123,11 @@ export class ExactSum {
     this.units += whole;
     return x - whole * UNIT;
   }
+}
+
+/** isPartial says whether `p` is a partial a sum can hold. */
+function isPartial(p: unknown): p is number {
+  return typeof p === 'number' && p !== 0 && Math.abs(p) < UNIT;
 }
 
 /** stepsOf returns `x` as a whole number of 2^-1074. */

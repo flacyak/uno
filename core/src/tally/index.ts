@@ -3,6 +3,7 @@
  */
 
 export { ExactSum } from './exact.ts';
+export type { SavedSum } from './exact.ts';
 export {
   DISTINCT_AT_MOST,
   GROUPS_SENT,
