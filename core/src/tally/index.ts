@@ -16,5 +16,5 @@ export type { Marks, SavedSample } from './sample.ts';
 export type { Point, Sample } from './sample.ts';
 export { TALLY_VERSION, isCount, isRecord } from './saved.ts';
 export { HELD, HELD_AT_MOST, TimeFold } from './time.ts';
-export type { Held, Period, Periods, Undated } from './time.ts';
+export type { Held, Period, Periods, SavedTime, Undated } from './time.ts';
 export type { Skipped } from './skipped.ts';

@@ -7,6 +7,7 @@ import { EPOCH_YEAR, civilFromDays, readDate } from '@date';
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
 
+import type { SavedSum } from './exact.ts';
 import { Count, counted } from './groups.ts';
 import type { Skipped } from './skipped.ts';
 
@@ -74,6 +75,25 @@ export interface Periods {
   skipped: Skipped;
 }
 
+/** One period as a save writes it: its key, its rows, and their sum when summed. */
+type SavedPeriod = [number, number] | [number, number, SavedSum];
+
+/**
+ * SavedTime is every bit of a TimeFold, as a save writes it: how it reads
+ * dates, the mark it sums with, none when it counts rows, the period it
+ * holds, its periods in the order they began, and what it left out.
+ */
+export interface SavedTime {
+  reading: Order | UnixUnit;
+  mark?: Mark;
+  held: Held;
+  timed: number;
+  periods: SavedPeriod[];
+  undated: { rows: number; sum?: SavedSum };
+  dates: Undated;
+  skipped: Skipped;
+}
+
 /**
  * TimeFold counts a date column's rows per period, and when it sums, adds up
  * their cells in another column. Rows are added and taken back one at a
@@ -110,6 +130,24 @@ export class TimeFold {
   /** remove takes back a row that add counted, and an empty period with it. */
   remove(date: string, cell = ''): void {
     this.count(date, cell, -1);
+  }
+
+  /** saved is what the fold holds, as a save writes it. */
+  saved(): SavedTime {
+    const summed = this.mark !== undefined;
+    const { rows, sum } = this.undated;
+    return {
+      reading: this.reading,
+      mark: this.mark,
+      held: HELD[this.level]!,
+      timed: this.timed,
+      periods: [...this.periods].map(([key, c]): SavedPeriod =>
+        summed ? [key, c.rows, c.sum.saved()] : [key, c.rows],
+      ),
+      undated: summed ? { rows, sum: sum.saved() } : { rows },
+      dates: { ...this.dates },
+      skipped: { ...this.skipped },
+    };
   }
 
   /** read is what the fold holds, as plain numbers. */

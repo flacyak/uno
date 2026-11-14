@@ -14,6 +14,7 @@ import {
   GroupsFold,
   SampleFold,
   TALLY_VERSION,
+  TimeFold,
 } from '@tally';
 import { UINT32_RANGE, seeded } from '@core-tests/lab/cache/stats';
 import {
@@ -25,6 +26,8 @@ import {
 } from '@core-tests/testdata/sales-q3';
 
 const SEEDS = 200;
+// The fixture's first column, its dates.
+const DATE = 0;
 const DRAWS = 48;
 const HALF = DRAWS / 2;
 const encoder = new TextEncoder();
@@ -252,10 +255,24 @@ test('a save that holds no scatter fold reads back as none', () => {
   for (const v of unsaved) expect(SampleFold.restored(v)).toBeUndefined();
 });
 
+/** Dates in every layout, blank, not dates, and dates only one order reads. */
+const DATES = [
+  '',
+  'n/a',
+  '2024-03-04',
+  '2024-03-04 9:05',
+  '03/04/2024 23:59:59',
+  '13/04/2024',
+  '04/13/2024 0:30',
+  '2024-03-04T23:30:00-05:00',
+  '1700000000',
+];
+
 /**
  * The hash of the folds TALLY_VERSION makes of the fixture: its rows by
- * region, its revenue and units summed by channel with each mark, and its
- * revenue against units with each mark. It
+ * region, its revenue and units summed by channel with each mark, its
+ * revenue against units with each mark, and its rows and revenue over its
+ * dates in each order, with DATES added. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -263,6 +280,7 @@ const GOLDEN = {
   version: 1,
   groups: '2ae37431f8e378df8ef90b5aa4776174d479cc156f24f3a898676c88cdd7c6cd',
   sample: '82b28cba5c4ad68f0358cb3c9b9cfbe9e4aaecbb4f143ca0412395470acb6432',
+  time: '2df69fd36bdc14b0210c23556d82b8f16274974e471b7d7464b59c1c25e34b15',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -302,4 +320,16 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(samples))),
     'a scatter fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.sample);
+  const dates = [...column(DATE), ...DATES];
+  const cells = [...revenue, ...DATES.map((_, i) => CELLS[i % CELLS.length]!)];
+  const times = (['day', 'month'] as const).flatMap((order) => [
+    new TimeFold(order),
+    new TimeFold(order, 'point'),
+    new TimeFold(order, 'comma'),
+  ]);
+  for (const fold of times) dates.forEach((v, r) => fold.add(v, cells[r]));
+  expect(
+    hashOf(encoder.encode(JSON.stringify(times.map((f) => f.saved())))),
+    'a time fold, or how a cell reads as a date or a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.time);
 });
