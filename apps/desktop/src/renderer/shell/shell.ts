@@ -119,6 +119,8 @@ export class Shell {
   private armed: string | undefined;
   /** The save in flight. A second Ctrl+S joins it, and the × waits for it. */
   private saving: Promise<void> | undefined;
+  /** The write that keeps a clean workspace's indexes and folds, in flight: see `keep`. */
+  private keeping: Promise<void> | undefined;
   /** The input strategy, used by the grid and the status bar. */
   private input: InputStrategy = strategy(localStorage.getItem(INPUT_KEY));
   /** The open pop-up menu, formula form and chart form, if any. */
@@ -935,7 +937,10 @@ export class Shell {
       this.workspace?.close();
       this.refresher?.dispose();
       this.workspace = w;
-      w.onTally = (chart) => this.layer?.tallied(chart);
+      w.onTally = (chart) => {
+        this.layer?.tallied(chart);
+        this.keep(w);
+      };
       const refresher = new Refresher(
         (id) => this.scheduled(w, id).catch((err: unknown) => this.reopened(w, err)),
         (id) => {
@@ -943,7 +948,10 @@ export class Shell {
         },
       );
       this.refresher = refresher;
-      w.onIndexed = (id) => refresher.ready(id);
+      w.onIndexed = (id) => {
+        refresher.ready(id);
+        this.keep(w);
+      };
       // Close any menu or form open for the replaced workspace. One opened
       // again leaves them, and the focus, to the person.
       if (!kept) this.closePopups();
@@ -964,6 +972,7 @@ export class Shell {
       }
       this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
       this.plan();
+      this.keep(w);
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.
@@ -1567,6 +1576,7 @@ export class Shell {
    */
   private async write(on: Showing, path: string | undefined): Promise<void> {
     const { workspace: w, grid } = on;
+    await this.keeping;
     try {
       const at = path ?? (await this.host.pickSave(w.suggestedFileName));
       if (at === undefined) return; // cancelled
@@ -1586,6 +1596,31 @@ export class Shell {
     }
     this.paintTabs();
     this.paintStatus();
+    this.keep(w);
+  }
+
+  /**
+   * keep writes the open workspace where the host keeps such a write
+   * (`Host.keep`), once an index it read is complete, every chart is folded
+   * and nothing is unsaved, so the saved copy carries the indexes and folds.
+   * Nobody asked for it, so it says nothing, success or failure, and marks
+   * nothing saved: an edit made while it is out stays unsaved, and a save
+   * asked for meanwhile waits for it.
+   */
+  private keep(w: Workspace): void {
+    const { host } = this;
+    const on = this.showing();
+    if (host.keep === undefined || on?.workspace !== w || w.path === "") return;
+    if (this.saving !== undefined || this.keeping !== undefined || !w.keepable) return;
+    const path = w.path;
+    this.keeping = w
+      .bytes(on.grid.selection(), path)
+      .then((bytes) => host.keep?.(path, bytes))
+      .catch(() => undefined)
+      .finally(() => {
+        this.keeping = undefined;
+        this.keep(w);
+      });
   }
 
   // ---------------------------------------------------------- command line

@@ -161,6 +161,15 @@ export class Charts {
     });
   }
 
+  /** Whether every chart's latest tally is complete, so a save keeps each whole fold. */
+  get folded(): boolean {
+    return this.all.every((chart) => {
+      const held = this.tallied.get(chart.id);
+      if (!reads(held, chart.source, chart.plot)) return false;
+      return held.latest.t !== "unread" && held.latest.coverage.complete;
+    });
+  }
+
   /** Adds a chart under a new id and returns it. It shows at once, and a
    * refusal takes it away. */
   async add(chart: Omit<Chart, "id">): Promise<Chart> {
