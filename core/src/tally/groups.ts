@@ -7,6 +7,9 @@ import type { Mark } from '@num';
 import { parse } from '@num';
 
 import { ExactSum } from './exact.ts';
+import type { SavedSum } from './exact.ts';
+import { isCount, isMark, isRecord } from './saved.ts';
+import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
 
 /**
@@ -49,10 +52,29 @@ export interface Groups {
   skipped: Skipped;
 }
 
+/** One group as a save writes it: its rows, and their sum when summed. */
+interface SavedCount {
+  value: string;
+  rows: number;
+  sum?: SavedSum;
+}
+
+/**
+ * SavedGroups is every bit of a GroupsFold, as a save writes it: the mark it
+ * sums with, none when it counts rows, its groups in the order they began,
+ * the rest's rows and sum, and the cells it left out.
+ */
+export interface SavedGroups {
+  mark?: Mark;
+  groups: SavedCount[];
+  rest: Omit<SavedCount, 'value'>;
+  skipped: Skipped;
+}
+
 /** Rows counted together, and their cells added exactly. */
 class Count {
   rows = 0;
-  readonly sum = new ExactSum();
+  sum = new ExactSum();
 }
 
 /**
@@ -96,6 +118,49 @@ export class GroupsFold {
     const group = this.groups.get(value);
     this.count(group ?? this.rest, cell, -1);
     if (group?.rows === 0) this.groups.delete(value);
+  }
+
+  /** saved is what the fold holds, which `restored` reads back as it was. */
+  saved(): SavedGroups {
+    const summed = this.mark !== undefined;
+    const kept = ({ rows, sum }: Count) =>
+      summed ? { rows, sum: sum.saved() } : { rows };
+    return {
+      mark: this.mark,
+      groups: [...this.groups].map(([value, c]) => ({ value, ...kept(c) })),
+      rest: kept(this.rest),
+      skipped: { ...this.skipped },
+    };
+  }
+
+  /** restored is the fold `saved` holds, or undefined where it holds none. */
+  static restored(saved: unknown): GroupsFold | undefined {
+    if (!isRecord(saved)) return undefined;
+    const { mark, groups, rest } = saved;
+    const skipped = restoredSkipped(saved['skipped']);
+    if (skipped === undefined || (mark !== undefined && !isMark(mark)))
+      return undefined;
+    if (!Array.isArray(groups) || groups.length > DISTINCT_AT_MOST)
+      return undefined;
+    const fold =
+      mark === undefined ? new GroupsFold() : new GroupsFold('sum', mark);
+    // A count holds rows, and its sum where the fold sums.
+    const count = (v: unknown, into: Count): boolean => {
+      if (!isRecord(v) || !isCount(v['rows'])) return false;
+      into.rows = v['rows'];
+      const sum = mark === undefined ? into.sum : ExactSum.restored(v['sum']);
+      if (sum !== undefined) into.sum = sum;
+      return sum !== undefined;
+    };
+    for (const g of groups) {
+      const into = new Count();
+      if (!isRecord(g) || typeof g['value'] !== 'string') return undefined;
+      if (!count(g, into) || into.rows === 0) return undefined;
+      fold.groups.set(g['value'], into);
+    }
+    if (!count(rest, fold.rest)) return undefined;
+    Object.assign(fold.skipped, skipped);
+    return fold;
   }
 
   /** snapshot reads the fold as plain numbers and strings. */
