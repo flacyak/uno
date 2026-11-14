@@ -90,10 +90,11 @@ export function civilFromDays(days: number): Civil {
 /** How a date written 03/04/2024 reads: day first (3 April) or month first (4 March). */
 export type Order = 'day' | 'month';
 
+const MINUTE_SECONDS = 60;
 const HOUR_MINUTES = 60;
 const DAY_HOURS = 24;
 const DAY_MINUTES = DAY_HOURS * HOUR_MINUTES;
-/** A year is written in four digits, and a month or day in two at most. */
+/** A year is written in four digits, and a month, day or time field in two at most. */
 const YEAR_DIGITS = 4;
 const FIELD_DIGITS = 2;
 const DECIMAL = 10;
@@ -101,13 +102,23 @@ const DECIMAL = 10;
 const code = (c: string): number => c.charCodeAt(0);
 const ZERO = code('0');
 const NINE = code('9');
+const COLON = code(':');
 const POINT = code('.');
+const PLUS = code('+');
 const MINUS = code('-');
 const SLASH = code('/');
+const SPACE = code(' ');
+const UPPER_T = code('T');
+const LOWER_T = code('t');
+const UPPER_Z = code('Z');
+const LOWER_Z = code('z');
 
 /**
  * readDate is `v` as minutes since 1970-01-01 00:00 as written, or undefined
- * when it is not a date. A year-last date reads by `order`.
+ * when it is not a date. A date with a time of day counts its hours and
+ * minutes; seconds and an offset are checked and left out, so a cell counts
+ * in the period it writes. A year-last date reads by `order`, and a year and
+ * month as its first day.
  * It scans a character at a time, with no regular expression, since a chart
  * reads every cell of its column.
  */
@@ -115,7 +126,7 @@ export function readDate(v: string, order: Order): number | undefined {
   const from = 0;
   const to = v.length;
 
-  // Three fields of digits: field1 ends at end1 and so on.
+  // Three fields of digits, or a year and month: field1 ends at end1 and so on.
   const field1 = readDigits(v, from, to);
   const end1 = digitsStop;
   const sep = v.charCodeAt(end1);
@@ -131,6 +142,11 @@ export function readDate(v: string, order: Order): number | undefined {
   const length2 = end2 - end1 - 1;
   if (length2 < 1 || length2 > FIELD_DIGITS) return undefined;
 
+  if (!yearLast && end2 === to) {
+    // A year and month, 2024-03, reads as its first day.
+    const yearMonth = sep === MINUS && length2 === FIELD_DIGITS;
+    return yearMonth ? minutes(field1, field2, 1, 0) : undefined;
+  }
   if (v.charCodeAt(end2) !== sep) return undefined;
   const field3 = readDigits(v, end2 + 1, to);
   const end3 = digitsStop;
@@ -140,17 +156,78 @@ export function readDate(v: string, order: Order): number | undefined {
     : length3 >= 1 && length3 <= FIELD_DIGITS;
   if (!fits) return undefined;
 
-  if (end3 !== to) return undefined;
-  if (!yearLast) return minutes(field1, field2, field3);
+  const time = end3 === to ? 0 : timeOfDay(v, end3, to);
+  if (time === undefined) return undefined;
+  if (!yearLast) return minutes(field1, field2, field3, time);
   return order === 'day'
-    ? minutes(field3, field2, field1)
-    : minutes(field3, field1, field2);
+    ? minutes(field3, field2, field1, time)
+    : minutes(field3, field1, field2, time);
 }
 
-/** The minutes a real date starts at, or undefined when the date is not real. */
-function minutes(year: number, month: number, day: number): number | undefined {
+/** The minutes of a real date and `time`, or undefined when the date is not real. */
+function minutes(
+  year: number,
+  month: number,
+  day: number,
+  time: number,
+): number | undefined {
   if (!isReal(year, month, day)) return undefined;
-  return daysFromCivil(year, month, day) * DAY_MINUTES;
+  return daysFromCivil(year, month, day) * DAY_MINUTES + time;
+}
+
+/**
+ * The minutes into the day a time from `at` to `to` writes: a T, t or space,
+ * HH:MM, an optional :SS with an optional fraction, then an optional Z or
+ * ±HH:MM. Seconds stop at 59, so a leap second is not a time.
+ */
+function timeOfDay(v: string, at: number, to: number): number | undefined {
+  const between = v.charCodeAt(at);
+  if (between !== UPPER_T && between !== LOWER_T && between !== SPACE) {
+    return undefined;
+  }
+  let i = at + 1;
+  const hours = twoDigits(v, i);
+  i += FIELD_DIGITS;
+  if (v.charCodeAt(i++) !== COLON) return undefined;
+  const mins = twoDigits(v, i);
+  i += FIELD_DIGITS;
+  if (hours < 0 || hours >= DAY_HOURS) return undefined;
+  if (mins < 0 || mins >= HOUR_MINUTES) return undefined;
+  if (v.charCodeAt(i) === COLON) {
+    const secs = twoDigits(v, ++i);
+    if (secs < 0 || secs >= MINUTE_SECONDS) return undefined;
+    i += FIELD_DIGITS;
+    if (v.charCodeAt(i) === POINT) {
+      readDigits(v, ++i, to);
+      if (digitsStop === i) return undefined;
+      i = digitsStop;
+    }
+  }
+  return offsetEnd(v, i) === to ? hours * HOUR_MINUTES + mins : undefined;
+}
+
+/**
+ * The index past the offset at `i`: a Z, or ±HH:MM checked for form only, or
+ * `i` itself when none is written. -1 when one is begun and not finished.
+ */
+function offsetEnd(v: string, i: number): number {
+  const c = v.charCodeAt(i);
+  if (c === UPPER_Z || c === LOWER_Z) return i + 1;
+  if (c !== PLUS && c !== MINUS) return i;
+  const colon = i + 1 + FIELD_DIGITS;
+  const written =
+    twoDigits(v, i + 1) >= 0 &&
+    v.charCodeAt(colon) === COLON &&
+    twoDigits(v, colon + 1) >= 0;
+  return written ? colon + 1 + FIELD_DIGITS : -1;
+}
+
+/** The number two digits at `at` write, or -1 when either is not a digit. */
+function twoDigits(v: string, at: number): number {
+  const tens = v.charCodeAt(at);
+  const ones = v.charCodeAt(at + 1);
+  if (!isDigit(tens) || !isDigit(ones)) return -1;
+  return (tens - ZERO) * DECIMAL + (ones - ZERO);
 }
 
 /**
