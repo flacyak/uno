@@ -250,3 +250,41 @@ test('a time fold sums cells with their mark, and undated rows apart', () => {
     skipped: { blank: 1, unparsed: 1 },
   });
 });
+
+const UNIX_SECONDS = 1_700_000_000;
+const HOUR_SECONDS = 3_600;
+
+test('a time fold counts the dates it leaves out, and those read the other way', () => {
+  const fold = new TimeFold('month');
+  const dates = [
+    '',
+    '',
+    'n/a',
+    '13/04/2024',
+    '13/04/2024 9:05',
+    '2024-13-01',
+    '04/13/2024',
+    '2024-03-04 9:05',
+    '2024-03-04 00:00',
+    '2024-03-04',
+    '2024-03',
+  ];
+  for (const v of dates) fold.add(v);
+  fold.remove('');
+  expect(fold.read()).toMatchObject({
+    undated: { rows: 5 },
+    dates: { blank: 1, unparsed: 4, other: 2 },
+    timed: 1,
+  });
+  // Unix time reads in no other order.
+  const unix = new TimeFold('s');
+  for (const v of [`${UNIX_SECONDS}`, `${UNIX_SECONDS}000`, '13/04/2024']) {
+    unix.add(v);
+  }
+  expect(unix.read()).toMatchObject({
+    periods: [{ key: Math.floor(UNIX_SECONDS / HOUR_SECONDS), rows: 1 }],
+    undated: { rows: 2 },
+    dates: { blank: 0, unparsed: 2, other: 0 },
+    timed: 1,
+  });
+});

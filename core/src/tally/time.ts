@@ -23,6 +23,7 @@ export const HELD_AT_MOST = 8_192;
 
 const HOUR_MINUTES = 60;
 const DAY_HOURS = 24;
+const DAY_MINUTES = DAY_HOURS * HOUR_MINUTES;
 const YEAR_MONTHS = 12;
 
 /**
@@ -38,6 +39,17 @@ const COARSER: ReadonlyArray<(key: number) => number> = [
   (month) => Math.floor(month / YEAR_MONTHS),
 ];
 
+/** The order a date written year last reads in when the fold's does not. */
+const OTHER: Record<Order | UnixUnit, Order | undefined> = {
+  day: 'month',
+  month: 'day',
+  s: undefined,
+  ms: undefined,
+};
+
+/** Date cells a fold left out, and of those, how many read in the other order. */
+export type Undated = Skipped & { other: number };
+
 /** One held period: its key, its rows, and their sum, 0 when counting rows. */
 export interface Period {
   key: number;
@@ -50,8 +62,14 @@ export interface Periods {
   held: Held;
   /** The periods that hold a row, earliest first. */
   periods: Period[];
+  /**
+   * Rows dated past midnight, so a column of dates, or of date-times all at
+   * 00:00, never offers hours.
+   */
+  timed: number;
   /** Rows whose date cell was blank or not a date, and their sum. */
   undated: { rows: number; sum: number };
+  dates: Undated;
   /** Cells of the summed column, none when the fold counts rows. */
   skipped: Skipped;
 }
@@ -61,8 +79,9 @@ export interface Periods {
  * their cells in another column. Rows are added and taken back one at a
  * time, so an edit moves a fold by the row it changed. It holds hours while
  * there are at most HELD_AT_MOST of them, then merges them into days, months
- * and years as each passes the bound, so every count and sum stays exact. It never goes back to a finer period. A row whose date does not read
- * with the fold's reading is counted as undated.
+ * and years as each passes the bound, so every count and sum stays exact. It
+ * never goes back to a finer period. A row whose date does not read with the
+ * fold's reading is counted as undated.
  */
 export class TimeFold {
   /** How date cells read: by an order, or as Unix time. */
@@ -72,7 +91,9 @@ export class TimeFold {
   /** HELD's place of the period held. */
   private level = 0;
   private readonly periods = new Map<number, Count>();
+  private timed = 0;
   private readonly undated = new Count();
+  private readonly dates: Undated = { blank: 0, unparsed: 0, other: 0 };
   private readonly skipped: Skipped = { blank: 0, unparsed: 0 };
 
   /** A fold that sums reads its cells with `mark`; one with none counts rows. */
@@ -100,7 +121,9 @@ export class TimeFold {
     return {
       held: HELD[this.level]!,
       periods,
+      timed: this.timed,
       undated: { rows, sum: sum.value() },
+      dates: { ...this.dates },
       skipped: { ...this.skipped },
     };
   }
@@ -109,9 +132,11 @@ export class TimeFold {
   private count(date: string, cell: string, sign: 1 | -1): void {
     const minute = readDate(date, this.reading);
     if (minute === undefined) {
+      this.undate(date, sign);
       counted(this.undated, cell, sign, this.mark, this.skipped);
       return;
     }
+    if (minute % DAY_MINUTES !== 0) this.timed += sign;
     let key = Math.floor(minute / HOUR_MINUTES);
     for (let i = 0; i < this.level; i++) key = COARSER[i]!(key);
     let period = this.periods.get(key);
@@ -123,6 +148,19 @@ export class TimeFold {
     if (period.rows === 0) this.periods.delete(key);
     while (this.periods.size > HELD_AT_MOST && this.level < COARSER.length) {
       this.coarsen();
+    }
+  }
+
+  /** undate counts a date cell left out, or takes one back. */
+  private undate(date: string, sign: 1 | -1): void {
+    if (date === '') {
+      this.dates.blank += sign;
+      return;
+    }
+    this.dates.unparsed += sign;
+    const other = OTHER[this.reading];
+    if (other !== undefined && readDate(date, other) !== undefined) {
+      this.dates.other += sign;
     }
   }
 
