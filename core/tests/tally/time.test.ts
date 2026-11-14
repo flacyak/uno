@@ -6,10 +6,10 @@ import { expect, test } from 'vite-plus/test';
 
 import { readDate } from '@date';
 import { read } from '@ingest';
-import { HELD_AT_MOST, TimeFold } from '@tally';
+import { ExactSum, HELD_AT_MOST, TimeFold } from '@tally';
 import type { Held } from '@tally';
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
-import { ROWS, bytes } from '@core-tests/testdata/sales-q3';
+import { REVENUE, ROWS, bytes } from '@core-tests/testdata/sales-q3';
 
 const DATE = 0;
 const HOUR_MINUTES = 60;
@@ -79,19 +79,23 @@ test('a time fold moved by edits reads as one that counts again', () => {
   for (let seed = 1; seed <= SEEDS; seed++) {
     const random = seeded(seed);
     const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
-    const rows = Array.from({ length: EDITED_ROWS }, () => pick(EDITED_DATES));
+    const row = (): [string, string] => [
+      pick(EDITED_DATES),
+      pick(['', 'n/a', `${random()}`, `${-random()}`]),
+    ];
+    const rows = Array.from({ length: EDITED_ROWS }, row);
     const folded = () => {
-      const fold = new TimeFold('month');
-      for (const date of rows) fold.add(date);
+      const fold = new TimeFold('month', 'point');
+      for (const r of rows) fold.add(...r);
       return fold;
     };
     const fold = folded();
     // As many edits as rows, each a new row in place of an old one.
     for (let edit = 0; edit < EDITED_ROWS; edit++) {
       const r = Math.floor(random() * EDITED_ROWS);
-      fold.remove(rows[r]!);
-      rows[r] = pick(EDITED_DATES);
-      fold.add(rows[r]);
+      fold.remove(...rows[r]!);
+      rows[r] = row();
+      fold.add(...rows[r]);
     }
     expect(fold.read(), `seed ${seed}`).toEqual(folded().read());
   }
@@ -205,5 +209,44 @@ test('a fold that coarsened stays coarse once its rows are taken back', () => {
   expect(fold.read()).toMatchObject({
     held: 'day',
     periods: [{ key: keyOf(minutes[0]!, 'day'), rows: 1 }],
+  });
+});
+
+test("a time fold sums the sales sheet's revenue per day, exactly", () => {
+  const fold = new TimeFold('day', 'point');
+  const sums = new Map<number, ExactSum>();
+  const revenue = column(REVENUE);
+  column(DATE).forEach((v, r) => {
+    fold.add(v, revenue[r]);
+    const sum = sums.get(hourOf(v)) ?? new ExactSum();
+    if (revenue[r] !== '') sum.add(Number(revenue[r]));
+    sums.set(hourOf(v), sum);
+  });
+  const { periods, skipped } = fold.read();
+  expect(periods.map(({ key, sum }) => [key, sum])).toEqual(
+    [...sums].sort(([a], [b]) => a - b).map(([key, sum]) => [key, sum.value()]),
+  );
+  expect(skipped).toEqual({ blank: 4, unparsed: 0 });
+});
+
+test('a time fold sums cells with their mark, and undated rows apart', () => {
+  const fold = new TimeFold('day', 'comma');
+  const rows: Array<[string, string]> = [
+    ['2024-03-04', '1,5'],
+    ['2024-03-04 23:59', '2,25'],
+    ['2024-03-04', 'n/a'],
+    ['2024-03-05', ''],
+    ['', '1.234,56'],
+    ['n/a', '0,5'],
+  ];
+  for (const [date, cell] of rows) fold.add(date, cell);
+  expect(fold.read()).toMatchObject({
+    periods: [
+      { key: hourOf('2024-03-04'), rows: 2, sum: 1.5 },
+      { key: hourOf('2024-03-04 23:00'), rows: 1, sum: 2.25 },
+      { key: hourOf('2024-03-05'), rows: 1, sum: 0 },
+    ],
+    undated: { rows: 2, sum: 1235.06 },
+    skipped: { blank: 1, unparsed: 1 },
   });
 });
