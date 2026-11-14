@@ -72,7 +72,7 @@ export interface SavedGroups {
 }
 
 /** Rows counted together, and their cells added exactly. */
-class Count {
+export class Count {
   rows = 0;
   sum = new ExactSum();
 }
