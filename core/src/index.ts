@@ -8,6 +8,7 @@
 
 export * as go from './go/index.ts';
 export * as num from './num/index.ts';
+export * as date from './date/index.ts';
 export * as notation from './notation/index.ts';
 export * as formula from './formula/index.ts';
 export * as program from './program/index.ts';
