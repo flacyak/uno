@@ -81,15 +81,26 @@ export function inferMark(values: readonly string[]): Mark {
 }
 
 // The layouts a date can be written in: year first with one separator, year
-// last the same way, a month by name, and RFC 3339. These are matched by
-// hand because `new Date` accepts far more.
-const YEAR_FIRST = /^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})$/;
-const YEAR_LAST = /^(\d{1,2})([-/.])(\d{1,2})\2(\d{4})$/;
+// last the same way, a year and month, and a month by name. A year-first or
+// year-last date may go on to a time of day as RFC 3339 writes it, with the
+// seconds and the offset optional. These are matched by hand because
+// `new Date` accepts far more.
+const TIME = String.raw`(?:[Tt ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:\d{2})?)?`;
+const YEAR_FIRST = new RegExp(
+  String.raw`^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})${TIME}$`,
+);
+const YEAR_LAST = new RegExp(
+  String.raw`^(\d{1,2})([-/.])(\d{1,2})\2(\d{4})${TIME}$`,
+);
+const YEAR_MONTH = /^(\d{4})-(\d{2})$/;
 // Nov. 6, 1970 and November 6 1970; 6 Nov 1970 and 06-Nov-1970.
 const NAME_FIRST = /^([A-Za-z]+)\.? (\d{1,2}),? (\d{4})$/;
 const DAY_FIRST = /^(\d{1,2})([ -])([A-Za-z]+)\.?\2(\d{4})$/;
-const RFC3339 =
-  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
+
+/** The last hour of a day. */
+const LAST_HOUR = 23;
+/** The last minute of an hour, and the last second of a minute. */
+const LAST_MINUTE = 59;
 
 // A month is its full name or its three-letter form, plus "sept".
 const MONTHS = new Map<string, number>();
@@ -130,26 +141,39 @@ export function isDate(v: string): boolean {
   return false;
 }
 
+/**
+ * Whether the time a YEAR_FIRST or YEAR_LAST match wrote, in groups 5 to 7, is
+ * a real one, or there is none. Seconds stop at 59, so a leap second reads as
+ * text.
+ */
+function isRealTime(m: RegExpExecArray): boolean {
+  const [hours, minutes, seconds] = [m[5], m[6], m[7]];
+  if (hours === undefined) return true;
+  return (
+    Number(hours) <= LAST_HOUR &&
+    Number(minutes) <= LAST_MINUTE &&
+    (seconds === undefined || Number(seconds) <= LAST_MINUTE)
+  );
+}
+
 /** Each date layout, with a check that its fields make a real date. */
 const DATE_SHAPES: ReadonlyArray<[RegExp, (m: RegExpExecArray) => boolean]> = [
-  [YEAR_FIRST, (m) => isRealDate(Number(m[1]), Number(m[3]), Number(m[4]))],
+  [
+    YEAR_FIRST,
+    (m) =>
+      isRealDate(Number(m[1]), Number(m[3]), Number(m[4])) && isRealTime(m),
+  ],
   // 20-11-2024 is day first and 11/20/2024 is month first. Either reading
   // counts.
   [
     YEAR_LAST,
     (m) =>
-      isRealDate(Number(m[4]), Number(m[3]), Number(m[1])) ||
-      isRealDate(Number(m[4]), Number(m[1]), Number(m[3])),
+      (isRealDate(Number(m[4]), Number(m[3]), Number(m[1])) ||
+        isRealDate(Number(m[4]), Number(m[1]), Number(m[3]))) &&
+      isRealTime(m),
   ],
+  // A year and month reads as its first day.
+  [YEAR_MONTH, (m) => isRealDate(Number(m[1]), Number(m[2]), 1)],
   [NAME_FIRST, (m) => isRealDate(Number(m[3]), month(m[1]!), Number(m[2]))],
   [DAY_FIRST, (m) => isRealDate(Number(m[4]), month(m[3]!), Number(m[1]))],
-  [
-    RFC3339,
-    (m) =>
-      isRealDate(Number(m[1]), Number(m[2]), Number(m[3])) &&
-      // Seconds stop at 59, so a leap second reads as text.
-      Number(m[4]) <= 23 &&
-      Number(m[5]) <= 59 &&
-      Number(m[6]) <= 59,
-  ],
 ];
