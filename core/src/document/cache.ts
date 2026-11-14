@@ -1,8 +1,11 @@
 /**
  * @fileoverview The cache a .uno keeps of a pointed-at source: its row index
- * and the key it holds for, under cache/<id>/. A reader that ignores the
- * folder reads the workspace as well, so the manifest's format stays.
+ * and the key it holds for, and the folds of its charts, under cache/<id>/.
+ * A reader that ignores the folder reads the workspace as well, so the
+ * manifest's format stays.
  */
+
+import { TALLY_VERSION } from '@tally';
 
 import type { Document, Manifest } from './document.ts';
 import { resolvedPath, storedPath } from './document.ts';
@@ -13,6 +16,7 @@ export const CACHE_VERSION = 1;
 export const CACHE_DIR = 'cache/';
 const indexEntry = (id: string): string => `${CACHE_DIR}${id}/index.json`;
 const blocksEntry = (id: string): string => `${CACHE_DIR}${id}/blocks.bin`;
+const chartsEntry = (id: string): string => `${CACHE_DIR}${id}/charts.json`;
 
 /** SavedSource is what a .uno keeps of one source's row index. */
 export interface SavedSource {
@@ -29,7 +33,16 @@ export interface SavedSource {
   tail?: string;
   /** The block starts as stored, decoded once the key matches. */
   blocks: Uint8Array;
+  /**
+   * The fold of each of the source's charts by the chart's id, as the
+   * engine wrote it. Read only where this build's TALLY_VERSION folded them
+   * over the edits the log holds now.
+   */
+  charts?: Readonly<Record<string, unknown>>;
 }
+
+/** Digest is the SHA-256 of a source's edits, by the source's id. */
+export type Digest = (id: string) => string;
 
 /** One entry of the container, and what its deflate is kept under. */
 type Entry = { name: string; bytes: Uint8Array; key?: string };
@@ -51,6 +64,7 @@ export function readCache(
   entries: Record<string, Uint8Array>,
   m: Manifest,
   at: string,
+  log: Digest,
 ): Map<string, SavedSource> | undefined {
   const cache = new Map<string, SavedSource>();
   for (const { id } of m.sources) {
@@ -62,7 +76,12 @@ export function readCache(
     if (typeof counted !== 'number' || typeof complete !== 'boolean') continue;
     if (!isHash(head) || !isHash(tail)) continue;
     const kept = { key, counted, complete, head, tail, blocks };
-    cache.set(id, { path: resolvedPath(path, at), ...kept });
+    // Folds made by another build, or over other edits, are folded again.
+    const folded = parsed(entries[chartsEntry(id)]);
+    const charts = folded?.['charts'];
+    const held = folded?.['version'] === TALLY_VERSION && isRecord(charts);
+    const folds = held && folded['log'] === log(id) ? { charts } : {};
+    cache.set(id, { path: resolvedPath(path, at), ...kept, ...folds });
   }
   return cache.size === 0 ? undefined : cache;
 }
@@ -76,28 +95,34 @@ export interface Laid {
 /**
  * cacheEntries lays out the cache of each of the sources of `d` with one,
  * in their order, but a cache that would pass a cap: that source is saved
- * without one and read afresh when it opens. The block starts deflate once
- * for each file and count of them.
+ * without its charts' folds, or where that passes too, without any, and is
+ * read afresh when it opens. The block starts deflate once for each file
+ * and count of them. Each source's folds hold for its edits, by `log`.
  */
-export function cacheEntries(d: Document): Laid {
+export function cacheEntries(d: Document, log: Digest): Laid {
   let room = CACHE_AT_MOST;
   const laid: Laid = { entries: [], kept: new Map() };
   for (const { id } of d.sources) {
     const saved = d.cache?.get(id);
     if (saved === undefined) continue;
-    const { path, blocks, ...rest } = saved;
+    const { path, blocks, charts, ...rest } = saved;
     const index = { version: CACHE_VERSION, path: storedPath(path, d.at) };
     const json = JSON.stringify({ ...index, ...rest }, undefined, 2);
     const bytes = encoder.encode(json);
+    const folds = charts && { version: TALLY_VERSION, log: log(id), charts };
+    const folded = folds && encoder.encode(JSON.stringify(folds));
     const size = bytes.length + blocks.length;
-    if (size > Math.min(CACHE_SOURCE_AT_MOST, room)) continue;
-    room -= size;
+    const cap = Math.min(CACHE_SOURCE_AT_MOST, room);
+    if (size > cap) continue;
+    const charted = folded !== undefined && size + folded.length <= cap;
+    room -= charted ? size + folded.length : size;
     const key = `${path} ${JSON.stringify(saved.key)} ${blocks.length}`;
     laid.entries.push(
       { name: indexEntry(id), bytes },
       { name: blocksEntry(id), bytes: blocks, key },
     );
-    laid.kept.set(id, saved);
+    if (charted) laid.entries.push({ name: chartsEntry(id), bytes: folded });
+    laid.kept.set(id, charted ? saved : { path, blocks, ...rest });
   }
   return laid;
 }

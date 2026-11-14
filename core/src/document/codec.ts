@@ -67,6 +67,7 @@ import {
   storedPath,
 } from './document.ts';
 import { CACHE_DIR, cacheEntries, readCache } from './cache.ts';
+import type { Digest } from './cache.ts';
 import { baseOf } from './path.ts';
 
 const decoder = new TextDecoder('utf-8');
@@ -143,7 +144,7 @@ export function readContainer(
   });
 
   const chartsRead = readCharts(entries[CHARTS_ENTRY]);
-  const cache = readCache(entries, m, at);
+  const cache = readCache(entries, m, at, digests(log));
   return {
     manifest: m,
     sources,
@@ -280,7 +281,7 @@ export function writeDocument(d: Document): Uint8Array {
     });
   }
 
-  const cache = cacheEntries(d);
+  const cache = cacheEntries(d, digests(d.log));
   entries.push(...cache.entries);
   // Extra entries go back in, in name order, so a saved file keeps the same
   // layout between saves.
@@ -1265,6 +1266,24 @@ function editJSON(l: Logged, single: boolean): unknown {
     was: e.was !== undefined && e.was !== '' ? e.was : undefined,
     now: e.now,
   };
+}
+
+/**
+ * digests gives the SHA-256 of each source's edits, a line of JSON each as
+ * a log of several sources writes them, so the folds of a source's charts
+ * hold for the edits they were folded over.
+ */
+function digests(log: readonly Logged[]): Digest {
+  const lines = (id: string) =>
+    log.flatMap((l) => (l.source === id ? [editJSON(l, false)] : []));
+  return (id) =>
+    sha256Hex(
+      encoder.encode(
+        lines(id)
+          .map((l) => JSON.stringify(l))
+          .join('\n'),
+      ),
+    );
 }
 
 /** formatJSON indents with two spaces and ends with a newline. */
