@@ -11,7 +11,7 @@
 import type { Chart, ChartColumn, Plot } from '@document';
 import type { Mark } from '@num';
 import type { Said } from '@said';
-import { GroupsFold, SampleFold } from '@tally';
+import { GroupsFold, SampleFold, isCount, isRecord } from '@tally';
 import type { SavedGroups, SavedSample } from '@tally';
 import type { Tally } from './protocol.ts';
 
@@ -72,6 +72,10 @@ export interface Block {
  */
 export class Tallies {
   private readonly charts = new Map<string, Tallying>();
+  /** The folds a save kept of charts not attached since, by chart id. */
+  private kept: Readonly<Record<string, unknown>> = {};
+  /** The rows the index a save kept holds, which no kept fold passes. */
+  private readable = 0;
   /** Each column's decimal mark, by place, as `remark` was last told. */
   private marks: readonly Mark[] = [];
 
@@ -87,14 +91,53 @@ export class Tallies {
       this.charts.delete(id);
       return t;
     }
-    const was = this.charts.get(id);
+    const was = this.charts.get(id) ?? this.restored(id, t);
     if (was?.key === t.key && readsWith(was, this.marks)) {
       was.plot = plot;
       was.done = false;
+      this.charts.set(id, was);
       return undefined;
     }
     this.charts.set(id, t);
     return undefined;
+  }
+
+  /**
+   * restore keeps `saved`, the folds a save kept by chart id, for the charts
+   * attach finds them for, over an index a save kept of `readable` rows.
+   */
+  restore(saved: Readonly<Record<string, unknown>>, readable: number): void {
+    this.kept = saved;
+    this.readable = readable;
+  }
+
+  /**
+   * restored is `t` with the fold the save kept of the chart with `id`,
+   * where it is of the same columns and holds no row past the index, which
+   * attach keeps where it reads them with the same marks.
+   */
+  private restored(id: string, t: Tallying): Tallying | undefined {
+    const saved = this.kept[id];
+    if (!isRecord(saved) || saved['key'] !== t.key) return undefined;
+    const { rows, ahead, fold } = saved;
+    const run: unknown[] = Array.isArray(ahead) ? ahead : [rows, rows];
+    const [from, end] = run;
+    if (!isCount(rows) || !isCount(from) || !isCount(end)) return undefined;
+    // A run folded ahead starts past the rows folded, and none passes the
+    // index.
+    const ran = from > rows;
+    if (ran !== Array.isArray(ahead) || from > end || end > this.readable)
+      return undefined;
+    const on: Pick<Folding, 'rows' | 'ahead'> = {
+      rows,
+      ahead: ran ? [from, end] : undefined,
+    };
+    if (t.t === 'sample') {
+      const back = SampleFold.restored(fold);
+      return back && { ...t, ...on, fold: back };
+    }
+    const back = GroupsFold.restored(fold);
+    return back && { ...t, ...on, fold: back };
   }
 
   /**

@@ -934,6 +934,8 @@ export class View {
     const print = { head: saved.head, tail: saved.tail };
     if (!grew) {
       if (this.printing) Object.assign(this.print, print);
+      // The charts take the folds the save kept over the same rows.
+      if (saved.charts) this.tallies.restore(saved.charts, index.readable());
       return { index, from: 'saved' };
     }
     const now = await printAt(this.source, index).catch(() => undefined);

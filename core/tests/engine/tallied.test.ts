@@ -1,22 +1,35 @@
 /**
  * @fileoverview A save keeps the fold of each chart over a file a path
  * points at, as its tally reads it, and the folds of a fixed workspace are
- * pinned to TALLY_VERSION, a formula column's among them.
+ * pinned to TALLY_VERSION, a formula column's among them. A reopen whose
+ * edits and fold version match draws each chart complete without a pass.
  */
 
-import { strFromU8, unzipSync } from 'fflate';
-import { copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vite-plus/test';
 
+import { LOG_ENTRY } from '@document';
 import type { Chart, Plot } from '@document';
 import type { Engine, SourceHandle, Tally } from '@engine';
 import { hashOf } from '@engine/grown';
 import { NO_ROW, Op } from '@sheet';
 import { GroupsFold, SampleFold, TALLY_VERSION } from '@tally';
 import { CHANNEL, REGION, REVENUE, UNITS } from '@core-tests/testdata/sales-q3';
-import { FIXTURE, TINY, connect, indexed, openOne, sales } from './harness.ts';
+import { blobProvider } from '@store';
+import { diskProvider } from '@store/node';
+import {
+  FIXTURE,
+  TINY,
+  bytes,
+  connect,
+  counted,
+  indexed,
+  openOne,
+  sales,
+} from './harness.ts';
 
 const HEADERS = sales.columns.map((c) => c.header);
 /** The fixture's column `col`, as a chart names it. */
@@ -131,4 +144,86 @@ test('the folds of a fixed workspace are as TALLY_VERSION says', async () => {
   } finally {
     done();
   }
+});
+
+/** Asked is what a reopen read of the source. */
+type Asked = Array<{ offset: number | undefined; length: number }>;
+
+/**
+ * reopened saves the charted fixture, changes the save by `change`, and
+ * reopens it in a second engine, which reads the file through a counted
+ * disk. It returns the tallies each engine heard, and what the second read.
+ */
+async function reopened(
+  change: (entries: Record<string, Uint8Array>, source: string) => void,
+) {
+  const first = connect(TINY);
+  const asked: Asked = [];
+  try {
+    const { src, tallies, uno, at } = await charted(first.engine);
+    const entries = unzipSync(uno);
+    change(entries, src.id);
+    await writeFile(at, zipSync(entries));
+    const csv = join(dir!, 'sales-q3.csv');
+    const again = connect(TINY, [
+      counted(diskProvider(), csv, asked),
+      blobProvider(),
+    ]);
+    try {
+      const back = await openOne(again.engine, { name: 'q3.uno', path: at });
+      const heard = tallied(back);
+      return { tallies, again: await heard, asked };
+    } finally {
+      again.done();
+    }
+  } finally {
+    first.done();
+  }
+}
+
+/**
+ * The most of the fixture a reopen with every chart drawn reads: the sniff
+ * and the rows the columns are told from, 75,637 of 240,435 bytes under
+ * TINY. A pass for the charts reads the whole file.
+ */
+const UNCHARTED_SHARE = 0.5;
+
+/** share is how much of the fixture `asked` read. */
+const share = (asked: Asked) =>
+  asked.reduce((sum, a) => sum + a.length, 0) / bytes.length;
+
+test('a reopen whose edits and fold version match draws each chart complete without a pass, as it was', async () => {
+  const { tallies, again, asked } = await reopened(() => undefined);
+  expect(again).toStrictEqual(tallies);
+  expect(share(asked)).toBeLessThan(UNCHARTED_SHARE);
+});
+
+test('a reopen over edits an older build added to the log folds every chart again', async () => {
+  const { tallies, again, asked } = await reopened((entries) => {
+    // A build that carries cache/ whole adds an edit in its save.
+    const log = strFromU8(entries[LOG_ENTRY]!);
+    const bind = JSON.parse(log.split('\n')[0]!);
+    const set = { ...bind, seq: 2, op: Op.Set, row: 0, col: REGION };
+    const edit = { ...set, was: 'West', now: 'Atlantis' };
+    entries[LOG_ENTRY] = strToU8(`${log}${JSON.stringify(edit)}\n`);
+  });
+  expect(share(asked), 'the charts read the file').toBeGreaterThan(1);
+  const values = (t?: Tally) =>
+    t?.t === 'groups' ? t.groups.map((g) => g.value) : [];
+  expect(values(again.get('c1'))).toContain('Atlantis');
+  expect(values(tallies.get('c1'))).not.toContain('Atlantis');
+});
+
+test('a chart whose fold read a column with another decimal mark folds again, and the others keep theirs', async () => {
+  const { tallies, again } = await reopened((entries, source) => {
+    const name = `cache/${source}/charts.json`;
+    const saved = JSON.parse(strFromU8(entries[name]!));
+    saved.charts.c0.fold.mark = 'comma';
+    // A mark the scatter's fold keeps shows it was not folded again.
+    saved.charts.c2.fold.plotted += 1;
+    entries[name] = strToU8(JSON.stringify(saved));
+  });
+  expect(again.get('c0')).toStrictEqual(tallies.get('c0'));
+  const plotted = (t?: Tally) => (t?.t === 'sample' ? t.plotted : 0);
+  expect(plotted(again.get('c2'))).toBe(plotted(tallies.get('c2')) + 1);
 });

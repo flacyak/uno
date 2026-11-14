@@ -2,8 +2,8 @@
  * @fileoverview Measures what a reopen of a saved workspace reads of the
  * source it points at, a file on disk and an object in a bucket: with no
  * chart, until its index is complete, and with a bars and a scatter chart,
- * until both are complete too. The save keeps the source's index, so the
- * reopen reads only what shows the first rows, and what the charts fold.
+ * until both are complete too. The save keeps the source's index and the
+ * charts' folds, so either reopen reads only what shows the first rows.
  */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -54,12 +54,6 @@ const FIRST_BLOCK = rowStart(TUNING.blockRows) - rowStart(0);
 const REOPEN_AT_MOST = SNIFF_AT_MOST + FIRST_BLOCK;
 /** And the most requests: one read each, and a HEAD first from a bucket. */
 const REQUESTS_AT_MOST = { disk: 2, bucket: 3 };
-/**
- * The most a reopen with charts may read, as a multiple of the source: the
- * charts' one pass, which reads each block once, and the sniff and first
- * block before it. 1.06 measured.
- */
-const CHARTED_AT_MOST = 1.07;
 
 /** rowStart is where data row `row` of the source starts. */
 function rowStart(row: number): number {
@@ -189,10 +183,15 @@ async function reopened(where: Where, plots: number): Promise<Cost> {
   await writeFile(uno, saved);
 
   const from = where.asked.length;
-  const again = await where.during(
-    openOne(where.engine(), { name: 'big.uno', path: uno }),
+  // The charts are drawn from the save as the source opens, so they are
+  // listened for before the bucket goes quiet.
+  const opening = openOne(where.engine(), { name: 'big.uno', path: uno });
+  const { again, drawnAgain } = await where.during(
+    opening.then((again) => ({
+      again,
+      drawnAgain: tallied(again, over.length),
+    })),
   );
-  const drawnAgain = tallied(again, over.length);
   await where.during(indexed(again));
   if (over.length > 0) await where.during(drawnAgain);
   const sent = where.asked.slice(from);
@@ -229,12 +228,13 @@ for (const { where, open } of PLACES) {
     expect(cost.requests).toBeLessThanOrEqual(REQUESTS_AT_MOST[where]);
   }, 60_000);
 
-  test(`a reopen over a file in a ${where} with a bars and a scatter chart reads it once, for the charts`, async () => {
+  test(`a reopen over a file in a ${where} with a bars and a scatter chart draws both from the save, and reads the sniff and the first block`, async () => {
     dir = await mkdtemp(join(tmpdir(), 'uno-reopen-'));
     place = await open(dir);
     const cost = await reopened(place, PLOTS.length);
-    const times = measured(`reopen with charts, ${where}`, cost);
+    measured(`reopen with charts, ${where}`, cost);
     record('reopen', metrics);
-    expect(times).toBeLessThanOrEqual(CHARTED_AT_MOST);
+    expect(cost.bytes).toBeLessThanOrEqual(REOPEN_AT_MOST);
+    expect(cost.requests).toBeLessThanOrEqual(REQUESTS_AT_MOST[where]);
   }, 60_000);
 }
