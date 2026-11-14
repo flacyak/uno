@@ -181,6 +181,28 @@ test('inferKind names the decimal mark from the sample', () => {
   }
 });
 
+// A date column's order comes from its sample: a value that reads only day
+// first or only month first decides it.
+test('inferKind names the order of a date column from the sample', () => {
+  const s = new Sheet(
+    't.csv',
+    ['eu', 'us', 'undecided', 'iso', 'text'],
+    [
+      ['03/04/2024', '03/04/2024', '03/04/2024', '2024-03-04', '13/04/2024'],
+      ['13/04/2024', '04/13/2024', '04/03/2024', '2024-03-05', 'West'],
+    ],
+  );
+  const orders = s.columns.map((c) => c.order);
+  expect(orders).toEqual(['day', 'month', 'either', undefined, undefined]);
+  expect(s.columns.map((c) => 'order' in c)).toEqual([
+    true,
+    true,
+    true,
+    false,
+    false,
+  ]);
+});
+
 // Date detection accepts only the listed layouts.
 describe('isDate is the written layouts and not whatever Date can parse', () => {
   const dates = [
@@ -201,10 +223,30 @@ describe('isDate is the written layouts and not whatever Date can parse', () => 
     '6 Nov 1970',
     '06-Nov-1970',
     'July 1 2026',
+    // A date-time with no offset, and a year and month, as exports write them.
+    '2024-03-04 12:30:00',
+    '2024-03-04T12:30',
+    '2024-03-04 12:30:00.250',
+    '2024-03-04T12:30Z',
+    '2024/03/04 12:30',
+    '04/03/2024 12:30:00',
+    '2024-03',
+    // Year 0 is a leap year in the proleptic Gregorian calendar.
+    '0000-02-29',
   ];
   const notDates = [
     '2026',
-    '2026-07',
+    '2026-7',
+    '2026-13',
+    '2024/03',
+    '2024-03-04  12:30',
+    '2024-03-04 12',
+    '2024-03-04 1:30',
+    '2024-03-04 24:00',
+    '2024-03-04 12:30:00+0100',
+    '2024-03-04 12:30.5',
+    'Mar 4, 2024 12:30',
+    '0001-02-29',
     'Nov 1970',
     'Novem 6, 1970',
     'Item 6, 1970',
