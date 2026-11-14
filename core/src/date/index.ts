@@ -142,7 +142,9 @@ export function readDate(v: string, order: Order): number | undefined {
     end1 - from <= FIELD_DIGITS &&
     isSeparator(sep) &&
     isDigit(v.charCodeAt(end1 + 1));
-  if (end1 - from !== YEAR_DIGITS && !yearLast) return undefined;
+  if (end1 - from !== YEAR_DIGITS && !yearLast) {
+    return named(v.slice(from, to));
+  }
   if (!isSeparator(sep)) return undefined;
   const field2 = readDigits(v, end1 + 1, to);
   const end2 = digitsStop;
@@ -268,4 +270,47 @@ function spaceAt(v: string, i: number): boolean {
   const c = v.charCodeAt(i);
   if (c >= PRINTABLE_FIRST && c <= PRINTABLE_LAST) return false;
   return isSpace(v[i]!);
+}
+
+// Nov. 6, 1970 and November 6 1970; 6 Nov 1970 and 06-Nov-1970.
+const NAME_FIRST = /^([A-Za-z]+)\.? (\d{1,2}),? (\d{4})$/;
+const DAY_FIRST = /^(\d{1,2})([ -])([A-Za-z]+)\.?\2(\d{4})$/;
+
+// A month is its full name or its three-letter form, plus "sept".
+const MONTH_NAMES = new Map<string, number>();
+[
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+].forEach((name, i) => {
+  MONTH_NAMES.set(name, i + 1);
+  MONTH_NAMES.set(name.slice(0, 3), i + 1);
+});
+MONTH_NAMES.set('sept', MONTH_NAMES.get('september')!);
+
+/**
+ * A date with its month by name, in English, at midnight. These layouts are
+ * rare in exports and keep their regular expressions.
+ */
+function named(s: string): number | undefined {
+  const name = NAME_FIRST.exec(s);
+  if (name !== null) {
+    return minutes(Number(name[3]), month(name[1]!), Number(name[2]), 0);
+  }
+  const day = DAY_FIRST.exec(s);
+  if (day === null) return undefined;
+  return minutes(Number(day[4]), month(day[3]!), Number(day[1]), 0);
+}
+
+function month(name: string): number {
+  return MONTH_NAMES.get(name.toLowerCase()) ?? 0;
 }

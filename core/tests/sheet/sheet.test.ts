@@ -209,6 +209,8 @@ describe('isDate is the written layouts and not whatever Date can parse', () => 
     '2024/03/04 12:30',
     '04/03/2024 12:30:00',
     '2024-03',
+    // Year 0 is a leap year in the proleptic Gregorian calendar.
+    '0000-02-29',
   ];
   const notDates = [
     '2026',
@@ -222,6 +224,7 @@ describe('isDate is the written layouts and not whatever Date can parse', () => 
     '2024-03-04 12:30:00+0100',
     '2024-03-04 12:30.5',
     'Mar 4, 2024 12:30',
+    '0001-02-29',
     'Nov 1970',
     'Novem 6, 1970',
     'Item 6, 1970',

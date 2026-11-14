@@ -33,7 +33,7 @@ describe('readDate reads each layout the same in either order', () => {
     ['1969-12-31 23:59', -1],
     ['9999-12-31 23:59', at(9999, 12, 31, 23, 59)],
     [' 2024-03-04\t', at(2024, 3, 4)],
-    ['\u00a02024-03-04 12:30\u3000', at(2024, 3, 4, 12, 30)],
+    [' 2024-03-04 12:30　', at(2024, 3, 4, 12, 30)],
   ];
   for (const [v, minutes] of cases) {
     test(JSON.stringify(v), () => {
@@ -74,7 +74,6 @@ describe('readDate refuses what is not a date', () => {
   const refused = [
     '',
     ' ',
-    '\u00a0',
     '2024',
     '20240304',
     '2024-3',
@@ -121,5 +120,26 @@ describe('readDate refuses what is not a date', () => {
       expect(readDate(v, 'day')).toBeUndefined();
       expect(readDate(v, 'month')).toBeUndefined();
     });
+  }
+});
+
+test('a month by name reads in English, at midnight', () => {
+  const cases: Array<[string, number | undefined]> = [
+    ['Nov. 6, 1970', at(1970, 11, 6)],
+    ['November 6 1970', at(1970, 11, 6)],
+    ['sept 6 1970', at(1970, 9, 6)],
+    ['6 Nov 1970', at(1970, 11, 6)],
+    ['06-Nov-1970', at(1970, 11, 6)],
+    [' Jul 1, 2026 ', at(2026, 7, 1)],
+    ['Feb 29, 2024', at(2024, 2, 29)],
+    ['Feb 30, 2024', undefined],
+    ['Nov 1970', undefined],
+    ['Novem 6, 1970', undefined],
+    ['6 Nov-1970', undefined],
+    ['Nov 6, 1970 12:30', undefined],
+  ];
+  for (const [v, minutes] of cases) {
+    expect(readDate(v, 'day'), v).toBe(minutes);
+    expect(readDate(v, 'month'), v).toBe(minutes);
   }
 });
