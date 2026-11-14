@@ -1,8 +1,8 @@
 /**
- * @fileoverview A .uno keeps each pointed-at source's row index under
- * cache/<id>/, and a reader that does not know the folder reads the file as
- * one saved without it: format 6, the manifest unchanged, and every other
- * entry byte for byte the same.
+ * @fileoverview A .uno keeps each pointed-at source's row index, and the
+ * folds of its charts, under cache/<id>/, and a reader that does not know
+ * the folder reads the file as one saved without it: format 6, the manifest
+ * unchanged, and every other entry byte for byte the same.
  */
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -15,7 +15,8 @@ import {
   readContainer,
   writeDocument,
 } from '@document';
-import type { Document, HeldFile, SavedSource } from '@document';
+import type { Document, HeldFile, Logged, SavedSource } from '@document';
+import { TALLY_VERSION } from '@tally';
 import {
   CACHE_AT_MOST,
   CACHE_DIR,
@@ -191,4 +192,98 @@ test('the caches that would pass the workspace cap are saved without, in source 
   expect([...d.cache!.keys()], 'the save says which went in').toStrictEqual(
     ids,
   );
+});
+
+/** The folds of two charts over orders.csv, as the engine writes them. */
+const FOLDS = {
+  c0: { key: 'groups 1', rows: 30_604_418, fold: { groups: [] } },
+  c1: { key: 'sample 4 5', rows: 30_604_418, fold: { kept: [[7, 1, 2]] } },
+};
+const CHARTS = `${CACHE_DIR}orders/charts.json`;
+
+/** An edit of orders.csv, the `seq`th. */
+function edited(seq: number): Logged {
+  const edit = {
+    seq,
+    op: 'set',
+    row: seq,
+    col: 1,
+    was: 'a',
+    now: 'b',
+  } as const;
+  return { source: 'orders', edit };
+}
+
+/** A workspace of orders.csv with charts folded over `log`. */
+function charted(log: Logged[] = [edited(1)]): Document {
+  const d = workspace(new Map([['orders', { ...saved(), charts: FOLDS }]]));
+  d.log = log;
+  return d;
+}
+
+test('a save writes the folds of the charts over a source with the version and edits they hold for, and reads them back', () => {
+  const uno = writeDocument(charted());
+  const written = JSON.parse(strFromU8(unzipSync(uno)[CHARTS]!));
+  expect(written.version).toBe(TALLY_VERSION);
+  expect(written.log).toMatch(/^[0-9a-f]{64}$/);
+  expect(written.charts).toStrictEqual(FOLDS);
+  const back = readContainer('books.uno', uno, AT);
+  expect(back.cache?.get('orders')?.charts).toStrictEqual(FOLDS);
+  // The folds go in apart from the index, which reads as it did.
+  const index = JSON.parse(strFromU8(unzipSync(uno)[INDEX]!));
+  expect(index.charts).toBeUndefined();
+});
+
+test('folds made by another build, or over edits made since, are not read and not written back', () => {
+  const uno = writeDocument(charted());
+  const entries = unzipSync(uno);
+  const written = JSON.parse(strFromU8(entries[CHARTS]!));
+  const another = { ...written, version: TALLY_VERSION + 1 };
+  const changes: Array<[string, Record<string, Uint8Array>]> = [
+    ['another build', { [CHARTS]: strToU8(JSON.stringify(another)) }],
+    ['not JSON', { [CHARTS]: strToU8('{"version": 1,') }],
+  ];
+  for (const [why, change] of changes) {
+    const read = readContainer(
+      'books.uno',
+      zipSync({ ...entries, ...change }),
+      AT,
+    );
+    expect(read.cache?.get('orders')?.charts, why).toBeUndefined();
+    expect(read.cache?.get('orders')?.counted, why).toBe(saved().counted);
+    const again = unzipSync(writeDocument(read));
+    expect(again[CHARTS], why).toBeUndefined();
+  }
+  // A build from 7a0c3a2b on, before the cache, carries the entries whole
+  // through a save that adds an edit to the log.
+  const carried = charted([edited(1), edited(2)]);
+  carried.cache = undefined;
+  carried.extra = new Map(
+    Object.entries(entries).filter(([name]) => name.startsWith(CACHE_DIR)),
+  );
+  const read = readContainer('books.uno', writeDocument(carried), AT);
+  expect(read.cache?.get('orders')?.charts).toBeUndefined();
+  expect(read.cache?.get('orders')?.counted).toBe(saved().counted);
+});
+
+test('a source over its cap is saved without the folds of its charts first, then without its index', () => {
+  const index = writeDocument(workspace(new Map([['orders', saved()]])));
+  const indexBytes = unzipSync(index)[INDEX]!.length + saved().blocks.length;
+  const fold = { kept: 'x'.repeat(CACHE_SOURCE_AT_MOST - indexBytes) };
+  const d = charted();
+  d.cache = new Map([['orders', { ...saved(), charts: { c0: fold } }]]);
+  const read = readContainer('books.uno', writeDocument(d), AT);
+  expect(read.cache?.get('orders')?.charts).toBeUndefined();
+  expect(read.cache?.get('orders')?.counted).toBe(saved().counted);
+  expect(d.cache.get('orders')?.charts, 'the save says what went in').toBe(
+    undefined,
+  );
+});
+
+test('a reader that drops cache/ opens a workspace with saved folds as one saved without them', () => {
+  const stripped = zipSync(uncached(writeDocument(charted())));
+  const plain = charted();
+  plain.cache = undefined;
+  const without = readContainer('books.uno', writeDocument(plain), AT);
+  expect(readContainer('books.uno', stripped, AT)).toStrictEqual(without);
 });

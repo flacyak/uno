@@ -43,6 +43,14 @@ import {
 /** The most a sniff reads, and the fixture's first block of rows. */
 const SNIFF_AT_MOST = 64 << 10;
 const FIRST_BLOCK_AT_MOST = 64 << 10;
+/** Rows an append adds to the fixture. */
+const APPENDED = '2025-09-30,West,Ada,web,1,1\n'.repeat(3);
+/**
+ * The most of the fixture a reopen of it grown reads past the sniff: the
+ * rows the columns are told from, the first and last saved blocks, and the
+ * last block again with the new rows. 4.5% measured.
+ */
+const GROWN_SHARE = 0.1;
 /** Milliseconds each read waits, so a save lands while the index runs. */
 const SLOW_MS = 5;
 
@@ -129,7 +137,13 @@ test('a reopen whose key holds reads the sniff and the first block, and serves e
 
 test('a reopen over a file on disk changed since the save reads it whole', async () => {
   const changes: Array<[string, (csv: string) => Promise<void>]> = [
-    ['grown', (csv) => appendFile(csv, '2025-09-30,West,Ada,web,1,1\n')],
+    [
+      'grown, with its first row rewritten',
+      async (csv) => {
+        await writeFile(csv, strToU8(strFromU8(bytes).replace('West', 'Wets')));
+        await appendFile(csv, APPENDED);
+      },
+    ],
     ['touched', (csv) => utimes(csv, new Date(0), new Date(0))],
     [
       'rewritten with its modified time put back',
@@ -160,6 +174,34 @@ test('a reopen over a file on disk changed since the save reads it whole', async
       disk.close();
       await rm(dir!, { recursive: true, force: true });
     }
+  }
+});
+
+test('a reopen over a file on disk grown by an append since the save reads only its tail', async () => {
+  const disk = await onDisk();
+  const engine = (providers = [diskProvider(), blobProvider()]) => {
+    const c = connect(TINY, providers);
+    return Object.assign(c.engine, { done: c.done });
+  };
+  const first = engine();
+  const again = engine([
+    counted(diskProvider(), disk.csv, disk.asked),
+    blobProvider(),
+  ]);
+  const fresh = engine();
+  try {
+    await saveIndexed(first, disk.csv, disk.uno);
+    await appendFile(disk.csv, APPENDED);
+    const src = await reopen(again, disk.uno);
+    const whole = await openOne(fresh, { name: 'grown.csv', path: disk.csv });
+    await indexed(whole);
+    expect(src.progress.rows).toBe(whole.progress.rows);
+    expect(disk.asked[0]!.offset, 'the sniff').toBe(0);
+    expect(bytesOf(disk.asked, 1)).toBeLessThan(GROWN_SHARE * bytes.length);
+    expect(await everyRow(src)).toStrictEqual(await everyRow(whole));
+  } finally {
+    for (const e of [first, again, fresh]) e.done();
+    disk.close();
   }
 });
 

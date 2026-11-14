@@ -6,6 +6,8 @@ import type { Mark } from '@num';
 import { parse } from '@num';
 
 import { byRank } from './rank.ts';
+import { isCount, isMark, isRecord } from './saved.ts';
+import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
 
 /**
@@ -46,8 +48,31 @@ export interface Sample {
   skipped: Skipped;
 }
 
+/**
+ * SavedSample is what a save keeps of a SampleFold: its marks, each kept
+ * row as [row, x, y], or [row] where it has no point, the row ranked last
+ * at the last cut, its counts, the blocks an edit left stale, and the least
+ * and most of each page over the first `span` of its blocks. A -0 reads
+ * back as 0.
+ */
+export interface SavedSample {
+  marks: Marks;
+  kept: Array<[number, number, number] | [number]>;
+  last?: number;
+  plotted: number;
+  skipped: Skipped;
+  stale: number[];
+  pages: Array<{ first: number; span: number; least: Point; most: Point }>;
+}
+
 /** The least and most x and y of the plotted rows of PAGE_BLOCKS blocks. */
 class Page {
+  /**
+   * How many of the first blocks hold the least and most of them all, as a
+   * save kept them, until an edit takes one and each folds again.
+   */
+  coarse = 0;
+
   readonly leastX = new Float64Array(PAGE_BLOCKS).fill(Infinity);
   readonly leastY = new Float64Array(PAGE_BLOCKS).fill(Infinity);
   readonly mostX = new Float64Array(PAGE_BLOCKS).fill(-Infinity);
@@ -127,9 +152,26 @@ export class SampleFold {
    */
   remove(block: number, row: number, xCell: string, yCell: string): void {
     const point = this.count(xCell, yCell, -1);
-    if (point !== undefined && this.page(block).touches(block, point)) {
+    const page = this.page(block);
+    if (point !== undefined && page.touches(block, point)) {
       this.stales.add(block);
+      // A block of a coarse page holds the page's least and most, which
+      // only every block of it folded again tells apart.
+      const first = block - (block % PAGE_BLOCKS);
+      if (block < first + page.coarse) {
+        for (let b = first; b < first + page.coarse; b++) this.stales.add(b);
+        page.coarse = 0;
+      }
     }
+    this.kept.delete(row);
+  }
+
+  /**
+   * forget takes back a row as remove does, for a block that refold empties
+   * and that folds again whole, so it leaves no block stale.
+   */
+  forget(row: number, xCell: string, yCell: string): void {
+    this.count(xCell, yCell, -1);
     this.kept.delete(row);
   }
 
@@ -159,6 +201,54 @@ export class SampleFold {
     return [...this.stales].sort((a, b) => a - b);
   }
 
+  /** saved is what the fold holds, with each page's least and most. */
+  saved(): SavedSample {
+    const kept = [...this.kept].map(([row, p]): SavedSample['kept'][number] =>
+      p === undefined ? [row] : [row, p.x, p.y],
+    );
+    const pages = [...this.pages].flatMap(([first, page]) => {
+      const [least, most] = extentOf([page]);
+      const span = 1 + page.leastX.findLastIndex((x, i) => x <= page.mostX[i]!);
+      return least.x <= most.x ? [{ first, span, least, most }] : [];
+    });
+    const { last, plotted } = this;
+    const skipped = { ...this.skipped };
+    const counts = { last, plotted, skipped, stale: this.stale() };
+    return { marks: { ...this.marks }, kept, ...counts, pages };
+  }
+
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none.
+   * Each block of a page holds the page's least and most, so the page is
+   * coarse: an edit that takes its least or most folds each block again.
+   */
+  static restored(saved: unknown): SampleFold | undefined {
+    if (!isRecord(saved) || !isRecord(saved['marks'])) return undefined;
+    const { x, y } = saved['marks'];
+    const { kept, last, plotted, stale, pages } = saved;
+    const skipped = restoredSkipped(saved['skipped']);
+    if (!isMark(x) || !isMark(y) || skipped === undefined) return undefined;
+    if (!isCount(plotted) || !(last === undefined || isCount(last)))
+      return undefined;
+    if (!Array.isArray(kept) || kept.length > KEPT_AT_MOST) return undefined;
+    if (!kept.every(isKept) || !Array.isArray(stale) || !stale.every(isCount))
+      return undefined;
+    if (!Array.isArray(pages) || !pages.every(isPage)) return undefined;
+    const fold = new SampleFold({ x, y });
+    for (const k of kept)
+      fold.kept.set(k[0], k.length === 3 ? { x: k[1], y: k[2] } : undefined);
+    fold.last = last;
+    fold.plotted = plotted;
+    Object.assign(fold.skipped, skipped);
+    for (const block of stale) fold.stales.add(block);
+    for (const { first, span, least, most } of pages) {
+      const page = fold.page(first);
+      for (let b = first; b < first + span; b++) page.set(b, least, most);
+      page.coarse = span;
+    }
+    return fold;
+  }
+
   /** snapshot reads the fold as plain numbers. */
   snapshot(): Sample {
     const rows = [...this.kept.keys()].sort(byRank);
@@ -179,15 +269,7 @@ export class SampleFold {
 
   /** extent returns the least and most x and y of every block. */
   private extent(): [Point, Point] {
-    const least = { x: Infinity, y: Infinity };
-    const most = { x: -Infinity, y: -Infinity };
-    for (const page of this.pages.values()) {
-      least.x = Math.min(least.x, ...page.leastX);
-      least.y = Math.min(least.y, ...page.leastY);
-      most.x = Math.max(most.x, ...page.mostX);
-      most.y = Math.max(most.y, ...page.mostY);
-    }
-    return [least, most];
+    return extentOf(this.pages.values());
   }
 
   /** page returns the page that holds block `at`, made when it has none. */
@@ -227,4 +309,38 @@ export class SampleFold {
     this.plotted += sign;
     return { x, y };
   }
+}
+
+/** extentOf returns the least and most x and y of every block of `pages`. */
+function extentOf(pages: Iterable<Page>): [Point, Point] {
+  const least = { x: Infinity, y: Infinity };
+  const most = { x: -Infinity, y: -Infinity };
+  for (const page of pages) {
+    least.x = Math.min(least.x, ...page.leastX);
+    least.y = Math.min(least.y, ...page.leastY);
+    most.x = Math.max(most.x, ...page.mostX);
+    most.y = Math.max(most.y, ...page.mostY);
+  }
+  return [least, most];
+}
+
+/** isKept says whether `v` is a kept row as a save writes it. */
+function isKept(v: unknown): v is SavedSample['kept'][number] {
+  if (!Array.isArray(v) || !isCount(v[0])) return false;
+  return v.length === 1 || (v.length === 3 && isPoint({ x: v[1], y: v[2] }));
+}
+
+/** isPage says whether `v` is a page's least and most as a save writes it. */
+function isPage(v: unknown): v is SavedSample['pages'][number] {
+  if (!isRecord(v)) return false;
+  const { first, span, least, most } = v;
+  if (!isPoint(least) || !isPoint(most)) return false;
+  const inPage = isCount(span) && span > 0 && span <= PAGE_BLOCKS;
+  const ordered = least.x <= most.x && least.y <= most.y;
+  return isCount(first) && first % PAGE_BLOCKS === 0 && inPage && ordered;
+}
+
+/** isPoint says whether `v` is a point of two finite numbers. */
+function isPoint(v: unknown): v is Point {
+  return isRecord(v) && Number.isFinite(v['x']) && Number.isFinite(v['y']);
 }

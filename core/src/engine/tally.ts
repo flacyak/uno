@@ -11,7 +11,8 @@
 import type { Chart, ChartColumn, Plot } from '@document';
 import type { Mark } from '@num';
 import type { Said } from '@said';
-import { GroupsFold, SampleFold } from '@tally';
+import { GroupsFold, SampleFold, isCount, isRecord } from '@tally';
+import type { SavedGroups, SavedSample } from '@tally';
 import type { Tally } from './protocol.ts';
 
 /** How far one chart's fold has got. */
@@ -45,6 +46,17 @@ type Tallying =
   | (Folding & { t: 'groups'; fold: GroupsFold; by: number; sum?: number });
 
 /**
+ * SavedChart is what a save keeps of a chart's fold: which fold its columns
+ * make, the rows it holds, and the fold, with the marks it read them with.
+ */
+export interface SavedChart {
+  key: string;
+  rows: number;
+  ahead?: [number, number];
+  fold: SavedGroups | SavedSample;
+}
+
+/**
  * A block's rows as the folds read them: their range, and what a column of
  * them shows, by row.
  */
@@ -60,6 +72,12 @@ export interface Block {
  */
 export class Tallies {
   private readonly charts = new Map<string, Tallying>();
+  /** The folds a save kept of charts not attached since, by chart id. */
+  private kept: Readonly<Record<string, unknown>> = {};
+  /** The rows the index a save kept holds, which no kept fold passes. */
+  private readable = 0;
+  /** The last block of that index, which a grown file reads again. */
+  private gone: { block: number; rows: Block } | undefined;
   /** Each column's decimal mark, by place, as `remark` was last told. */
   private marks: readonly Mark[] = [];
 
@@ -75,14 +93,66 @@ export class Tallies {
       this.charts.delete(id);
       return t;
     }
-    const was = this.charts.get(id);
+    const was = this.charts.get(id) ?? this.restored(id, t);
     if (was?.key === t.key && readsWith(was, this.marks)) {
       was.plot = plot;
       was.done = false;
+      this.charts.set(id, was);
       return undefined;
     }
     this.charts.set(id, t);
     return undefined;
+  }
+
+  /**
+   * restore keeps `saved`, the folds a save kept by chart id, for the charts
+   * attach finds them for, over an index a save kept of `readable` rows. Of
+   * a file grown since, each fold gives back the rows of `gone`, the last
+   * block, which the view reads again with the rows that follow.
+   */
+  restore(
+    saved: Readonly<Record<string, unknown>>,
+    readable: number,
+    gone?: { block: number; rows: Block },
+  ): void {
+    this.kept = saved;
+    this.readable = readable;
+    this.gone = gone;
+  }
+
+  /**
+   * restored is `t` with the fold the save kept of the chart with `id`,
+   * where it is of the same columns and holds no row past the index, which
+   * attach keeps where it reads them with the same marks.
+   */
+  private restored(id: string, t: Tallying): Tallying | undefined {
+    const saved = this.kept[id];
+    if (!isRecord(saved) || saved['key'] !== t.key) return undefined;
+    const { rows, ahead, fold } = saved;
+    const run: unknown[] = Array.isArray(ahead) ? ahead : [rows, rows];
+    const [from, end] = run;
+    if (!isCount(rows) || !isCount(from) || !isCount(end)) return undefined;
+    // A run folded ahead starts past the rows folded, and none passes the
+    // index.
+    const ran = from > rows;
+    if (ran !== Array.isArray(ahead) || from > end || end > this.readable)
+      return undefined;
+    const on: Pick<Folding, 'rows' | 'ahead'> = {
+      rows,
+      ahead: ran ? [from, end] : undefined,
+    };
+    if (t.t === 'sample') {
+      const back = SampleFold.restored(fold);
+      return back && this.givenBack({ ...t, ...on, fold: back });
+    }
+    const back = GroupsFold.restored(fold);
+    return back && this.givenBack({ ...t, ...on, fold: back });
+  }
+
+  /** givenBack is `t` without the rows of the block restore said is gone. */
+  private givenBack(t: Tallying): Tallying {
+    if (this.gone !== undefined) giveBack(t, this.gone.block, this.gone.rows);
+    return t;
   }
 
   /**
@@ -104,6 +174,22 @@ export class Tallies {
   /** detach stops folding the chart with `id`. */
   detach(id: string): void {
     this.charts.delete(id);
+  }
+
+  /**
+   * saved is the fold of each chart that holds any row, by the chart's id,
+   * as a save keeps it. A scatter an edit left stale is left out, to fold
+   * again when it opens.
+   */
+  saved(): Record<string, SavedChart> {
+    const saved: Record<string, SavedChart> = {};
+    for (const [id, t] of this.charts) {
+      if (t.t === 'sample' && t.fold.stale().length > 0) continue;
+      if (t.rows === 0 && t.ahead === undefined) continue;
+      const { key, rows, ahead } = t;
+      saved[id] = { key, rows, ahead, fold: t.fold.saved() };
+    }
+    return saved;
   }
 
   /** How many charts are attached. */
@@ -229,16 +315,8 @@ export class Tallies {
    * chart reads the same columns.
    */
   adopt(was: Tallies, block: number, last: Block): void {
-    const kept = last.from;
     for (const [id, t] of was.charts) {
-      // A fold takes blocks whole, so one that holds the block's first row
-      // holds the block.
-      if (holds(t, kept)) unfold(t, block, last);
-      t.rows = Math.min(t.rows, kept);
-      if (t.ahead !== undefined) {
-        const [from, end] = t.ahead;
-        t.ahead = from < kept ? [from, Math.min(end, kept)] : undefined;
-      }
+      giveBack(t, block, last);
       t.done = false;
       this.charts.set(id, t);
     }
@@ -433,6 +511,23 @@ function sample(
 }
 
 /**
+ * giveBack takes the rows of `block`, `last`, out of `t`'s fold where it
+ * holds them, for a view that reads the block again with the rows that
+ * follow, so the fold holds the rows before it alone.
+ */
+function giveBack(t: Tallying, block: number, last: Block): void {
+  const kept = last.from;
+  // A fold takes blocks whole, so one that holds the block's first row
+  // holds the block.
+  if (holds(t, kept)) unfold(t, block, last);
+  t.rows = Math.min(t.rows, kept);
+  if (t.ahead !== undefined) {
+    const [from, end] = t.ahead;
+    t.ahead = from < kept ? [from, Math.min(end, kept)] : undefined;
+  }
+}
+
+/**
  * unfold takes the rows of `block` out of `t`'s fold, as they showed, so
  * the block can be folded again whole. A sample's extent of the block is
  * empty until then.
@@ -442,7 +537,7 @@ function unfold(t: Tallying, block: number, { from, end, shown }: Block): void {
     const xs = shown(t.x);
     const ys = shown(t.y);
     for (let row = from; row < end; row++) {
-      t.fold.remove(block, row, xs(row), ys(row));
+      t.fold.forget(row, xs(row), ys(row));
     }
     t.fold.refold(block, new SampleFold(t.fold.marks));
   } else {

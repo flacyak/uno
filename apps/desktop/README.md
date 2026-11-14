@@ -124,6 +124,13 @@ What a `.uno` gives up for this is travelling on its own. Sending somebody the
 file without the data it points at gets them the tabs, the edits and the log,
 and no rows.
 
+A save also keeps each pointed-at source's row index and the folds of its
+charts, so a reopen over the same bytes shows rows and draws every chart without
+reading the file again. A chart's fold holds up to 10,000 of a column's values
+with their sums, or 4,096 sampled points, and anyone who unzips the `.uno` can
+read them, whether or not they can read the data it points at. uno itself shows
+them only once the source opens and matches what was saved.
+
 ## Settings
 
 The gear at the left of the status bar opens settings upward from the corner.

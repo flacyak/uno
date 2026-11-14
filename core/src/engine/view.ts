@@ -327,15 +327,15 @@ export class View {
         ? RowIndex.seeded(was.index, source.size)
         : undefined;
     const restored =
-      seed === undefined ? v.restored(ask.saved, tuning) : undefined;
+      seed === undefined ? await v.restored(ask.saved, tuning) : undefined;
     v.index =
-      seed ?? restored ?? new RowIndex(format.dataStart, source.size, tuning);
-    v.from =
-      seed !== undefined
-        ? 'appended'
-        : restored !== undefined
-          ? 'saved'
-          : 'read';
+      seed ??
+      restored?.index ??
+      new RowIndex(format.dataStart, source.size, tuning);
+    v.from = seed !== undefined ? 'appended' : (restored?.from ?? 'read');
+    // The blocks a save kept count as handed to the tap, so a chart reads
+    // them in runs.
+    if (restored !== undefined) v.tapped = restored.index.begun;
     v.pages = new Pages(name, source, format, v.index, tuning.cacheBytes);
     v.spanBytes = tuning.chunkBytes;
     v.schema = schemaOf(format, ask.parts);
@@ -897,36 +897,72 @@ export class View {
   /**
    * restored is the row index `saved` holds, where it is of this view's file
    * as the open measured it, read the same way by the same scanner. One a
-   * save took partway goes on from its last block. The blocks count as
-   * handed to the tap, so a chart reads them in runs, and a file on disk
-   * takes the print saved with them.
+   * save took partway goes on from its last block. A file on disk that grew
+   * by an append since the save keeps every block but the last, as the
+   * schedule's refresh of it does, and the pass reads on from there. A file
+   * on disk takes the print saved with the blocks.
    */
-  private restored(
+  private async restored(
     saved: SavedSource | undefined,
     tuning: Tuning,
-  ): RowIndex | undefined {
+  ): Promise<{ index: RowIndex; from: IndexFrom } | undefined> {
     const key = this.key;
-    if (saved === undefined || key === undefined) return;
-    if (saved.path !== this.path || differs(saved.key, key) !== undefined)
+    if (saved === undefined || key === undefined || saved.path !== this.path)
       return;
+    // An append moves the size and the times alone, and only on disk.
+    const { bytes, modified, statusChanged } = key;
+    const moved = { ...saved.key, bytes, modified, statusChanged };
+    const was = saved.key['bytes'];
+    const grew =
+      this.printing &&
+      saved.complete &&
+      typeof was === 'number' &&
+      was < bytes &&
+      differs(moved, key) === undefined;
+    if (!grew && differs(saved.key, key) !== undefined) return;
     const starts = decodeBlocks(saved.blocks);
     if (starts === undefined) return;
-    const { dataStart } = this.format;
-    const { size } = this.source;
-    const { counted, complete } = saved;
     const index = RowIndex.restored(
-      dataStart,
-      size,
+      this.format.dataStart,
+      grew ? was : bytes,
       tuning,
       starts,
-      counted,
-      complete,
+      saved.counted,
+      saved.complete,
     );
     if (index === undefined) return;
-    this.tapped = index.begun;
-    if (this.printing)
-      Object.assign(this.print, { head: saved.head, tail: saved.tail });
-    return index;
+    const print = { head: saved.head, tail: saved.tail };
+    if (!grew) {
+      if (this.printing) Object.assign(this.print, print);
+      // The charts take the folds the save kept over the same rows.
+      if (saved.charts) this.tallies.restore(saved.charts, index.readable());
+      return { index, from: 'saved' };
+    }
+    const last = index.begun - 1;
+    const read = (block: number) => {
+      const [start, end] = index.bytesOf(block);
+      return this.source.read(start, end - start);
+    };
+    const [head, tail] = await Promise.all([read(0), read(last)]).catch(
+      () => [],
+    );
+    if (head === undefined || tail === undefined) return;
+    if (hashOf(head) !== print.head || hashOf(tail) !== print.tail) return;
+    const seed = RowIndex.seeded(index, bytes);
+    if (seed === undefined) return;
+    // The pass hands on from the last block, and the first is as it was.
+    this.print.head = print.head;
+    // The charts take the folds the save kept, each giving back the rows of
+    // the last block as they showed, which the pass reads again.
+    const [from, end] = index.rowsOf(last);
+    const records = this.format.decode(tail);
+    if (saved.charts && records.length === end - from) {
+      const shown = (col: number) =>
+        this.shownIn(col, from, records, undefined);
+      const gone = { block: last, rows: { from, end, shown } };
+      this.tallies.restore(saved.charts, end, gone);
+    }
+    return { index: seed, from: 'appended' };
   }
 
   /**
@@ -1244,7 +1280,8 @@ export class View {
 
   /**
    * saved is what a save keeps of the row index of a file a path points at
-   * alone: every block begun so far, and the key it holds for.
+   * alone: every block begun so far, and the key it holds for, and the fold
+   * of each of its charts.
    */
   saved(): SavedSource | undefined {
     const index = this.index;
@@ -1254,7 +1291,9 @@ export class View {
     const { head, tail } = this.print;
     const { counted, complete } = index;
     const kept = { counted, complete, head, tail, blocks: this.encoded.blocks };
-    return { path: this.path, key: this.key, ...kept };
+    const charts = this.tallies.saved();
+    const folded = Object.keys(charts).length > 0 ? { charts } : {};
+    return { path: this.path, key: this.key, ...kept, ...folded };
   }
 
   /** The current edit log. */

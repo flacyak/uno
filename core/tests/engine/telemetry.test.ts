@@ -3,7 +3,7 @@
  * and how a collector's address is read from the environment.
  */
 
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -160,7 +160,7 @@ test('an index is measured by what its bytes were handed as, and nothing names t
   }
 });
 
-test('an index restored from a save is measured apart from one read from the file', async () => {
+test('an index restored from a save, or appended to from one, is measured apart from one read from the file', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'uno-telemetry-'));
   const csv = join(dir, 'sales-q3.csv');
   const uno = join(dir, 'q3.uno');
@@ -168,6 +168,7 @@ test('an index restored from a save is measured apart from one read from the fil
   const providers = [diskProvider(), blobProvider()];
   const first = measured(providers);
   const again = measured(providers);
+  const grown = measured(providers);
   try {
     const src = await openOne(first.engine, {
       name: 'sales-q3.csv',
@@ -180,14 +181,18 @@ test('an index restored from a save is measured apart from one read from the fil
     );
     await writeFile(uno, saved);
     await indexed(await openOne(again.engine, { name: 'q3.uno', path: uno }));
+    await appendFile(csv, '2025-09-30,West,Ada,web,1,1\n');
+    await indexed(await openOne(grown.engine, { name: 'q3.uno', path: uno }));
 
     const from = (seen: Measurement[]) =>
       seen.filter((m) => m.name === INDEX).map((m) => m.attributes?.['index']);
     expect(from(first.seen)).toEqual(['read']);
     expect(from(again.seen)).toEqual(['saved']);
+    expect(from(grown.seen)).toEqual(['appended']);
   } finally {
     first.engine.close();
     again.engine.close();
+    grown.engine.close();
     await rm(dir, { recursive: true, force: true });
   }
 });
