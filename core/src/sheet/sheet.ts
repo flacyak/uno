@@ -6,6 +6,7 @@
  * same over a file, with the same Schema and the same pipeline.
  */
 
+import type { ShownOrder, UnixUnit } from '@date';
 import type { Formula } from '@formula';
 import { evaluate } from '@formula';
 import type { Mark } from '@num';
@@ -32,6 +33,10 @@ export interface Column {
   flagged: boolean;
   /** The decimal mark the column's numbers are read with. */
   mark: Mark;
+  /** How the column's dates written year last read, from its sample. */
+  order?: ShownOrder;
+  /** The unit of Unix time the column's numbers are, from its sample. */
+  unit?: UnixUnit;
 }
 
 /**
@@ -303,12 +308,17 @@ export class Sheet {
   }
 
   private inferColumn(col: number): void {
-    const { kind, flagged, mark } = inferKind(this.rowData.length, (row) =>
-      this.display(row, col),
+    const { kind, flagged, mark, order, unit } = inferKind(
+      this.rowData.length,
+      (row) => this.display(row, col),
     );
     const c = this.columns[col]!;
     c.kind = kind;
     c.flagged = flagged;
     c.mark = mark;
+    if (order === undefined) delete c.order;
+    else c.order = order;
+    if (unit === undefined) delete c.unit;
+    else c.unit = unit;
   }
 }

@@ -8,6 +8,7 @@
  * a Web Worker, or a MessageChannel.
  */
 
+import type { ShownOrder, UnixUnit } from '@date';
 import type { Chart, ChartPlace, Plot } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Mark } from '@num';
@@ -30,6 +31,16 @@ export interface ColumnInfo {
   flagged: boolean;
   /** The decimal mark the column's numbers are read with, from its sample. */
   mark: Mark;
+  /**
+   * How the column's dates written year last read, day first or month first,
+   * from its sample. Absent when it is not a date column or writes none so.
+   */
+  order?: ShownOrder;
+  /**
+   * The unit of Unix time the column's whole numbers are, seconds or
+   * milliseconds, from its sample. The column stays a number.
+   */
+  unit?: UnixUnit;
   /** The formula expression bound to the column, if any. */
   binding?: string;
 }
