@@ -966,7 +966,12 @@ describe("a workspace's charts", () => {
     const back = readContainer('sales.uno', zipSync(entries));
     expect(back.charts).toStrictEqual([SAVED]);
     expect(back.carriedCharts).toStrictEqual([
-      { id: 'c2', source: 'sales', json: JSON.stringify(split) },
+      {
+        id: 'c2',
+        source: 'sales',
+        place: SAVED.place,
+        json: JSON.stringify(split),
+      },
     ]);
   });
 

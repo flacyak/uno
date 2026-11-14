@@ -701,7 +701,11 @@ function readCharts(
       const o = asRecord(raw);
       const id = asString(o['id']);
       const source = asString(o['source']);
-      carriedCharts.push({ id, source, json: JSON.stringify(raw) });
+      const json = JSON.stringify(raw);
+      const place = o['place'];
+      carriedCharts.push(
+        isPlace(place) ? { id, source, place, json } : { id, source, json },
+      );
     }
   });
   return { charts, carriedCharts };
