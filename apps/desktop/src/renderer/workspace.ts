@@ -285,6 +285,8 @@ export class Workspace {
    * read.
    */
   private readonly relinked = new Set<string>();
+  /** Whether an index the saved copy lacks completed since the workspace was last written. */
+  private unkept = false;
   /**
    * The relink or append in flight for each source, by id. The same one asked
    * again before it is answered joins it, so Reload pressed twice reads the
@@ -375,9 +377,13 @@ export class Workspace {
 
   private tab(source: SourceHandle, saved?: readonly Edit[]): Tab {
     const t = new Tab(source, new Band(source, this.changed), saved);
+    // An index that completed before the open answered is told only here.
+    if (source.progress.complete && source.progress.unkept) this.unkept = true;
     source.onProgress = (progress) => {
       this.changed();
-      if (progress.complete) this.onIndexed(source.id);
+      if (!progress.complete) return;
+      if (progress.unkept) this.unkept = true;
+      this.onIndexed(source.id);
     };
     source.onOffer = (offer) => {
       t.offer = offer;
@@ -724,6 +730,9 @@ export class Workspace {
    * serialising.
    */
   async bytes(cell: Cell, at: string): Promise<Uint8Array> {
+    // The engine answers in order, so an index it completes after this is
+    // told after it, and is left for the next write.
+    this.unkept = false;
     this.showing.keep(cell);
     const written = await this.engine.save(
       {
@@ -747,6 +756,16 @@ export class Workspace {
     this.relinked.clear();
     this.charts.saved();
     for (const t of this.tabs) t.saved();
+  }
+
+  /**
+   * Whether a write would keep what the saved copy lacks and nothing else:
+   * an index was read to its end since the last write, every index and
+   * chart is complete, and nothing is unsaved.
+   */
+  get keepable(): boolean {
+    const indexed = this.tabs.every((t) => t.source.progress.complete);
+    return this.unkept && indexed && this.charts.folded && !this.dirty;
   }
 
   /** Index progress for the showing tab, as a whole percent. */

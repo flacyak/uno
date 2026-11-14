@@ -45,6 +45,12 @@ export interface Progress {
   rows: number;
   complete: boolean;
   /**
+   * Whether a save would keep an index the .uno this source opened from
+   * lacks: one of a file a save keeps the index of, read from the file and
+   * not taken whole from that save.
+   */
+  unkept: boolean;
+  /**
    * Milliseconds since the open began, by the engine's clock. Final once
    * complete, when it is the time telemetry reports for the index.
    */

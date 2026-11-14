@@ -252,6 +252,8 @@ export class View {
   private took: number | undefined;
   /** Where the index came from, said with its measurements. */
   private from: IndexFrom = 'read';
+  /** Whether the index came whole from the save the source opened from. */
+  private whole = false;
 
   /** Whether the view keeps a print: a file on disk, read alone. */
   private printing = false;
@@ -333,6 +335,7 @@ export class View {
       restored?.index ??
       new RowIndex(format.dataStart, source.size, tuning);
     v.from = seed !== undefined ? 'appended' : (restored?.from ?? 'read');
+    v.whole = restored?.from === 'saved' && restored.index.complete;
     // The blocks a save kept count as handed to the tap, so a chart reads
     // them in runs.
     if (restored !== undefined) v.tapped = restored.index.begun;
@@ -466,6 +469,7 @@ export class View {
       readable: index.readable(),
       rows: index.rows(),
       complete: index.complete,
+      unkept: this.key !== undefined && !this.whole,
       elapsedMs: this.took ?? performance.now() - this.began,
     };
   }

@@ -56,6 +56,14 @@ export interface Host {
    * schedule to open again once its engine is lost, or undefined where none is
    * kept. Absent where an engine lasts as long as its window, as on the desktop. */
   reopen?(path: string): Promise<SourceRef | undefined>;
+  /**
+   * Writes a workspace nobody has edited since its last save to `path`, so
+   * the saved copy keeps the row indexes and chart folds read since, unless
+   * a newer save is there, which is left as it is. Present where the saved
+   * copy is what an engine started later opens, as behind the hosted gate;
+   * absent on the desktop, where it would rewrite the person's file unasked.
+   */
+  keep?(path: string, bytes: Uint8Array): Promise<void>;
 }
 
 /**
