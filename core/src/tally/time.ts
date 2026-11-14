@@ -57,7 +57,7 @@ function keyAt(minute: number, level: number): number {
 }
 
 /** The sizes a chart draws periods at, finest first. */
-export const PER = ['hour', 'day', 'month', 'year'] as const;
+export const PER = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 export type Per = (typeof PER)[number];
 
 /**
@@ -65,6 +65,30 @@ export type Per = (typeof PER)[number];
  * than any window draws at 4 px a column.
  */
 export const LEVEL_SENT_AT_MOST = 1_024;
+
+const WEEK_DAYS = 7;
+const QUARTER_MONTHS = 3;
+/** 1970-01-01 was a Thursday, 4 days after Sunday 1969-12-28. */
+const SUNDAY_BEFORE_EPOCH = 4;
+
+/**
+ * Each size, the held period it is made from, and its key from that
+ * period's key. A week's key counts weeks from Sunday 1969-12-28, so every
+ * week starts on a Sunday, whatever the language.
+ */
+const SIZES: Record<Per, [Held, (key: number) => number]> = {
+  hour: ['hour', (hour) => hour],
+  day: ['day', (day) => day],
+  week: ['day', (day) => Math.floor((day + SUNDAY_BEFORE_EPOCH) / WEEK_DAYS)],
+  month: ['month', (month) => month],
+  quarter: ['month', (month) => Math.floor(month / QUARTER_MONTHS)],
+  year: ['year', (year) => year],
+};
+
+/** sundayOf is the days from 1970-01-01 to the Sunday that labels `week`. */
+export function sundayOf(week: number): number {
+  return week * WEEK_DAYS - SUNDAY_BEFORE_EPOCH;
+}
 
 /** The order a date written year last reads in when the fold's does not. */
 const OTHER: Record<Order | UnixUnit, Order | undefined> = {
@@ -270,11 +294,12 @@ export class TimeFold {
    * is finer than the period held, or it spans more than LEVEL_SENT_AT_MOST.
    */
   private levelAt(per: Per): TimeLevel | undefined {
-    const made = HELD.indexOf(per);
+    const [madeFrom, step] = SIZES[per];
+    const made = HELD.indexOf(madeFrom);
     if (made < this.level || this.periods.size === 0) return undefined;
     const keyOf = (key: number) => {
       for (let i = this.level; i < made; i++) key = COARSER[i]!(key);
-      return key;
+      return step(key);
     };
     const held = [...this.periods.keys()];
     const from = keyOf(Math.min(...held));

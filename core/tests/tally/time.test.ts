@@ -6,7 +6,13 @@ import { expect, test } from 'vite-plus/test';
 
 import { readDate } from '@date';
 import { read } from '@ingest';
-import { ExactSum, HELD_AT_MOST, LEVEL_SENT_AT_MOST, TimeFold } from '@tally';
+import {
+  ExactSum,
+  HELD_AT_MOST,
+  LEVEL_SENT_AT_MOST,
+  TimeFold,
+  sundayOf,
+} from '@tally';
 import type { Held, Per } from '@tally';
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
 import { REVENUE, ROWS, bytes } from '@core-tests/testdata/sales-q3';
@@ -107,6 +113,7 @@ const DAY_MINUTES = DAY_HOURS * HOUR_MINUTES;
 const MONTH_MOST_MINUTES = 31 * DAY_MINUTES;
 const MINUTE_MS = 60_000;
 const YEAR_MONTHS = 12;
+const YEAR_QUARTERS = 4;
 const EPOCH_YEAR = 1970;
 /** The years readDate reads: 0000 to 9999. */
 const YEARS = 10_000;
@@ -320,12 +327,19 @@ test('a snapshot sends each level from its size to years, dense with zeros', () 
   const march = dayOf('2024-03-01');
   // March, April, and 1 to 10 May.
   const days = 31 + 30 + 10;
-  expect(sent.map((l) => l.per)).toEqual(['day', 'month', 'year']);
+  expect(sent.map((l) => l.per)).toEqual([
+    'day',
+    'week',
+    'month',
+    'quarter',
+    'year',
+  ]);
   expect(sent[0]).toMatchObject({ per: 'day', from: march });
   expect(sent[0]!.rows).toEqual([1, 0, 1, ...Array(days - 4).fill(0), 1]);
   expect(sent[0]!.sum.filter((s) => s !== 0)).toEqual([1, 2, 4]);
-  expect(sent[1]).toMatchObject({ rows: [2, 0, 1], sum: [3, 0, 4] });
-  expect(sent[2]).toMatchObject({
+  expect(sent[2]).toMatchObject({ rows: [2, 0, 1], sum: [3, 0, 4] });
+  expect(sent[3]).toMatchObject({ rows: [2, 1], sum: [3, 4] });
+  expect(sent[4]).toMatchObject({
     from: 2024 - EPOCH_YEAR,
     rows: [3],
     sum: [7],
@@ -338,17 +352,31 @@ test('a snapshot sends each level from its size to years, dense with zeros', () 
   expect(snapped([]).snapshot('auto').levels).toEqual([]);
 });
 
+test('weeks start on Sunday and are labelled by it, across a new year', () => {
+  const dates = ['2022-12-31', '2023-01-01', '2023-01-07', '2023-01-08'];
+  const [week] = snapped(dates).snapshot('week').levels;
+  expect(week!.rows).toEqual([1, 2, 1]);
+  const sunday = new Date(sundayOf(week!.from) * DAY_MINUTES * MINUTE_MS);
+  expect(sunday.toISOString().slice(0, 10)).toBe('2022-12-25');
+  // The Sunday of a week before 1970, and of week 0.
+  expect(sundayOf(0)).toBe(dayOf('1969-12-28'));
+  expect(sundayOf(-1)).toBe(dayOf('1969-12-21'));
+});
+
 test('a snapshot leaves out a level with more than LEVEL_SENT_AT_MOST periods', () => {
   const span = snapped(['1900-01-01', '2024-12-31']);
-  // 125 years are 1,500 months.
-  expect(levels(span, 'day')).toEqual([['year', 1900 - EPOCH_YEAR, 125]]);
+  // 125 years are 500 quarters and 1,500 months.
+  expect(levels(span, 'day')).toEqual([
+    ['quarter', (1900 - EPOCH_YEAR) * YEAR_QUARTERS, 500],
+    ['year', 1900 - EPOCH_YEAR, 125],
+  ]);
   const most = (LEVEL_SENT_AT_MOST - 1) * DAY_MINUTES;
   expect(levels(foldOf([0, most]), 'day')[0]).toEqual([
     'day',
     0,
     LEVEL_SENT_AT_MOST,
   ]);
-  expect(levels(foldOf([0, most + DAY_MINUTES]), 'day')[0]![0]).toBe('month');
+  expect(levels(foldOf([0, most + DAY_MINUTES]), 'day')[0]![0]).toBe('week');
 });
 
 test('a snapshot starts at the size asked for, or the finest the fold can make', () => {
@@ -358,12 +386,14 @@ test('a snapshot starts at the size asked for, or the finest the fold can make',
   expect(levels(timed, 'auto')[0]![0]).toBe('hour');
   expect(levels(dates, 'hour')[0]![0]).toBe('hour');
   expect(levels(dates, 'month')[0]![0]).toBe('month');
-  // A fold that holds days makes no hours, and one that holds months no days.
+  // A fold that holds days makes no hours, and one that holds months no days
+  // or weeks.
   const days = foldOf(stepped(PAST_BOUND, HOUR_MINUTES));
   expect(levels(days, 'hour')[0]![0]).toBe('day');
   const months = foldOf(stepped(PAST_BOUND, DAY_MINUTES));
   expect(months.snapshot('day').levels.map((l) => l.per)).toEqual([
     'month',
+    'quarter',
     'year',
   ]);
 });

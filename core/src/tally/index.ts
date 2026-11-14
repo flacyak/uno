@@ -21,6 +21,7 @@ export {
   LEVEL_SENT_AT_MOST,
   PER,
   TimeFold,
+  sundayOf,
 } from './time.ts';
 export type {
   Held,
