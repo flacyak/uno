@@ -6,8 +6,8 @@ import { expect, test } from 'vite-plus/test';
 
 import { readDate } from '@date';
 import { read } from '@ingest';
-import { ExactSum, HELD_AT_MOST, TimeFold } from '@tally';
-import type { Held } from '@tally';
+import { ExactSum, HELD_AT_MOST, LEVEL_SENT_AT_MOST, TimeFold } from '@tally';
+import type { Held, Per } from '@tally';
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
 import { REVENUE, ROWS, bytes } from '@core-tests/testdata/sales-q3';
 
@@ -287,4 +287,93 @@ test('a time fold counts the dates it leaves out, and those read the other way',
     dates: { blank: 0, unparsed: 2, other: 0 },
     timed: 1,
   });
+});
+
+/** The key of the day `v` writes, read day first. */
+function dayOf(v: string): number {
+  return Math.floor(readDate(v, 'day')! / DAY_MINUTES);
+}
+
+/** A fold of `dates`, with `cells` summed where given. */
+function snapped(
+  dates: readonly string[],
+  cells?: readonly string[],
+): TimeFold {
+  const fold =
+    cells === undefined ? new TimeFold('day') : new TimeFold('day', 'point');
+  dates.forEach((v, r) => fold.add(v, cells?.[r]));
+  return fold;
+}
+
+/** Each level a snapshot at `per` sends: its size, first key and rows. */
+function levels(
+  fold: TimeFold,
+  per: Per | 'auto',
+): Array<[Per, number, number]> {
+  return fold.snapshot(per).levels.map((l) => [l.per, l.from, l.rows.length]);
+}
+
+test('a snapshot sends each level from its size to years, dense with zeros', () => {
+  const dates = ['2024-03-01', '2024-03-03', '2024-05-10', 'n/a'];
+  const fold = snapped(dates, ['1', '2', '4', '8']);
+  const { levels: sent, undated } = fold.snapshot('day');
+  const march = dayOf('2024-03-01');
+  // March, April, and 1 to 10 May.
+  const days = 31 + 30 + 10;
+  expect(sent.map((l) => l.per)).toEqual(['day', 'month', 'year']);
+  expect(sent[0]).toMatchObject({ per: 'day', from: march });
+  expect(sent[0]!.rows).toEqual([1, 0, 1, ...Array(days - 4).fill(0), 1]);
+  expect(sent[0]!.sum.filter((s) => s !== 0)).toEqual([1, 2, 4]);
+  expect(sent[1]).toMatchObject({ rows: [2, 0, 1], sum: [3, 0, 4] });
+  expect(sent[2]).toMatchObject({
+    from: 2024 - EPOCH_YEAR,
+    rows: [3],
+    sum: [7],
+  });
+  expect(undated).toEqual({ rows: 1, sum: 8 });
+  // A fold that counts rows sends no sums.
+  expect(snapped(dates).snapshot('year').levels).toEqual([
+    { per: 'year', from: 2024 - EPOCH_YEAR, rows: [3], sum: [] },
+  ]);
+  expect(snapped([]).snapshot('auto').levels).toEqual([]);
+});
+
+test('a snapshot leaves out a level with more than LEVEL_SENT_AT_MOST periods', () => {
+  const span = snapped(['1900-01-01', '2024-12-31']);
+  // 125 years are 1,500 months.
+  expect(levels(span, 'day')).toEqual([['year', 1900 - EPOCH_YEAR, 125]]);
+  const most = (LEVEL_SENT_AT_MOST - 1) * DAY_MINUTES;
+  expect(levels(foldOf([0, most]), 'day')[0]).toEqual([
+    'day',
+    0,
+    LEVEL_SENT_AT_MOST,
+  ]);
+  expect(levels(foldOf([0, most + DAY_MINUTES]), 'day')[0]![0]).toBe('month');
+});
+
+test('a snapshot starts at the size asked for, or the finest the fold can make', () => {
+  const dates = snapped(['2024-03-04', '2024-03-05']);
+  const timed = snapped(['2024-03-04', '2024-03-05 9:05']);
+  expect(levels(dates, 'auto')[0]![0]).toBe('day');
+  expect(levels(timed, 'auto')[0]![0]).toBe('hour');
+  expect(levels(dates, 'hour')[0]![0]).toBe('hour');
+  expect(levels(dates, 'month')[0]![0]).toBe('month');
+  // A fold that holds days makes no hours, and one that holds months no days.
+  const days = foldOf(stepped(PAST_BOUND, HOUR_MINUTES));
+  expect(levels(days, 'hour')[0]![0]).toBe('day');
+  const months = foldOf(stepped(PAST_BOUND, DAY_MINUTES));
+  expect(months.snapshot('day').levels.map((l) => l.per)).toEqual([
+    'month',
+    'year',
+  ]);
+});
+
+test("a Unix column's periods are UTC", () => {
+  const fold = new TimeFold('s');
+  fold.add(`${UNIX_SECONDS}`);
+  const [hour, day] = fold.snapshot('hour').levels;
+  expect(hour!.from).toBe(Math.floor(UNIX_SECONDS / HOUR_SECONDS));
+  expect(day!.from).toBe(
+    dayOf(new Date(UNIX_SECONDS * 1000).toISOString().slice(0, 10)),
+  );
 });

@@ -56,6 +56,16 @@ function keyAt(minute: number, level: number): number {
   return key;
 }
 
+/** The sizes a chart draws periods at, finest first. */
+export const PER = ['hour', 'day', 'month', 'year'] as const;
+export type Per = (typeof PER)[number];
+
+/**
+ * LEVEL_SENT_AT_MOST is how many periods a snapshot sends of one size, more
+ * than any window draws at 4 px a column.
+ */
+export const LEVEL_SENT_AT_MOST = 1_024;
+
 /** The order a date written year last reads in when the fold's does not. */
 const OTHER: Record<Order | UnixUnit, Order | undefined> = {
   day: 'month',
@@ -88,6 +98,28 @@ export interface Periods {
   undated: { rows: number; sum: number };
   dates: Undated;
   /** Cells of the summed column, none when the fold counts rows. */
+  skipped: Skipped;
+}
+
+/** One size's periods, dense from the first to the last, zeros included. */
+export interface TimeLevel {
+  per: Per;
+  /** The first period's key at this size. */
+  from: number;
+  rows: number[];
+  /** Sums, empty when the fold counts rows. */
+  sum: number[];
+}
+
+/** What a snapshot sends. */
+export interface Times {
+  /**
+   * Each size from the one asked for to years, made from the period held,
+   * that has at most LEVEL_SENT_AT_MOST periods. None when no row is dated.
+   */
+  levels: TimeLevel[];
+  undated: { rows: number; sum: number };
+  dates: Undated;
   skipped: Skipped;
 }
 
@@ -214,6 +246,49 @@ export class TimeFold {
     fold.level = level;
     fold.timed = timed;
     return fold;
+  }
+
+  /**
+   * snapshot reads the fold at each size from `per` to years. A size finer
+   * than the period held is left out. Automatic starts at hours when a row
+   * is dated past midnight, and at days otherwise.
+   */
+  snapshot(per: Per | 'auto'): Times {
+    const first = per !== 'auto' ? per : this.timed > 0 ? 'hour' : 'day';
+    const sizes = PER.slice(PER.indexOf(first));
+    const { rows, sum } = this.undated;
+    return {
+      levels: sizes.flatMap((size) => this.levelAt(size) ?? []),
+      undated: { rows, sum: sum.value() },
+      dates: { ...this.dates },
+      skipped: { ...this.skipped },
+    };
+  }
+
+  /**
+   * levelAt is the fold at `per`, or undefined when it holds no period, `per`
+   * is finer than the period held, or it spans more than LEVEL_SENT_AT_MOST.
+   */
+  private levelAt(per: Per): TimeLevel | undefined {
+    const made = HELD.indexOf(per);
+    if (made < this.level || this.periods.size === 0) return undefined;
+    const keyOf = (key: number) => {
+      for (let i = this.level; i < made; i++) key = COARSER[i]!(key);
+      return key;
+    };
+    const held = [...this.periods.keys()];
+    const from = keyOf(Math.min(...held));
+    const span = keyOf(Math.max(...held)) - from + 1;
+    if (span > LEVEL_SENT_AT_MOST) return undefined;
+    const rows = Array.from({ length: span }, () => 0);
+    const sums = Array.from({ length: span }, () => new ExactSum());
+    for (const [key, count] of this.periods) {
+      const i = keyOf(key) - from;
+      rows[i] = rows[i]! + count.rows;
+      sums[i]!.merge(count.sum);
+    }
+    const sum = this.mark === undefined ? [] : sums.map((s) => s.value());
+    return { per, from, rows, sum };
   }
 
   /** read is what the fold holds, as plain numbers. */
