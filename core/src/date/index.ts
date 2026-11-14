@@ -312,19 +312,27 @@ function timeOfDay(v: string, at: number, to: number): number | undefined {
   return offsetEnd(v, i) === to ? hours * HOUR_MINUTES + mins : undefined;
 }
 
+/** The farthest an offset from UTC is written, in hours: Kiribati's +14:00. */
+const OFFSET_HOURS_MOST = 14;
+
 /**
- * The index past the offset at `i`: a Z, or ±HH:MM checked for form only, or
- * `i` itself when none is written. -1 when one is begun and not finished.
+ * The index past the offset at `i`: a Z, or ±HH:MM with the hours up to
+ * OFFSET_HOURS_MOST and the minutes up to 59, or `i` itself when none is
+ * written. -1 when one is begun and not a real offset.
  */
 function offsetEnd(v: string, i: number): number {
   const c = v.charCodeAt(i);
   if (c === UPPER_Z || c === LOWER_Z) return i + 1;
   if (c !== PLUS && c !== MINUS) return i;
   const colon = i + 1 + FIELD_DIGITS;
+  const hours = twoDigits(v, i + 1);
+  const mins = twoDigits(v, colon + 1);
   const written =
-    twoDigits(v, i + 1) >= 0 &&
+    hours >= 0 &&
+    hours <= OFFSET_HOURS_MOST &&
     v.charCodeAt(colon) === COLON &&
-    twoDigits(v, colon + 1) >= 0;
+    mins >= 0 &&
+    mins < HOUR_MINUTES;
   return written ? colon + 1 + FIELD_DIGITS : -1;
 }
 

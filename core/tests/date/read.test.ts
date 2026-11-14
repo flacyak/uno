@@ -76,6 +76,9 @@ test('an offset is checked and left out, so a cell counts as written', () => {
   expect(readDate('2024-03-04 12:30+14:00', 'day')).toBe(
     at(2024, 3, 4, 12, 30),
   );
+  expect(readDate('2024-03-04 12:30-14:59', 'day')).toBe(
+    at(2024, 3, 4, 12, 30),
+  );
 });
 
 describe('readDate refuses what is not a date', () => {
@@ -118,6 +121,10 @@ describe('readDate refuses what is not a date', () => {
     '2024-03-04 12:30+01',
     '2024-03-04 12:30+0100',
     '2024-03-04 12:30+01:0',
+    '2024-03-04 12:30+99:99',
+    '2024-03-04T12:30:00+15:00',
+    '2024-03-04T12:30:00-14:60',
+    '2024-03-04T12:30:00+01:60',
     '2024-03-04 12:30 Z',
     '2024-03-04 12:30ZZ',
     '2024-03-04x',
