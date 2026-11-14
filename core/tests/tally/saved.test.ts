@@ -174,6 +174,72 @@ test('a scatter fold saves the least and most of each page of blocks', () => {
   expect(saved.plotted).toBe(fold.snapshot().plotted);
 });
 
+test('a scatter fold read back from its save folds on as the fold it was', () => {
+  const half = (PAGE_BLOCKS + 1) * BLOCK_ROWS;
+  const before = scattered(range(0, half));
+  const after = scattered(
+    range(half, PAGED_ROWS),
+    SampleFold.restored(throughJson(before.saved())),
+  );
+  const whole = scattered(range(0, PAGED_ROWS));
+  expect(after.snapshot()).toStrictEqual(whole.snapshot());
+  expect(after.stale()).toEqual([]);
+});
+
+test("an edit of a read back page's least or most folds each of its blocks again", () => {
+  const rows = range(0, PAGED_ROWS);
+  const page = scattered(rows).saved().pages[1]!;
+  const firstRow = page.first * BLOCK_ROWS;
+  // A row inside the page's least and most, then the one on its most x.
+  const inside = firstRow + 1;
+  const top = rows.find(
+    (r) => r >= firstRow && paged(r)[0] === `${page.most.x}`,
+  )!;
+  const edits = new Map<number, [string, string]>([
+    [inside, ['1.5', '-1']],
+    [top, ['0.5', '-1']],
+  ]);
+  const cells = (row: number) => edits.get(row) ?? paged(row);
+  /** mended edits `row`, then folds each block it left stale again. */
+  const mended = (fold: SampleFold, row: number): number[] => {
+    const block = Math.floor(row / BLOCK_ROWS);
+    fold.remove(block, row, ...paged(row));
+    fold.add(block, row, ...cells(row));
+    const stale = fold.stale();
+    for (const b of stale) {
+      const alone = new SampleFold(POINTS);
+      for (const r of range(b * BLOCK_ROWS, (b + 1) * BLOCK_ROWS)) {
+        alone.add(b, r, ...cells(r));
+      }
+      fold.refold(b, alone);
+    }
+    return stale;
+  };
+  const fold = SampleFold.restored(throughJson(scattered(rows).saved()))!;
+  const whole = scattered(rows);
+  expect(mended(fold, inside)).toEqual([]);
+  expect(mended(fold, top)).toEqual(range(page.first, page.first + page.span));
+  mended(whole, inside);
+  expect(mended(whole, top)).toEqual([Math.floor(top / BLOCK_ROWS)]);
+  expect(fold.snapshot()).toStrictEqual(whole.snapshot());
+});
+
+test('a save that holds no scatter fold reads back as none', () => {
+  const saved = scattered(range(0, BLOCK_ROWS)).saved();
+  const page = saved.pages[0]!;
+  const unsaved = [
+    undefined,
+    { ...saved, marks: { x: 'point', y: 'dot' } },
+    { ...saved, plotted: -1 },
+    { ...saved, kept: [[1, 2]] },
+    { ...saved, kept: [[1, null, 2]] },
+    { ...saved, pages: [{ ...page, first: 1 }] },
+    { ...saved, pages: [{ ...page, span: PAGE_BLOCKS + 1 }] },
+    { ...saved, pages: [{ ...page, least: page.most, most: page.least }] },
+  ];
+  for (const v of unsaved) expect(SampleFold.restored(v)).toBeUndefined();
+});
+
 /**
  * The hash of the folds TALLY_VERSION makes of the fixture: its rows by
  * region, its revenue and units summed by channel with each mark, and its
