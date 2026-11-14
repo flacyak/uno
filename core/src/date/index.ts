@@ -59,7 +59,7 @@ function yearStart(year: number): number {
 }
 
 /** The year days, and readDate's minutes, count from. */
-const EPOCH_YEAR = 1970;
+export const EPOCH_YEAR = 1970;
 /** The days from 0000-01-01 to 1970-01-01. */
 const EPOCH = yearStart(EPOCH_YEAR);
 

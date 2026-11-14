@@ -6,8 +6,9 @@ import { expect, test } from 'vite-plus/test';
 
 import { readDate } from '@date';
 import { read } from '@ingest';
-import { TimeFold } from '@tally';
-import { seeded } from '@core-tests/lab/cache/stats';
+import { HELD_AT_MOST, TimeFold } from '@tally';
+import type { Held } from '@tally';
+import { seeded, shuffled } from '@core-tests/lab/cache/stats';
 import { ROWS, bytes } from '@core-tests/testdata/sales-q3';
 
 const DATE = 0;
@@ -49,6 +50,7 @@ test('a time fold counts the rows of each hour, earliest first', () => {
   ];
   for (const v of dates) fold.add(v);
   expect(fold.read()).toMatchObject({
+    held: 'hour',
     periods: [
       { key: hourOf('2024-03-04'), rows: 1 },
       { key: hourOf('2024-03-04 09:00'), rows: 1 },
@@ -93,4 +95,115 @@ test('a time fold moved by edits reads as one that counts again', () => {
     }
     expect(fold.read(), `seed ${seed}`).toEqual(folded().read());
   }
+});
+
+const DAY_HOURS = 24;
+const DAY_MINUTES = DAY_HOURS * HOUR_MINUTES;
+/** No month is longer, so each step of it starts a new month. */
+const MONTH_MOST_MINUTES = 31 * DAY_MINUTES;
+const MINUTE_MS = 60_000;
+const YEAR_MONTHS = 12;
+const EPOCH_YEAR = 1970;
+/** The years readDate reads: 0000 to 9999. */
+const YEARS = 10_000;
+const PAST_BOUND = HELD_AT_MOST + 1;
+
+/** A date and time `minute` minutes after 1970, as a cell writes it. */
+function written(minute: number): string {
+  const iso = new Date(minute * MINUTE_MS).toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+}
+
+/** The key of the period at `held` that `minute` falls in, as Date counts. */
+function keyOf(minute: number, held: Held): number {
+  const at = new Date(minute * MINUTE_MS);
+  const months =
+    (at.getUTCFullYear() - EPOCH_YEAR) * YEAR_MONTHS + at.getUTCMonth();
+  const keys: Record<Held, number> = {
+    hour: Math.floor(minute / HOUR_MINUTES),
+    day: Math.floor(minute / DAY_MINUTES),
+    month: months,
+    year: Math.floor(months / YEAR_MONTHS),
+  };
+  return keys[held];
+}
+
+/** Each period's key and rows, from `minutes` counted again at `held`. */
+function counted(minutes: readonly number[], held: Held): number[][] {
+  const rows = new Map<number, number>();
+  for (const m of minutes) {
+    const key = keyOf(m, held);
+    rows.set(key, (rows.get(key) ?? 0) + 1);
+  }
+  return [...rows].sort(([a], [b]) => a - b);
+}
+
+/** A fold of the cells written at `minutes`, in their order. */
+function foldOf(minutes: readonly number[]): TimeFold {
+  const fold = new TimeFold('day');
+  for (const m of minutes) fold.add(written(m));
+  return fold;
+}
+
+/** `n` minutes from 1970, `step` apart. */
+function stepped(n: number, step: number): number[] {
+  return Array.from({ length: n }, (_, i) => i * step);
+}
+
+test('a time fold coarsens past HELD_AT_MOST periods, keeping every count', () => {
+  const firstYears = Array.from({ length: YEARS }, (_, year) => {
+    const t = new Date(0);
+    t.setUTCFullYear(year, 0, 1);
+    return t.getTime() / MINUTE_MS;
+  });
+  const spans: Array<[Held, number[]]> = [
+    ['hour', stepped(HELD_AT_MOST, HOUR_MINUTES)],
+    ['day', stepped(PAST_BOUND, HOUR_MINUTES)],
+    ['month', stepped(PAST_BOUND, DAY_MINUTES)],
+    ['year', stepped(PAST_BOUND, MONTH_MOST_MINUTES)],
+    ['year', firstYears],
+  ];
+  for (const [held, minutes] of spans) {
+    // Each cell twice, so every period counts more than one row.
+    const twice = [...minutes, ...minutes];
+    const read = foldOf(twice).read();
+    expect(read.held).toBe(held);
+    expect(read.periods.map(({ key, rows }) => [key, rows])).toEqual(
+      counted(twice, held),
+    );
+  }
+});
+
+// Rows over two years, more hours than a fold holds and fewer days.
+const SPAN_MINUTES = 2 * 366 * DAY_MINUTES;
+const BLOCK_ROWS = 1_000;
+const BLOCKS = 20;
+
+test('a time fold reads the same block by block, in any order', () => {
+  for (let seed = 1; seed <= SEEDS / 10; seed++) {
+    const random = seeded(seed);
+    const minutes = Array.from({ length: BLOCK_ROWS * BLOCKS }, () =>
+      Math.floor(random() * SPAN_MINUTES),
+    );
+    const whole = foldOf(minutes).read();
+    expect(whole.held).toBe('day');
+    expect(whole.periods.map(({ key, rows }) => [key, rows])).toEqual(
+      counted(minutes, 'day'),
+    );
+    const blocks = [...Array(BLOCKS).keys()];
+    const order = shuffled(blocks, random).flatMap((block) =>
+      minutes.slice(block * BLOCK_ROWS, (block + 1) * BLOCK_ROWS),
+    );
+    expect(foldOf(order).read(), `seed ${seed}`).toEqual(whole);
+  }
+});
+
+test('a fold that coarsened stays coarse once its rows are taken back', () => {
+  const minutes = stepped(PAST_BOUND, HOUR_MINUTES);
+  const fold = foldOf(minutes);
+  for (const m of minutes.slice(1)) fold.remove(written(m));
+  expect(fold.read()).toMatchObject({
+    held: 'day',
+    periods: [{ key: keyOf(minutes[0]!, 'day'), rows: 1 }],
+  });
 });
