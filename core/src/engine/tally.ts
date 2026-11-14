@@ -12,6 +12,7 @@ import type { Chart, ChartColumn, Plot } from '@document';
 import type { Mark } from '@num';
 import type { Said } from '@said';
 import { GroupsFold, SampleFold } from '@tally';
+import type { SavedGroups, SavedSample } from '@tally';
 import type { Tally } from './protocol.ts';
 
 /** How far one chart's fold has got. */
@@ -43,6 +44,17 @@ interface Folding {
 type Tallying =
   | (Folding & { t: 'sample'; fold: SampleFold; x: number; y: number })
   | (Folding & { t: 'groups'; fold: GroupsFold; by: number; sum?: number });
+
+/**
+ * SavedChart is what a save keeps of a chart's fold: which fold its columns
+ * make, the rows it holds, and the fold, with the marks it read them with.
+ */
+export interface SavedChart {
+  key: string;
+  rows: number;
+  ahead?: [number, number];
+  fold: SavedGroups | SavedSample;
+}
 
 /**
  * A block's rows as the folds read them: their range, and what a column of
@@ -104,6 +116,22 @@ export class Tallies {
   /** detach stops folding the chart with `id`. */
   detach(id: string): void {
     this.charts.delete(id);
+  }
+
+  /**
+   * saved is the fold of each chart that holds any row, by the chart's id,
+   * as a save keeps it. A scatter an edit left stale is left out, to fold
+   * again when it opens.
+   */
+  saved(): Record<string, SavedChart> {
+    const saved: Record<string, SavedChart> = {};
+    for (const [id, t] of this.charts) {
+      if (t.t === 'sample' && t.fold.stale().length > 0) continue;
+      if (t.rows === 0 && t.ahead === undefined) continue;
+      const { key, rows, ahead } = t;
+      saved[id] = { key, rows, ahead, fold: t.fold.saved() };
+    }
+    return saved;
   }
 
   /** How many charts are attached. */

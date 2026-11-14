@@ -1260,7 +1260,8 @@ export class View {
 
   /**
    * saved is what a save keeps of the row index of a file a path points at
-   * alone: every block begun so far, and the key it holds for.
+   * alone: every block begun so far, and the key it holds for, and the fold
+   * of each of its charts.
    */
   saved(): SavedSource | undefined {
     const index = this.index;
@@ -1270,7 +1271,9 @@ export class View {
     const { head, tail } = this.print;
     const { counted, complete } = index;
     const kept = { counted, complete, head, tail, blocks: this.encoded.blocks };
-    return { path: this.path, key: this.key, ...kept };
+    const charts = this.tallies.saved();
+    const folded = Object.keys(charts).length > 0 ? { charts } : {};
+    return { path: this.path, key: this.key, ...kept, ...folded };
   }
 
   /** The current edit log. */
