@@ -32,6 +32,8 @@ describe('readDate reads each layout the same in either order', () => {
     ['0000-02-29', at(0, 2, 29)],
     ['1969-12-31 23:59', -1],
     ['9999-12-31 23:59', at(9999, 12, 31, 23, 59)],
+    [' 2024-03-04\t', at(2024, 3, 4)],
+    ['\u00a02024-03-04 12:30\u3000', at(2024, 3, 4, 12, 30)],
   ];
   for (const [v, minutes] of cases) {
     test(JSON.stringify(v), () => {
@@ -71,6 +73,8 @@ test('an offset is checked and left out, so a cell counts as written', () => {
 describe('readDate refuses what is not a date', () => {
   const refused = [
     '',
+    ' ',
+    '\u00a0',
     '2024',
     '20240304',
     '2024-3',

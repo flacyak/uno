@@ -9,6 +9,8 @@
  * costs about as much as the read.
  */
 
+import { isSpace } from '@go';
+
 /** A calendar date: a year, a month from 1 to 12, and a day from 1. */
 export interface Civil {
   year: number;
@@ -112,19 +114,24 @@ const UPPER_T = code('T');
 const LOWER_T = code('t');
 const UPPER_Z = code('Z');
 const LOWER_Z = code('z');
+/** Printable ASCII, none of which is White_Space. */
+const PRINTABLE_FIRST = code('!');
+const PRINTABLE_LAST = code('~');
 
 /**
  * readDate is `v` as minutes since 1970-01-01 00:00 as written, or undefined
  * when it is not a date. A date with a time of day counts its hours and
  * minutes; seconds and an offset are checked and left out, so a cell counts
  * in the period it writes. A year-last date reads by `order`, and a year and
- * month as its first day.
+ * month as its first day. Surrounding White_Space is trimmed.
  * It scans a character at a time, with no regular expression, since a chart
  * reads every cell of its column.
  */
 export function readDate(v: string, order: Order): number | undefined {
-  const from = 0;
-  const to = v.length;
+  let from = 0;
+  let to = v.length;
+  while (from < to && spaceAt(v, from)) from++;
+  while (to > from && spaceAt(v, to - 1)) to--;
 
   // Three fields of digits, or a year and month: field1 ends at end1 and so on.
   const field1 = readDigits(v, from, to);
@@ -254,4 +261,11 @@ function isSeparator(c: number): boolean {
 
 function isDigit(c: number): boolean {
   return c >= ZERO && c <= NINE;
+}
+
+/** Whether the character at `i` is White_Space, as `trimSpace` reads it. */
+function spaceAt(v: string, i: number): boolean {
+  const c = v.charCodeAt(i);
+  if (c >= PRINTABLE_FIRST && c <= PRINTABLE_LAST) return false;
+  return isSpace(v[i]!);
 }
