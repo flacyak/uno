@@ -203,6 +203,26 @@ test('inferKind names the order of a date column from the sample', () => {
   ]);
 });
 
+// A column of Unix seconds or milliseconds stays a number and names its unit.
+test('inferKind names the unit of a column of Unix time', () => {
+  const s = new Sheet(
+    't.csv',
+    ['seconds', 'millis', 'ids', 'serials'],
+    [
+      ['1700000000', '1700000000123', '1700000000', '45355'],
+      ['1700003600', '1700003600456', '42', '45356'],
+    ],
+  );
+  expect(s.columns.map((c) => c.kind)).toEqual(['num', 'num', 'num', 'num']);
+  expect(s.columns.map((c) => c.unit)).toEqual([
+    's',
+    'ms',
+    undefined,
+    undefined,
+  ]);
+  expect(s.columns.map((c) => 'unit' in c)).toEqual([true, true, false, false]);
+});
+
 // Date detection accepts only the listed layouts.
 describe('isDate is the written layouts and not whatever Date can parse', () => {
   const dates = [

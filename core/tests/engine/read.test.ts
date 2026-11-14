@@ -102,6 +102,20 @@ test('the engine names the order of each date column from its sample', async () 
   }
 });
 
+test('the engine names the unit of a column of Unix time', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const csv =
+      'at,ms,n\n1700000000,1700000000123,1\n1700003600,1700003600456,2\n';
+    const src = await openOne(engine, { name: 'u.csv', blob: new Blob([csv]) });
+    const columns = src.opened.columns;
+    expect(columns.map((c) => c.kind)).toEqual(['num', 'num', 'num']);
+    expect(columns.map((c) => c.unit)).toEqual(['s', 'ms', undefined]);
+  } finally {
+    done();
+  }
+});
+
 test('a band holds the rows around the viewport, and only those', async () => {
   const { engine, done } = connect(TINY);
   try {

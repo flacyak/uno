@@ -3,8 +3,8 @@
  * open: text, number or date, whether it is flagged, and its decimal mark.
  */
 
-import type { ShownOrder } from '@date';
-import { inferOrder, readDate } from '@date';
+import type { ShownOrder, UnixUnit } from '@date';
+import { inferOrder, inferUnit, readDate } from '@date';
 import { trimSpace } from '@go';
 import type { Mark } from '@num';
 import { isNumber, markShown, parse, undress } from '@num';
@@ -31,6 +31,11 @@ export interface Inferred {
    * it. Absent when the column is not dates or writes none year last.
    */
   order?: ShownOrder;
+  /**
+   * The unit of Unix time a number column's whole numbers are, as `inferUnit`
+   * names it. The column stays a number for sums, sorting and find.
+   */
+  unit?: UnixUnit;
 }
 
 /**
@@ -68,7 +73,11 @@ export function inferKind(rows: number, at: (row: number) => string): Inferred {
     const date: Inferred = { kind: 'date', flagged: false, mark };
     return order === undefined ? date : { ...date, order };
   }
-  if (nums === seen) return { kind: 'num', flagged: false, mark };
+  if (nums === seen) {
+    const unit = inferUnit(values);
+    const num: Inferred = { kind: 'num', flagged: false, mark };
+    return unit === undefined ? num : { ...num, unit };
+  }
   if (nums + formatted === seen) return { kind: 'text', flagged: true, mark };
   return { kind: 'text', flagged: false, mark };
 }

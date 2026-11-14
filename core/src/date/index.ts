@@ -95,6 +95,9 @@ export type Order = 'day' | 'month';
 /** The order a column's sample shows: one of them, or either when none decides. */
 export type ShownOrder = Order | 'either';
 
+/** The unit a whole number of Unix time counts since 1970-01-01 00:00 UTC. */
+export type UnixUnit = 's' | 'ms';
+
 const MINUTE_SECONDS = 60;
 const HOUR_MINUTES = 60;
 const DAY_HOURS = 24;
@@ -126,15 +129,22 @@ const PRINTABLE_LAST = code('~');
  * when it is not a date. A date with a time of day counts its hours and
  * minutes; seconds and an offset are checked and left out, so a cell counts
  * in the period it writes. A year-last date reads by `order`, and a year and
- * month as its first day. Surrounding White_Space is trimmed.
+ * month as its first day. Read with a UnixUnit, it is a whole number of
+ * Unix time, whose periods are UTC's. Surrounding White_Space is trimmed.
  * It scans a character at a time, with no regular expression, since a chart
  * reads every cell of its column.
  */
-export function readDate(v: string, order: Order): number | undefined {
+export function readDate(
+  v: string,
+  reading: Order | UnixUnit,
+): number | undefined {
   let from = 0;
   let to = v.length;
   while (from < to && spaceAt(v, from)) from++;
   while (to > from && spaceAt(v, to - 1)) to--;
+  if (reading === 's' || reading === 'ms') {
+    return unixMinutes(v, from, to, reading);
+  }
 
   // Three fields of digits, or a year and month: field1 ends at end1 and so on.
   const field1 = readDigits(v, from, to);
@@ -171,7 +181,7 @@ export function readDate(v: string, order: Order): number | undefined {
   const time = end3 === to ? 0 : timeOfDay(v, end3, to);
   if (time === undefined) return undefined;
   if (!yearLast) return minutes(field1, field2, field3, time);
-  return order === 'day'
+  return reading === 'day'
     ? minutes(field3, field2, field1, time)
     : minutes(field3, field1, field2, time);
 }
@@ -205,6 +215,57 @@ export function inferOrder(values: readonly string[]): ShownOrder | undefined {
   if (!yearLast) return undefined;
   if (dayOnly === monthOnly) return 'either';
   return dayOnly ? 'day' : 'month';
+}
+
+/** Milliseconds in each unit of Unix time. */
+const UNIT_MS: Record<UnixUnit, number> = { s: 1000, ms: 1 };
+const MINUTE_MS = MINUTE_SECONDS * UNIT_MS.s;
+/** The years readDate reads, and the minutes they span. */
+const FIRST_YEAR = 0;
+const LAST_YEAR = 9999;
+const FIRST_MINUTE = daysFromCivil(FIRST_YEAR, 1, 1) * DAY_MINUTES;
+const END_MINUTE = daysFromCivil(LAST_YEAR + 1, 1, 1) * DAY_MINUTES;
+
+/**
+ * The minute a whole number of Unix `unit`s from `from` to `to` falls in, or
+ * undefined when it is not one or falls outside the years readDate reads.
+ */
+function unixMinutes(
+  v: string,
+  from: number,
+  to: number,
+  unit: UnixUnit,
+): number | undefined {
+  const n = readDigits(v, from, to);
+  if (from === to || digitsStop !== to) return undefined;
+  const minute = Math.floor((n * UNIT_MS[unit]) / MINUTE_MS);
+  return minute >= FIRST_MINUTE && minute < END_MINUTE ? minute : undefined;
+}
+
+/** The least and most a sampled Unix time may be: 2001-09-09 to 2286-11-20. */
+const UNIX_SAMPLED: Record<UnixUnit, readonly [number, number]> = {
+  s: [1_000_000_000, 9_999_999_999],
+  ms: [1_000_000_000_000, 9_999_999_999_999],
+};
+
+/**
+ * inferUnit names the unit of Unix time a column's sampled `values` write:
+ * seconds when every one is a whole number from 1,000,000,000 to
+ * 9,999,999,999, and milliseconds from 1,000,000,000,000 to
+ * 9,999,999,999,999. Undefined otherwise, and when there are none, so an
+ * Excel serial day such as 45355 never reads as a date.
+ */
+export function inferUnit(values: readonly string[]): UnixUnit | undefined {
+  if (values.length === 0) return undefined;
+  const units: readonly UnixUnit[] = ['s', 'ms'];
+  return units.find((unit) => {
+    const [least, most] = UNIX_SAMPLED[unit];
+    return values.every((v) => {
+      const s = trimSpace(v);
+      const n = readDigits(s, 0, s.length);
+      return digitsStop === s.length && n >= least && n <= most;
+    });
+  });
 }
 
 /** The minutes of a real date and `time`, or undefined when the date is not real. */
