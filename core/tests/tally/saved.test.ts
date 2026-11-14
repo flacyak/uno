@@ -8,7 +8,13 @@ import { expect, test } from 'vite-plus/test';
 
 import { hashOf } from '@engine/grown';
 import { read } from '@ingest';
-import { DISTINCT_AT_MOST, ExactSum, GroupsFold, TALLY_VERSION } from '@tally';
+import {
+  DISTINCT_AT_MOST,
+  ExactSum,
+  GroupsFold,
+  SampleFold,
+  TALLY_VERSION,
+} from '@tally';
 import { UINT32_RANGE, seeded } from '@core-tests/lab/cache/stats';
 import {
   CHANNEL,
@@ -125,15 +131,60 @@ test('a save that holds no groups fold reads back as none', () => {
   for (const v of unsaved) expect(GroupsFold.restored(v)).toBeUndefined();
 });
 
+/** Blocks a page of a scatter's least and most holds, and rows a block. */
+const PAGE_BLOCKS = 256;
+const BLOCK_ROWS = 4;
+/** Rows over two pages and a part of a third. */
+const PAGED_ROWS = (2 * PAGE_BLOCKS + 3) * BLOCK_ROWS;
+const POINTS = { x: 'point', y: 'point' } as const;
+
+/** paged is a row's x and y over PAGED_ROWS, with a word and a blank. */
+function paged(row: number): [string, string] {
+  if (row % 7 === 0) return ['n/a', `${row}`];
+  return [`${(row * 37) % 1000}.5`, row % 5 === 0 ? '' : `${-row}`];
+}
+
+/** scattered folds `rows` of PAGED_ROWS, BLOCK_ROWS a block. */
+function scattered(rows: number[], fold = new SampleFold(POINTS)): SampleFold {
+  for (const row of rows) {
+    fold.add(Math.floor(row / BLOCK_ROWS), row, ...paged(row));
+  }
+  return fold;
+}
+
+const range = (from: number, end: number) =>
+  Array.from({ length: end - from }, (_, i) => from + i);
+
+test('a scatter fold saves the least and most of each page of blocks', () => {
+  const fold = scattered(range(0, PAGED_ROWS));
+  const saved = fold.saved();
+  expect(throughJson(saved)).toEqual(saved);
+  expect(saved.pages.map(({ first, span }) => [first, span])).toEqual([
+    [0, PAGE_BLOCKS],
+    [PAGE_BLOCKS, PAGE_BLOCKS],
+    [2 * PAGE_BLOCKS, 3],
+  ]);
+  // Each page's least and most are those of its rows alone.
+  for (const { first, span, least, most } of saved.pages) {
+    const rows = range(first * BLOCK_ROWS, (first + span) * BLOCK_ROWS);
+    const alone = scattered(rows).snapshot();
+    expect({ least, most }).toEqual({ least: alone.least, most: alone.most });
+  }
+  expect(saved.kept.length).toBeGreaterThan(0);
+  expect(saved.plotted).toBe(fold.snapshot().plotted);
+});
+
 /**
  * The hash of the folds TALLY_VERSION makes of the fixture: its rows by
- * region, and its revenue and units summed by channel with each mark. It
+ * region, its revenue and units summed by channel with each mark, and its
+ * revenue against units with each mark. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
 const GOLDEN = {
   version: 1,
   groups: '2ae37431f8e378df8ef90b5aa4776174d479cc156f24f3a898676c88cdd7c6cd',
+  sample: '82b28cba5c4ad68f0358cb3c9b9cfbe9e4aaecbb4f143ca0412395470acb6432',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -161,4 +212,16 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(saved)),
     'a fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.groups);
+  const [units, revenue] = [column(UNITS), column(REVENUE)];
+  const samples = (['point', 'comma'] as const).map((mark) => {
+    const fold = new SampleFold({ x: mark, y: mark });
+    units.forEach((x, r) =>
+      fold.add(Math.floor(r / BLOCK_ROWS), r, x, revenue[r]!),
+    );
+    return fold.saved();
+  });
+  expect(
+    hashOf(encoder.encode(JSON.stringify(samples))),
+    'a scatter fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.sample);
 });

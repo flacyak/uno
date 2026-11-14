@@ -46,6 +46,23 @@ export interface Sample {
   skipped: Skipped;
 }
 
+/**
+ * SavedSample is what a save keeps of a SampleFold: its marks, each kept
+ * row as [row, x, y], or [row] where it has no point, the row ranked last
+ * at the last cut, its counts, the blocks an edit left stale, and the least
+ * and most of each page over the first `span` of its blocks. A -0 reads
+ * back as 0.
+ */
+export interface SavedSample {
+  marks: Marks;
+  kept: Array<[number, number, number] | [number]>;
+  last?: number;
+  plotted: number;
+  skipped: Skipped;
+  stale: number[];
+  pages: Array<{ first: number; span: number; least: Point; most: Point }>;
+}
+
 /** The least and most x and y of the plotted rows of PAGE_BLOCKS blocks. */
 class Page {
   readonly leastX = new Float64Array(PAGE_BLOCKS).fill(Infinity);
@@ -159,6 +176,22 @@ export class SampleFold {
     return [...this.stales].sort((a, b) => a - b);
   }
 
+  /** saved is what the fold holds, with each page's least and most. */
+  saved(): SavedSample {
+    const kept = [...this.kept].map(([row, p]): SavedSample['kept'][number] =>
+      p === undefined ? [row] : [row, p.x, p.y],
+    );
+    const pages = [...this.pages].flatMap(([first, page]) => {
+      const [least, most] = extentOf([page]);
+      const span = 1 + page.leastX.findLastIndex((x, i) => x <= page.mostX[i]!);
+      return least.x <= most.x ? [{ first, span, least, most }] : [];
+    });
+    const { last, plotted } = this;
+    const skipped = { ...this.skipped };
+    const counts = { last, plotted, skipped, stale: this.stale() };
+    return { marks: { ...this.marks }, kept, ...counts, pages };
+  }
+
   /** snapshot reads the fold as plain numbers. */
   snapshot(): Sample {
     const rows = [...this.kept.keys()].sort(byRank);
@@ -179,15 +212,7 @@ export class SampleFold {
 
   /** extent returns the least and most x and y of every block. */
   private extent(): [Point, Point] {
-    const least = { x: Infinity, y: Infinity };
-    const most = { x: -Infinity, y: -Infinity };
-    for (const page of this.pages.values()) {
-      least.x = Math.min(least.x, ...page.leastX);
-      least.y = Math.min(least.y, ...page.leastY);
-      most.x = Math.max(most.x, ...page.mostX);
-      most.y = Math.max(most.y, ...page.mostY);
-    }
-    return [least, most];
+    return extentOf(this.pages.values());
   }
 
   /** page returns the page that holds block `at`, made when it has none. */
@@ -227,4 +252,17 @@ export class SampleFold {
     this.plotted += sign;
     return { x, y };
   }
+}
+
+/** extentOf returns the least and most x and y of every block of `pages`. */
+function extentOf(pages: Iterable<Page>): [Point, Point] {
+  const least = { x: Infinity, y: Infinity };
+  const most = { x: -Infinity, y: -Infinity };
+  for (const page of pages) {
+    least.x = Math.min(least.x, ...page.leastX);
+    least.y = Math.min(least.y, ...page.leastY);
+    most.x = Math.max(most.x, ...page.mostX);
+    most.y = Math.max(most.y, ...page.mostY);
+  }
+  return [least, most];
 }
