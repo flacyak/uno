@@ -1041,8 +1041,13 @@ export class View {
     let told = Date.now();
     let slice = told;
     for (let row = first; ;) {
+      // A row waits until it is readable as well as handed over: the last
+      // block a save kept partway counts as handed before the pass makes
+      // it readable, and a wait on that alone would never yield to the pass.
       await this.until(
-        () => index.complete || this.tapped > index.blockOf(row),
+        () =>
+          index.complete ||
+          (row < index.readable() && this.tapped > index.blockOf(row)),
       );
       if (signal.aborted) return;
       if (row >= index.readable()) break;
