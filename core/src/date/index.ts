@@ -281,21 +281,23 @@ function minutes(
 
 /**
  * The minutes into the day a time from `at` to `to` writes: a T, t or space,
- * HH:MM, an optional :SS with an optional fraction, then an optional Z or
- * ±HH:MM. Seconds stop at 59, so a leap second is not a time.
+ * H:MM or HH:MM, an optional :SS with an optional fraction, then an optional
+ * Z or ±HH:MM. The hour may be one digit, as a US Excel export writes
+ * 3/4/2024 9:05. Seconds stop at 59, so a leap second is not a time.
  */
 function timeOfDay(v: string, at: number, to: number): number | undefined {
   const between = v.charCodeAt(at);
   if (between !== UPPER_T && between !== LOWER_T && between !== SPACE) {
     return undefined;
   }
-  let i = at + 1;
-  const hours = twoDigits(v, i);
-  i += FIELD_DIGITS;
+  const hours = readDigits(v, at + 1, to);
+  let i = digitsStop;
+  const hourDigits = i - at - 1;
+  if (hourDigits < 1 || hourDigits > FIELD_DIGITS) return undefined;
   if (v.charCodeAt(i++) !== COLON) return undefined;
   const mins = twoDigits(v, i);
   i += FIELD_DIGITS;
-  if (hours < 0 || hours >= DAY_HOURS) return undefined;
+  if (hours >= DAY_HOURS) return undefined;
   if (mins < 0 || mins >= HOUR_MINUTES) return undefined;
   if (v.charCodeAt(i) === COLON) {
     const secs = twoDigits(v, ++i);

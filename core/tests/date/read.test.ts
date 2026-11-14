@@ -59,6 +59,14 @@ test('a year-last date reads by the order', () => {
   }
 });
 
+test('a one-digit hour reads, as a US Excel export writes it', () => {
+  expect(readDate('3/4/2024 9:05', 'month')).toBe(at(2024, 3, 4, 9, 5));
+  expect(readDate('3/4/2024 9:05:07', 'month')).toBe(at(2024, 3, 4, 9, 5));
+  expect(readDate('12/31/2024 0:59', 'month')).toBe(at(2024, 12, 31, 0, 59));
+  expect(readDate('2024-03-04 1:30', 'day')).toBe(at(2024, 3, 4, 1, 30));
+  expect(readDate('2024-03-04T9:05Z', 'day')).toBe(at(2024, 3, 4, 9, 5));
+});
+
 test('an offset is checked and left out, so a cell counts as written', () => {
   // The same instant, written in two zones, counts on two days.
   expect(readDate('2024-03-04T23:30:00-05:00', 'day')).toBe(
@@ -96,7 +104,10 @@ describe('readDate refuses what is not a date', () => {
     '2024-03-04 24:00',
     '2024-03-04 23:60',
     '2024-03-04 23:59:60',
-    '2024-03-04 1:30',
+    '2024-03-04 123:30',
+    '2024-03-04 :30',
+    '3/4/2024 9:5',
+    '3/4/2024 9:05:7',
     '2024-03-04 12:3',
     '2024-03-04 12',
     '2024-03-04 12:30:5',

@@ -181,6 +181,23 @@ test('inferKind names the decimal mark from the sample', () => {
   }
 });
 
+// Excel's US CSV export writes a date-time as m/d/yyyy h:mm, with no
+// leading zero on the hour.
+test('inferKind names a US Excel export of date-times a date, month first', () => {
+  const s = new Sheet(
+    'export.csv',
+    ['ordered', 'shipped'],
+    [
+      ['3/4/2024 9:05', '3/4/2024 9:05:07'],
+      ['3/13/2024 14:20', '3/13/2024 14:20:59'],
+    ],
+  );
+  expect(s.columns.map((c) => [c.kind, c.order])).toEqual([
+    ['date', 'month'],
+    ['date', 'month'],
+  ]);
+});
+
 // A date column's order comes from its sample: a value that reads only day
 // first or only month first decides it.
 test('inferKind names the order of a date column from the sample', () => {
@@ -251,6 +268,9 @@ describe('isDate is the written layouts and not whatever Date can parse', () => 
     '2024/03/04 12:30',
     '04/03/2024 12:30:00',
     '2024-03',
+    // A US Excel export writes the hour in one digit.
+    '3/4/2024 9:05',
+    '3/4/2024 9:05:07',
     // Year 0 is a leap year in the proleptic Gregorian calendar.
     '0000-02-29',
   ];
@@ -261,7 +281,7 @@ describe('isDate is the written layouts and not whatever Date can parse', () => 
     '2024/03',
     '2024-03-04  12:30',
     '2024-03-04 12',
-    '2024-03-04 1:30',
+    '2024-03-04 001:30',
     '2024-03-04 24:00',
     '2024-03-04 12:30:00+0100',
     '2024-03-04 12:30.5',
