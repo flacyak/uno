@@ -13,6 +13,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
+    "./date": "./dist/date/index.mjs",
     "./document": "./dist/document/index.mjs",
     "./engine": "./dist/engine/index.mjs",
     "./formula": "./dist/formula/index.mjs",
