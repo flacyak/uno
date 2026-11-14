@@ -223,8 +223,8 @@ const MINUTE_MS = MINUTE_SECONDS * UNIT_MS.s;
 /** The years readDate reads, and the minutes they span. */
 const FIRST_YEAR = 0;
 const LAST_YEAR = 9999;
-const FIRST_MINUTE = daysFromCivil(FIRST_YEAR, 1, 1) * DAY_MINUTES;
-const END_MINUTE = daysFromCivil(LAST_YEAR + 1, 1, 1) * DAY_MINUTES;
+export const FIRST_MINUTE = daysFromCivil(FIRST_YEAR, 1, 1) * DAY_MINUTES;
+export const END_MINUTE = daysFromCivil(LAST_YEAR + 1, 1, 1) * DAY_MINUTES;
 
 /**
  * The minute a whole number of Unix `unit`s from `from` to `to` falls in, or

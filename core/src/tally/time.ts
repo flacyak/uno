@@ -3,12 +3,21 @@
  * hour, or per day, month or year once there are too many hours to hold.
  */
 
-import { EPOCH_YEAR, civilFromDays, readDate } from '@date';
+import {
+  END_MINUTE,
+  EPOCH_YEAR,
+  FIRST_MINUTE,
+  civilFromDays,
+  readDate,
+} from '@date';
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
 
+import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
 import { Count, counted } from './groups.ts';
+import { isCount, isMark, isRecord } from './saved.ts';
+import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
 
 /** The periods a fold holds, finest first. Each merges exactly into the next. */
@@ -39,6 +48,13 @@ const COARSER: ReadonlyArray<(key: number) => number> = [
   },
   (month) => Math.floor(month / YEAR_MONTHS),
 ];
+
+/** The key of the period at HELD's place `level` that `minute` falls in. */
+function keyAt(minute: number, level: number): number {
+  let key = Math.floor(minute / HOUR_MINUTES);
+  for (let i = 0; i < level; i++) key = COARSER[i]!(key);
+  return key;
+}
 
 /** The order a date written year last reads in when the fold's does not. */
 const OTHER: Record<Order | UnixUnit, Order | undefined> = {
@@ -132,7 +148,7 @@ export class TimeFold {
     this.count(date, cell, -1);
   }
 
-  /** saved is what the fold holds, as a save writes it. */
+  /** saved is what the fold holds, which `restored` reads back as it was. */
   saved(): SavedTime {
     const summed = this.mark !== undefined;
     const { rows, sum } = this.undated;
@@ -148,6 +164,56 @@ export class TimeFold {
       dates: { ...this.dates },
       skipped: { ...this.skipped },
     };
+  }
+
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none: a
+   * field out of range, a period twice, an empty one, one whose key is past
+   * the years readDate reads, or more than HELD_AT_MOST periods finer than
+   * years.
+   */
+  static restored(saved: unknown): TimeFold | undefined {
+    if (!isRecord(saved) || !isRecord(saved['dates'])) return undefined;
+    const { reading, mark, held, timed, periods, undated } = saved;
+    const level = HELD.findIndex((h) => h === held);
+    const dates = restoredSkipped(saved['dates']);
+    const other = saved['dates']['other'];
+    const skipped = restoredSkipped(saved['skipped']);
+    const fields =
+      isReading(reading) &&
+      (mark === undefined || isMark(mark)) &&
+      level >= 0 &&
+      isCount(timed) &&
+      isCount(other) &&
+      dates !== undefined &&
+      skipped !== undefined &&
+      isRecord(undated) &&
+      Array.isArray(periods) &&
+      (periods.length <= HELD_AT_MOST || level === COARSER.length);
+    if (!fields) return undefined;
+    const fold = new TimeFold(reading, mark);
+    const least = keyAt(FIRST_MINUTE, level);
+    const most = keyAt(END_MINUTE - 1, level);
+    const isKey = (key: unknown): key is number =>
+      typeof key === 'number' &&
+      Number.isSafeInteger(key) &&
+      key >= least &&
+      key <= most;
+    for (const p of periods as unknown[]) {
+      const [key, rows, sum]: unknown[] = Array.isArray(p) ? p : [];
+      const count = restoredCount(rows, sum, mark);
+      if (!isKey(key) || fold.periods.has(key)) return undefined;
+      if (count === undefined || count.rows === 0) return undefined;
+      fold.periods.set(key, count);
+    }
+    const count = restoredCount(undated['rows'], undated['sum'], mark);
+    if (count === undefined) return undefined;
+    Object.assign(fold.undated, count);
+    Object.assign(fold.dates, dates, { other });
+    Object.assign(fold.skipped, skipped);
+    fold.level = level;
+    fold.timed = timed;
+    return fold;
   }
 
   /** read is what the fold holds, as plain numbers. */
@@ -175,8 +241,7 @@ export class TimeFold {
       return;
     }
     if (minute % DAY_MINUTES !== 0) this.timed += sign;
-    let key = Math.floor(minute / HOUR_MINUTES);
-    for (let i = 0; i < this.level; i++) key = COARSER[i]!(key);
+    const key = keyAt(minute, this.level);
     let period = this.periods.get(key);
     if (period === undefined) {
       period = new Count();
@@ -217,4 +282,23 @@ export class TimeFold {
       into.sum.merge(count.sum);
     }
   }
+}
+
+/** isReading says whether `v` is how a fold reads dates. */
+function isReading(v: unknown): v is Order | UnixUnit {
+  return typeof v === 'string' && Object.hasOwn(OTHER, v);
+}
+
+/** The count a save holds of `rows`, and of `sum` where `mark` sums. */
+function restoredCount(
+  rows: unknown,
+  sum: unknown,
+  mark: Mark | undefined,
+): Count | undefined {
+  const restored = mark === undefined ? new ExactSum() : ExactSum.restored(sum);
+  if (!isCount(rows) || restored === undefined) return undefined;
+  const count = new Count();
+  count.rows = rows;
+  count.sum = restored;
+  return count;
 }
