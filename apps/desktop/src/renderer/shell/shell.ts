@@ -925,7 +925,7 @@ export class Shell {
         signal,
       );
       // Load the layer before the check below, so no open takes over after it.
-      if (w.charts.all.length > 0) await this.loadLayer();
+      if (w.charts.all.length + w.charts.carried.length > 0) await this.loadLayer();
       // A later open finished first, or this one was stopped as it opened.
       if (superseded()) {
         w.close();

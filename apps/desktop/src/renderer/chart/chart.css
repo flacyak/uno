@@ -309,6 +309,18 @@
   border-color: var(--accent);
 }
 
+/* A window of a chart this build cannot draw, from layer.ts: one line in the
+ * caption's ink, in its middle as a plot's state stands. It takes no pointer,
+ * so the sheet under it stays the sheet's. */
+.chart.chart-carried {
+  justify-content: center;
+  padding: 0 10px;
+  color: var(--ink-3);
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
 /* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.
  * bars.ts sets a bar's thickness, the window's ground before the next, the
  * inset and the gap before a value. A label takes what it needs, up to

@@ -448,6 +448,9 @@ export class Workspace {
       charts: [...this.charts.values()],
       carriedIds: this.carriedCharts.map((c) => c.id),
       carriedOver: this.carriedCharts.map((c) => c.source),
+      carriedPlaces: this.carriedCharts.flatMap(({ id, source, place }) =>
+        place === undefined ? [] : [{ id, source, place }],
+      ),
       chartsNote,
     };
   }

@@ -11,7 +11,7 @@
 import { isPlace } from "@document";
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { Refusal } from "@engine";
-import type { Added, Engine, GroupsTally, Place, SampleTally, Tally } from "@engine";
+import type { Added, CarriedPlace, Engine, GroupsTally, Place, SampleTally, Tally } from "@engine";
 
 import type { State } from "./sources.ts";
 
@@ -98,6 +98,8 @@ export class Charts {
   private readonly taken = new Set<string>();
   /** The sources of the charts this workspace carries and cannot show. */
   private readonly carrying = new Set<string>();
+  /** Where the windows of those charts stand, by id, for those whose records give a place. */
+  private readonly kept = new Map<string, CarriedPlace>();
   /** The count behind the ids uno makes. */
   private made = 0;
   /** The charts as the last save recorded them. */
@@ -117,7 +119,7 @@ export class Charts {
 
   /** Takes the charts an open found, which count as saved, and the ids and
    * sources of the ones it carries. */
-  seed(opening: Pick<Added, "charts" | "carriedIds" | "carriedOver">): void {
+  seed(opening: Pick<Added, "charts" | "carriedIds" | "carriedOver" | "carriedPlaces">): void {
     for (const chart of opening.charts) {
       this.answered.set(chart.id, chart);
       this.recorded.set(chart.id, chart);
@@ -125,6 +127,12 @@ export class Charts {
     }
     for (const id of opening.carriedIds) this.taken.add(id);
     for (const source of opening.carriedOver) this.carrying.add(source);
+    for (const carried of opening.carriedPlaces) this.kept.set(carried.id, carried);
+  }
+
+  /** The windows of the charts this workspace carries and cannot show, where they stand. */
+  get carried(): readonly CarriedPlace[] {
+    return [...this.kept.values()];
   }
 
   /** The charts as their windows show them, oldest first. */
@@ -241,6 +249,9 @@ export class Charts {
       this.tallied.delete(chart.id);
     }
     this.carrying.delete(source);
+    for (const carried of this.kept.values()) {
+      if (carried.source === source) this.kept.delete(carried.id);
+    }
   }
 
   /** Notes the charts answered for now as the ones a save wrote. */

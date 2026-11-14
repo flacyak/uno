@@ -528,6 +528,7 @@
   "chart_reading": "reading {name}…",
   "chart_no_values_yet": "no values in {columns} yet",
   "chart_source_missing": "{name} is missing",
+  "chart_carried": "a newer uno made this chart",
   "chart_bucket_unconnected": "{bucket} is not connected",
   "chart_blank": "{count} blank",
   "chart_blank_value": "(blank)",

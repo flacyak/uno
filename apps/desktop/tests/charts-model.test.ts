@@ -367,9 +367,18 @@ test("a chart takes its tallies with it, by a removal or its source's", async ()
     await w.remove(w.sources[1]!);
     expect(w.charts.heard(ads.id)).toBeUndefined();
     // The same records back would show anything still kept of them.
-    w.charts.seed({ charts: [BARS, ads], carriedIds: [], carriedOver: [] });
+    w.charts.seed({ charts: [BARS, ads], carriedIds: [], carriedOver: [], carriedPlaces: [] });
     expect(w.charts.heard(BARS.id)?.latest).toBeUndefined();
     expect(w.charts.heard(ads.id)?.latest).toBeUndefined();
+  });
+});
+
+test("a chart this build cannot draw stands where its record put it, and goes with its source", async () => {
+  const json = JSON.stringify({ ...BARS, id: "c2", source: ADS, plot: { t: "unknown" } });
+  await opened(uno(unoOf([BARS], [{ id: "c2", source: ADS, json }])), async (w) => {
+    expect(w.charts.carried).toStrictEqual([{ id: "c2", source: ADS, place: BARS.place }]);
+    await w.remove(w.sources[1]!);
+    expect(w.charts.carried).toStrictEqual([]);
   });
 });
 

@@ -546,6 +546,7 @@
   "chart_reading": "a ler {name}…",
   "chart_no_values_yet": "ainda não há valores em {columns}",
   "chart_source_missing": "{name} está ausente",
+  "chart_carried": "um uno mais recente fez este gráfico",
   "chart_bucket_unconnected": "{bucket} não está conectado",
   "chart_blank": "{count} em branco",
   "chart_blank_value": "(em branco)",
