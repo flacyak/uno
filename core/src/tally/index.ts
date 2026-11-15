@@ -18,7 +18,7 @@ export { TALLY_VERSION, isCount, isRecord } from './saved.ts';
 export {
   HELD,
   HELD_AT_MOST,
-  LEVEL_SENT_AT_MOST,
+  LEVEL_BATCH,
   PER,
   TimeFold,
   sundayOf,

@@ -61,10 +61,11 @@ export const PER = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 export type Per = (typeof PER)[number];
 
 /**
- * LEVEL_SENT_AT_MOST is how many periods a snapshot sends of one size, more
- * than any window draws at 4 px a column.
+ * LEVEL_BATCH is how many periods of one size a snapshot or a batch sends at
+ * once, more than any window draws at 4 px a column. A level with more is
+ * sent in batches, the first with the snapshot and the rest as asked for.
  */
-export const LEVEL_SENT_AT_MOST = 1_024;
+export const LEVEL_BATCH = 1_024;
 
 const WEEK_DAYS = 7;
 const QUARTER_MONTHS = 3;
@@ -125,11 +126,18 @@ export interface Periods {
   skipped: Skipped;
 }
 
-/** One size's periods, dense from the first to the last, zeros included. */
+/**
+ * One batch of a size's periods, dense from the first to the last, zeros
+ * included: at most LEVEL_BATCH of them, from the period at `offset`.
+ */
 export interface TimeLevel {
   per: Per;
-  /** The first period's key at this size. */
+  /** The key of the size's first period, which `offset` counts from. */
   from: number;
+  /** How many periods the size spans, from its first to its last. */
+  span: number;
+  /** The place in the size of the batch's first period. */
+  offset: number;
   rows: number[];
   /** Sums, empty when the fold counts rows. */
   sum: number[];
@@ -138,8 +146,8 @@ export interface TimeLevel {
 /** What a snapshot sends. */
 export interface Times {
   /**
-   * Each size from the one asked for to years, made from the period held,
-   * that has at most LEVEL_SENT_AT_MOST periods. None when no row is dated.
+   * The first batch of each size from the one asked for to years, made from
+   * the period held. None when no row is dated.
    */
   levels: TimeLevel[];
   undated: { rows: number; sum: number };
@@ -282,7 +290,7 @@ export class TimeFold {
     const sizes = PER.slice(PER.indexOf(first));
     const { rows, sum } = this.undated;
     return {
-      levels: sizes.flatMap((size) => this.levelAt(size) ?? []),
+      levels: sizes.flatMap((size) => this.batch(size, 0) ?? []),
       undated: { rows, sum: sum.value() },
       dates: { ...this.dates },
       skipped: { ...this.skipped },
@@ -290,10 +298,13 @@ export class TimeFold {
   }
 
   /**
-   * levelAt is the fold at `per`, or undefined when it holds no period, `per`
-   * is finer than the period held, or it spans more than LEVEL_SENT_AT_MOST.
+   * batch is the fold at `per` from the period at `offset`, as the snapshot
+   * sends its first, or undefined when it holds no period, `per` is finer
+   * than the period held, or `offset` is not a place in the size. A batch
+   * names the size's `from` and `span`, so a fold that changed since the
+   * snapshot shows it.
    */
-  private levelAt(per: Per): TimeLevel | undefined {
+  batch(per: Per, offset: number): TimeLevel | undefined {
     const [madeFrom, step] = SIZES[per];
     const made = HELD.indexOf(madeFrom);
     if (made < this.level || this.periods.size === 0) return undefined;
@@ -304,16 +315,19 @@ export class TimeFold {
     const held = [...this.periods.keys()];
     const from = keyOf(Math.min(...held));
     const span = keyOf(Math.max(...held)) - from + 1;
-    if (span > LEVEL_SENT_AT_MOST) return undefined;
-    const rows = Array.from({ length: span }, () => 0);
-    const sums = Array.from({ length: span }, () => new ExactSum());
+    const placed = Number.isSafeInteger(offset) && offset >= 0;
+    if (!placed || offset >= span) return undefined;
+    const length = Math.min(LEVEL_BATCH, span - offset);
+    const rows = Array.from({ length }, () => 0);
+    const sums = Array.from({ length }, () => new ExactSum());
     for (const [key, count] of this.periods) {
-      const i = keyOf(key) - from;
+      const i = keyOf(key) - from - offset;
+      if (i < 0 || i >= length) continue;
       rows[i] = rows[i]! + count.rows;
       sums[i]!.merge(count.sum);
     }
     const sum = this.mark === undefined ? [] : sums.map((s) => s.value());
-    return { per, from, rows, sum };
+    return { per, from, span, offset, rows, sum };
   }
 
   /** read is what the fold holds, as plain numbers. */

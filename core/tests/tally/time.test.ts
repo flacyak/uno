@@ -9,7 +9,7 @@ import { read } from '@ingest';
 import {
   ExactSum,
   HELD_AT_MOST,
-  LEVEL_SENT_AT_MOST,
+  LEVEL_BATCH,
   TimeFold,
   sundayOf,
 } from '@tally';
@@ -114,6 +114,7 @@ const MONTH_MOST_MINUTES = 31 * DAY_MINUTES;
 const MINUTE_MS = 60_000;
 const YEAR_MONTHS = 12;
 const YEAR_QUARTERS = 4;
+const WEEK_DAYS = 7;
 const EPOCH_YEAR = 1970;
 /** The years readDate reads: 0000 to 9999. */
 const YEARS = 10_000;
@@ -347,7 +348,14 @@ test('a snapshot sends each level from its size to years, dense with zeros', () 
   expect(undated).toEqual({ rows: 1, sum: 8 });
   // A fold that counts rows sends no sums.
   expect(snapped(dates).snapshot('year').levels).toEqual([
-    { per: 'year', from: 2024 - EPOCH_YEAR, rows: [3], sum: [] },
+    {
+      per: 'year',
+      from: 2024 - EPOCH_YEAR,
+      span: 1,
+      offset: 0,
+      rows: [3],
+      sum: [],
+    },
   ]);
   expect(snapped([]).snapshot('auto').levels).toEqual([]);
 });
@@ -363,20 +371,85 @@ test('weeks start on Sunday and are labelled by it, across a new year', () => {
   expect(sundayOf(-1)).toBe(dayOf('1969-12-21'));
 });
 
-test('a snapshot leaves out a level with more than LEVEL_SENT_AT_MOST periods', () => {
+/** Each level a snapshot at `per` sends: its size, span and batch's rows. */
+function spans(fold: TimeFold, per: Per): Array<[Per, number, number]> {
+  return fold.snapshot(per).levels.map((l) => [l.per, l.span, l.rows.length]);
+}
+
+test('a snapshot sends the first LEVEL_BATCH periods of every level', () => {
   const span = snapped(['1900-01-01', '2024-12-31']);
-  // 125 years are 500 quarters and 1,500 months.
-  expect(levels(span, 'day')).toEqual([
-    ['quarter', (1900 - EPOCH_YEAR) * YEAR_QUARTERS, 500],
-    ['year', 1900 - EPOCH_YEAR, 125],
+  const years = 2024 - 1900 + 1;
+  const days = dayOf('2024-12-31') - dayOf('1900-01-01') + 1;
+  // 1900-01-01 was a Monday and 2024-12-31 a Tuesday, so the weeks run from
+  // Sunday 31 December 1899 to Sunday 29 December 2024.
+  const sundays = dayOf('2024-12-29') - dayOf('1899-12-31');
+  const weeks = sundays / WEEK_DAYS + 1;
+  expect(spans(span, 'day')).toEqual([
+    ['day', days, LEVEL_BATCH],
+    ['week', weeks, LEVEL_BATCH],
+    ['month', years * YEAR_MONTHS, LEVEL_BATCH],
+    ['quarter', years * YEAR_QUARTERS, years * YEAR_QUARTERS],
+    ['year', years, years],
   ]);
-  const most = (LEVEL_SENT_AT_MOST - 1) * DAY_MINUTES;
-  expect(levels(foldOf([0, most]), 'day')[0]).toEqual([
+  const most = (LEVEL_BATCH - 1) * DAY_MINUTES;
+  expect(spans(foldOf([0, most]), 'day')[0]).toEqual([
     'day',
-    0,
-    LEVEL_SENT_AT_MOST,
+    LEVEL_BATCH,
+    LEVEL_BATCH,
   ]);
-  expect(levels(foldOf([0, most + DAY_MINUTES]), 'day')[0]![0]).toBe('week');
+  const past = foldOf([0, most + DAY_MINUTES]);
+  expect(spans(past, 'day')[0]).toEqual(['day', LEVEL_BATCH + 1, LEVEL_BATCH]);
+  expect(past.batch('day', LEVEL_BATCH)).toMatchObject({ from: 0, rows: [1] });
+});
+
+test('a batch starts at any place in its size, and none past it', () => {
+  const fold = snapped(['2024-03-01', '2024-03-03', '2024-03-04']);
+  const march = dayOf('2024-03-01');
+  expect(fold.batch('day', 2)).toMatchObject({
+    from: march,
+    span: 4,
+    offset: 2,
+    rows: [1, 1],
+  });
+  for (const offset of [-1, 4, 1.5, Number.NaN]) {
+    expect(fold.batch('day', offset), `${offset}`).toBeUndefined();
+  }
+  expect(snapped([]).batch('day', 0)).toBeUndefined();
+  const months = foldOf(stepped(PAST_BOUND, DAY_MINUTES));
+  expect(months.batch('day', 0)).toBeUndefined();
+  expect(months.batch('month', 0)?.per).toBe('month');
+});
+
+test('a 125-year monthly fold sends every month across batches', () => {
+  const months: string[] = [];
+  for (let year = 1900; year <= 2024; year++) {
+    for (let month = 1; month <= YEAR_MONTHS; month++) {
+      months.push(`${year}-${String(month).padStart(2, '0')}-01`);
+    }
+  }
+  const fold = snapped(
+    months,
+    months.map((_, i) => `${i}`),
+  );
+  const first = fold.snapshot('month').levels[0]!;
+  expect(first).toMatchObject({
+    per: 'month',
+    from: (1900 - EPOCH_YEAR) * YEAR_MONTHS,
+    span: months.length,
+    offset: 0,
+  });
+  const batches = [first];
+  for (let at = LEVEL_BATCH; at < first.span; at += LEVEL_BATCH) {
+    batches.push(fold.batch('month', at)!);
+  }
+  expect(batches.map((b) => [b.from, b.span, b.offset, b.rows.length])).toEqual(
+    [
+      [first.from, months.length, 0, LEVEL_BATCH],
+      [first.from, months.length, LEVEL_BATCH, months.length - LEVEL_BATCH],
+    ],
+  );
+  expect(batches.flatMap((b) => b.rows)).toEqual(months.map(() => 1));
+  expect(batches.flatMap((b) => b.sum)).toEqual(months.map((_, i) => i));
 });
 
 test('a snapshot starts at the size asked for, or the finest the fold can make', () => {
