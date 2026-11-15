@@ -240,6 +240,29 @@ test('inferKind names the unit of a column of Unix time', () => {
   expect(s.columns.map((c) => 'unit' in c)).toEqual([true, true, false, false]);
 });
 
+// A phone written with '-' or '()' is text, so its column never reads as Unix
+// time. A bare ten-digit number does, as the owner accepted on 2026-11-13.
+test('inferKind names no unit for phones written with separators', () => {
+  const s = new Sheet(
+    't.csv',
+    ['dashed', 'bracketed', 'mixed', 'bare'],
+    [
+      ['212-555-1234', '(212) 555-1234', '212-555-1234', '2125551234'],
+      ['646-555-0199', '(646) 555-0199', '(646) 555-0199', '6465550199'],
+      ['718-555-0123', '(718) 555-0123', '7185550123', '7185550123'],
+      ['917-555-0144', '(917) 555-0144', '917.555.0144', '9175550144'],
+      ['347-555-0100', '(347) 555-0100', '+1 347 555 0100', '3475550100'],
+    ],
+  );
+  expect(s.columns.map((c) => c.kind)).toEqual(['text', 'text', 'text', 'num']);
+  expect(s.columns.map((c) => c.unit)).toEqual([
+    undefined,
+    undefined,
+    undefined,
+    's',
+  ]);
+});
+
 // Date detection accepts only the listed layouts.
 describe('isDate is the written layouts and not whatever Date can parse', () => {
   const dates = [
