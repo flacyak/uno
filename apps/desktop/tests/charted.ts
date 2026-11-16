@@ -10,7 +10,7 @@ import { basename } from "node:path";
 import { newManifest, writeDocument } from "@document";
 import type { CarriedChart, Chart, Plot } from "@document";
 import { REGION, REVENUE, ROWS, UNITS } from "@main/smoke/fixture";
-import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/bars";
+import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
 import { kindOf } from "@renderer/chart/kind";
 import type { Drawing, Drawn, Kind } from "@renderer/chart/kind";
 import { KINDS } from "@renderer/chart/kinds/index";

@@ -4,30 +4,17 @@
  * under them counts the rest.
  *
  * The bars are HTML that chart.css lays out by the sizes here, so a theme
- * recolours them and a zoom keeps them crisp: a row per value, its label then
- * its bar on a track. A label is the file's text, set as text alone. The
- * values are mono, so the room they take is their length in ch, and a plot
- * too narrow for them beside its bars draws the bars alone.
+ * recolours them and a zoom keeps them crisp: ranked rows from rows.ts, each
+ * a bar on a track beside its label. The values are mono, so the room they
+ * take is their length in ch, and a plot too narrow for them beside its bars
+ * draws the bars alone.
  */
 
 import type { Plot } from "@document";
-import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
-import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-
-/** A bar's thickness, in px: the dataviz skill's most. */
-export const BAR_THICK = 24;
-
-/** The window's ground between two bars, in px: the dataviz skill's gap. */
-export const BAR_GAP = 2;
-
-/**
- * The space around the rows, in px: as far in as the head's title and the
- * caption's words stand from the window's edge.
- */
-export const BARS_INSET = 10;
+import { BARS_INSET, BAR_GAP, BAR_THICK, ranked, row } from "./rows.ts";
 
 /** The space between a bar's end and its value, in px. */
 export const TIP_GAP = 6;
@@ -47,18 +34,6 @@ const ANY_LENGTH = 1;
 /** What a bar chart draws. */
 type Bars = Extract<Plot, { t: "bars" }>;
 
-/** rowsIn gives how many rows of bars or words a plot `height` px high holds. */
-function rowsIn(height: number): number {
-  return Math.max(Math.floor((height - 2 * BARS_INSET + BAR_GAP) / (BAR_THICK + BAR_GAP)), 0);
-}
-
-/** line gives a line of `words` under the bars, whole in its title, as a narrow plot cuts it. */
-function line(words: string): HTMLElement {
-  const said = el("div", "chart-bars-line", words);
-  said.title = words;
-  return said;
-}
-
 /**
  * room gives what the values on one side of zero take, as CSS: the longest one's
  * characters and the gap before it, or nothing for a side with none.
@@ -69,29 +44,13 @@ function room(side: ReadonlyArray<{ tip: string }>): string {
 }
 
 /**
- * named gives a bar's label: its value, the file's text, or the app's word for
- * the rows whose cell is blank, which a tally counts as a value of their own.
- */
-function named(value: string): HTMLElement {
-  if (value === "") return el("span", "chart-bar-label chart-blank", m.chart_blank_value());
-  return el("bdi", "chart-bar-label from-file", value);
-}
-
-/**
  * bars draws `groups` as rows or sums per value, as `plot` measures them, in a
  * plot `height` px high. A line of what is left out takes a bar's row.
  */
 export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
   const measure = (g: Group): number => (plot.sum === undefined ? g.rows : g.sum);
-  const { others, below, rest } = groups;
-  // The rest holds the rows of values past those a tally keeps apart, which it
-  // cannot count, so a line of its own says there are more.
-  const past = rest.rows > 0;
-  const unsent = others.values + below.values > 0 || past;
-  const rows = rowsIn(height) - (past ? 1 : 0);
-  const all = groups.groups;
-  const fit = all.length + (unsent ? 1 : 0) <= rows ? all.length : Math.max(rows - 1, 0);
-  const drawn = all.slice(0, fit).map((g) => ({
+  const { shown, lines } = ranked(groups, height);
+  const drawn = shown.map((g) => ({
     label: g.value,
     size: measure(g),
     tip: num(measure(g)),
@@ -125,19 +84,9 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
     track.classList.toggle("below", size < 0);
     track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(length(size)) / span}`);
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
-    const row = el("div", "chart-bar-row");
-    row.append(named(label), track);
-    box.append(row);
+    box.append(row(label, track));
   }
-
-  const left = all.slice(fit);
-  if (left.length > 0 || unsent) {
-    const values = left.length + others.values + below.values;
-    const rowsLeft = left.reduce((sum, g) => sum + g.rows, others.rows + below.rows + rest.rows);
-    const more = m.chart_bars_more({ count: num(values) });
-    box.append(line(`${more} · ${m.rows_count({ count: rowsLeft })}`));
-  }
-  if (past) box.append(line(m.chart_bars_past({ count: num(DISTINCT_AT_MOST) })));
+  box.append(...lines);
   return box;
 }
 

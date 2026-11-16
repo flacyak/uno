@@ -19,7 +19,8 @@ import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { ALONG_COMPACT_FROM, axis, gutter, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
-import { BARS_INSET, TIP_GAP } from "./bars.ts";
+import { TIP_GAP } from "./bars.ts";
+import { BARS_INSET } from "./rows.ts";
 
 /** A point's radius, in px: the dataviz skill's least marker, 8 px across. */
 export const POINT_RADIUS = 4;

@@ -27,7 +27,8 @@
  */
 
 import { m } from "@paraglide/messages";
-import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
+import { SPAN_LEAST } from "@renderer/chart/bars";
+import { BARS_INSET } from "@renderer/chart/rows";
 import { LABEL_GAP, PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { POINT_OPACITY, TICK_GAP } from "@renderer/chart/scatter";
