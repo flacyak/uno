@@ -66,8 +66,8 @@ function row(...cells: HTMLElement[]): HTMLTableRowElement {
  * at or below zero has none, and the values sent none of have Other's share
  * of them, or none where the pie draws no Other.
  */
-function grouped(
-  plot: Exclude<Plot, { t: "scatter" }>,
+export function grouped(
+  plot: Extract<Plot, { t: "bars" | "pie" }>,
   groups: Groups,
 ): [HTMLElement[], HTMLElement[]] {
   const { by, sum } = plot;
@@ -109,7 +109,7 @@ function grouped(
  * points gives a scatter's headers and rows: its x and y columns, and a row
  * per point drawn, in the order sent.
  */
-function points(
+export function points(
   plot: Extract<Plot, { t: "scatter" }>,
   sample: Sample,
 ): [HTMLElement[], HTMLElement[]] {
@@ -130,11 +130,19 @@ function parts(plot: Plot, tally: GroupsTally | SampleTally): [HTMLElement[], HT
  * `called`, what the head calls the chart, in the window's scroller.
  */
 export function table(plot: Plot, tally: GroupsTally | SampleTally, called: Node): HTMLElement {
+  return tableOf(parts(plot, tally), called);
+}
+
+/**
+ * tableOf gives a tally as its kind's `heads` and `rows`, as a table under a
+ * caption of `called`, what the head calls the chart, in the window's
+ * scroller.
+ */
+export function tableOf([heads, rows]: [HTMLElement[], HTMLElement[]], called: Node): HTMLElement {
   const box = el("div", "chart-table chart-scrolls themed-bar");
   const made = el("table");
   const caption = el("caption");
   caption.append(called);
-  const [heads, rows] = parts(plot, tally);
   const thead = el("thead");
   thead.append(row(...heads));
   const tbody = el("tbody");

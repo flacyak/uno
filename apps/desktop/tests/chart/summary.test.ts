@@ -9,7 +9,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 
 import type { Group, GroupsTally, SampleTally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { SUMMARY_VALUES, summary } from "@renderer/chart/summary";
+import { SUMMARY_VALUES, summary, summaryOf } from "@renderer/chart/summary";
 import { madeTitle } from "@renderer/chart/window";
 import { BARS, PIE, SCATTER } from "../charted.ts";
 
@@ -75,6 +75,22 @@ test("a summary says the title, the source and the rows, the largest values and 
     values: "North 2000, South 1500, West 1000",
     more: "y 1 más.",
   });
+});
+
+test("a kind's words make the summary: its span after the rows, the first values it names, and a count of the rest", () => {
+  const each = ["North 2,000", "South 1,500", "West 1,000", "East 312"];
+  expect(summaryOf("rows per region", NAME, ROWS, { span: "", each, more: 1 })).toStrictEqual({
+    said: "rows per region in sales-q3.csv, 4,812 rows.",
+    values: "North 2,000, South 1,500, West 1,000",
+    more: "and 1 more.",
+  });
+  const span = "4,808 points.";
+  expect(summaryOf("units", NAME, ROWS, { span, each: [], more: 0 })).toStrictEqual({
+    said: `units in sales-q3.csv, 4,812 rows. ${span}`,
+    values: "",
+    more: "",
+  });
+  expect(summaryOf("units", NAME, ROWS).said).toBe("units in sales-q3.csv, 4,812 rows.");
 });
 
 test("a sum names each value's sum, and the values a tally sent none of count among the rest", () => {

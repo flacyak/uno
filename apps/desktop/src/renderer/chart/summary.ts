@@ -10,7 +10,7 @@
  */
 
 import type { ChartColumn, Plot } from "@document";
-import type { Group, GroupsTally, SampleTally } from "@engine";
+import type { Group, Groups, GroupsTally, Sample, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent } from "@renderer/locale";
@@ -29,8 +29,18 @@ export interface Summary {
   more: string;
 }
 
+/** What a kind says of its tally, past its rows. */
+export interface Told {
+  /** The app's words after the rows: what a scatter's axes span, or nothing. */
+  span: string;
+  /** The values from the file, the largest first, each with what it measures. */
+  each: string[];
+  /** How many values come after the SUMMARY_VALUES named. */
+  more: number;
+}
+
 /** What a bars or pie chart draws. */
-type Grouped = Exclude<Plot, { t: "scatter" }>;
+type Grouped = Extract<Plot, { t: "bars" | "pie" }>;
 
 /** named gives a value as the summary says it: the file's text, or the app's word for a blank cell. */
 function named(value: string): string {
@@ -42,7 +52,7 @@ function named(value: string): string {
  * each with its rows or sum, or each slice with its share for a pie, and how
  * many come after the SUMMARY_VALUES named, with those a snapshot left out.
  */
-function valued(plot: Grouped, tally: GroupsTally): { each: string[]; more: number } {
+export function valued(plot: Grouped, tally: Groups): Told {
   if (plot.t === "pie") {
     const drawn = slices(plot, tally);
     const whole = wholeOf(drawn);
@@ -50,20 +60,20 @@ function valued(plot: Grouped, tally: GroupsTally): { each: string[]; more: numb
       const name = value === undefined ? m.chart_pie_other() : named(value);
       return whole > 0 ? `${name} ${percent(size / whole)}` : name;
     });
-    return { each, more: Math.max(drawn.length - SUMMARY_VALUES, 0) };
+    return { span: "", each, more: Math.max(drawn.length - SUMMARY_VALUES, 0) };
   }
   const measure = (g: Group): number => (plot.sum === undefined ? g.rows : g.sum);
   const each = tally.groups.map((g) => `${named(g.value)} ${num(measure(g))}`);
   const { others, below } = tally;
   const more = Math.max(each.length - SUMMARY_VALUES, 0) + others.values + below.values;
-  return { each, more };
+  return { span: "", each, more };
 }
 
 /** spanned gives what a scatter's summary says of its points, and of what its axes span. */
-function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: SampleTally): string {
+export function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: Sample): Told {
   const label = ({ header, col }: ChartColumn): string => columnLabel(header, col);
   const { least, most } = tally;
-  return m.chart_summary_points({
+  const span = m.chart_summary_points({
     points: m.chart_points({ count: tally.plotted }),
     x: label(plot.x),
     xLeast: num(least.x),
@@ -72,6 +82,7 @@ function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: SampleTally): str
     yLeast: num(least.y),
     yMost: num(most.y),
   });
+  return { span, each: [], more: 0 };
 }
 
 /**
@@ -85,15 +96,24 @@ export function summary(
   plot: Plot,
   tally: GroupsTally | SampleTally,
 ): Summary {
-  const said = m.chart_summary({ title, name, rows: m.rows_count({ count: tally.coverage.rows }) });
+  const { rows } = tally.coverage;
   if (plot.t === "scatter") {
-    const span = tally.t === "sample" ? ` ${spanned(plot, tally)}` : "";
-    return { said: `${said}${span}`, values: "", more: "" };
+    return summaryOf(title, name, rows, tally.t === "sample" ? spanned(plot, tally) : undefined);
   }
-  if (tally.t !== "groups") return { said, values: "", more: "" };
-  const { each, more } = valued(plot, tally);
+  return summaryOf(title, name, rows, tally.t === "groups" ? valued(plot, tally) : undefined);
+}
+
+/**
+ * summaryOf gives what a chart called `title`, over the file `name`, says it
+ * shows of a tally of `rows`, which its kind has `told`: the values from the
+ * file apart from the app's words.
+ */
+export function summaryOf(title: string, name: string, rows: number, told?: Told): Summary {
+  const said = m.chart_summary({ title, name, rows: m.rows_count({ count: rows }) });
+  if (told === undefined) return { said, values: "", more: "" };
+  const { span, each, more } = told;
   return {
-    said,
+    said: span === "" ? said : `${said} ${span}`,
     values: list(each.slice(0, SUMMARY_VALUES)),
     more: more > 0 ? m.chart_summary_more({ count: num(more) }) : "",
   };
