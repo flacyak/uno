@@ -21,6 +21,7 @@ import type {
   Tally,
 } from '@engine';
 import { groupsFolder } from '@engine/fold/groups';
+import { sampleFolder } from '@engine/fold/sample';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -273,6 +274,30 @@ test("a bars or pie chart's folder keeps the key a save names it by, and takes a
   folder.unfold(last, { from: kept, end: ROWS, shown });
   const coverage = { rows: kept, total: kept, complete: true };
   expect(folder.tally(plot, coverage)).toStrictEqual(pure(plot, sales, kept));
+});
+
+test("a scatter's folder keeps the key a save names it by, saves nothing an edit left stale, and mends it from the block alone", async () => {
+  const plot = { t: 'scatter', x: column(UNITS), y: column(REVENUE) } as const;
+  const marks = HEADERS.map(() => 'point' as const);
+  const folder = sampleFolder(plot, HEADERS, marks);
+  if (typeof folder === 'string') throw new Error(`no column ${folder}`);
+  expect(folder.key).toBe(`sample ${UNITS} ${REVENUE}`);
+  const whole = blocks(sales);
+  for (let block = 0; block * TINY.blockRows < ROWS; block++) {
+    folder.fold(block, await whole(block));
+  }
+  const sheet = read(NAME, bytes);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  // The row is made the block's most, then taken back from it.
+  for (const revenue of [ABOVE_ALL, '1']) {
+    const before = shownRow(sheet, EDITED);
+    sheet.set(EDITED, REVENUE, revenue);
+    folder.move(block, EDITED, before, shownRow(sheet, EDITED));
+  }
+  expect(folder.saved()).toBeUndefined();
+  await folder.mend(blocks(sheet));
+  expect(folder.saved()).toBeDefined();
+  expect(folder.tally(plot, WHOLE)).toStrictEqual(pure(plot, sheet));
 });
 
 test("a chart's column is found where it was, or by its header where the file moved it, and one the file has not names itself", () => {
