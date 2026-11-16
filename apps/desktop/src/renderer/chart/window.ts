@@ -30,17 +30,14 @@
  */
 
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
-import type { GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { wheelWay } from "@renderer/grid/metrics";
-import { columnLabel } from "@renderer/grid/rows";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { Words, button, el } from "@renderer/shell/util";
-import { bars, fitTips } from "./bars.ts";
 import {
   SEP,
   blank,
@@ -53,14 +50,14 @@ import {
   reading,
   trouble,
 } from "./caption.ts";
-import { belowZero, fitGaps, fitLabels, past, pie } from "./pie.ts";
+import { kindOf } from "./kind.ts";
+import type { Drawing, Drawn, Kind } from "./kind.ts";
+import { KINDS } from "./kinds/index.ts";
 import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
 import type { Corner, Rect, Room } from "./place.ts";
-import { fitAlong, sampled, scatter } from "./scatter.ts";
-import { summary } from "./summary.ts";
+import { summaryOf } from "./summary.ts";
 import type { Summary } from "./summary.ts";
-import { table } from "./table.ts";
-import { NONE, Tooltip, targets } from "./tooltip.ts";
+import { NONE, Tooltip } from "./tooltip.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -182,25 +179,7 @@ interface Hold {
 
 /** madeTitle gives the title a plot makes, in the app's language. */
 export function madeTitle(plot: Plot): string {
-  const named = ({ header, col }: ChartColumn): string => columnLabel(header, col);
-  if (plot.t === "scatter") return m.chart_title_against({ x: named(plot.x), y: named(plot.y) });
-  const by = named(plot.by);
-  const sum = plot.sum === undefined ? undefined : named(plot.sum);
-  if (plot.t === "bars") {
-    return sum === undefined ? m.chart_title_rows({ by }) : m.chart_title_sum({ by, sum });
-  }
-  return sum === undefined
-    ? m.chart_title_share_of_rows({ by })
-    : m.chart_title_share_of_sum({ by, sum });
-}
-
-/**
- * numbered gives the columns a plot reads numbers from: the one it sums, or a
- * scatter's x and y.
- */
-function numbered(plot: Plot): ChartColumn[] {
-  if (plot.t === "scatter") return [plot.x, plot.y];
-  return plot.sum === undefined ? [] : [plot.sum];
+  return kindOf(KINDS, plot.t, plot).title();
 }
 
 /** undoKey says whether `press` is Ctrl+Z, or Cmd+Z, which undoes an edit in the grid. */
@@ -239,17 +218,6 @@ function onButton(at: EventTarget | null): boolean {
 function edits({ key, ctrl, alt, meta, shift, repeat }: Press, at: EventTarget | null): boolean {
   if (ctrl || alt || meta || shift || repeat || !EDIT_KEYS.has(key)) return false;
   return key !== "Enter" || !onButton(at);
-}
-
-/**
- * extra gives what the caption says after the counts, for the plot's kind:
- * what a scatter's sample leaves out, or how a pie counts the values past
- * those a tally keeps apart and the values at or below zero it leaves out.
- */
-function extra(plot: Plot, tally: GroupsTally | SampleTally): string[] {
-  if (plot.t === "scatter" && tally.t === "sample") return [sampled(tally)];
-  if (plot.t === "pie" && tally.t === "groups") return [past(plot, tally), belowZero(plot, tally)];
-  return [];
 }
 
 /** canGo says whether a scroller at `at` of `end` has room `delta`'s way. */
@@ -312,7 +280,7 @@ export class ChartWindow {
   private readonly afterSchedule = el("span", "chart-checks-when");
   /** The count of the cells that were not numbers, the button that finds them in the sheet. */
   private readonly find = button("chart-find", "", () =>
-    this.stage.notNumbers(this.chart.source, numbered(this.chart.plot)),
+    this.stage.notNumbers(this.chart.source, this.kind().numbered),
   );
   /** The head's button that reads the chart's source again. */
   private readonly again = button("chart-head-button chart-refresh", "", () => this.refresh());
@@ -335,7 +303,7 @@ export class ChartWindow {
   /** Whether the table stands in the plot's place. */
   private tabled = false;
   /** The table of the tally and title it holds, kept while they stand, so a repaint keeps its scroll. */
-  private table: { of: GroupsTally | SampleTally; title: string; box: HTMLElement } | undefined;
+  private table: { of: Drawn; title: string; box: HTMLElement } | undefined;
 
   constructor(
     /** The chart the window shows, as the layer last said. */
@@ -482,14 +450,13 @@ export class ChartWindow {
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
-    const tally = drawable(heard);
-    const { plot } = this.chart;
+    const drawn = drawable(heard, this.kind());
     const latest = heard?.latest;
     const named = this.summarise(heard);
-    if (tally === undefined) this.fill(false, ...this.state(heard));
-    else if (this.tabled) this.tabulate(tally);
-    else this.draw(plot, tally, named);
-    const after = tally === undefined ? [] : extra(plot, tally);
+    if (drawn === undefined) this.fill(false, ...this.state(heard));
+    else if (this.tabled) this.tabulate(drawn.tally, drawn.drawing);
+    else this.draw(drawn.drawing, named);
+    const after = drawn === undefined ? [] : drawn.drawing.notes();
     this.say([coverage(latest), blank(latest)], notNumbers(latest), after);
     const why = cannotRead(heard);
     this.again.disabled = why !== undefined;
@@ -517,25 +484,14 @@ export class ChartWindow {
   }
 
   /**
-   * draw draws `tally` as `plot` reads it, at the plot's height, as an image
-   * `named` names, fits the values, the x axis or a pie's labels and gaps to
-   * the plot once they stand in it, and gives the box the marks where the
-   * fit leaves them.
+   * draw draws `drawing` at the plot's height, as an image `named` names,
+   * fits it to the plot once it stands there, and gives the box the marks
+   * where the fit leaves them.
    */
-  private draw(plot: Plot, tally: GroupsTally | SampleTally, named: string): void {
-    let drawn: HTMLElement | undefined;
-    if (plot.t === "bars" && tally.t === "groups") {
-      drawn = this.place(bars(plot, tally, this.plot.clientHeight), named);
-      fitTips(drawn);
-    } else if (plot.t === "scatter" && tally.t === "sample") {
-      drawn = this.place(scatter(tally), named);
-      fitAlong(drawn, tally);
-    } else if (plot.t === "pie" && tally.t === "groups") {
-      drawn = this.place(pie(plot, tally), named);
-      fitLabels(drawn);
-      fitGaps(drawn);
-    }
-    if (drawn !== undefined) this.tip.show(targets(plot, tally, drawn));
+  private draw(drawing: Drawing, named: string): void {
+    const drawn = this.place(drawing.draw(this.plot.clientHeight), named);
+    drawing.fit(drawn);
+    this.tip.show(drawing.targets(drawn));
   }
 
   /** place puts `drawn` in the plot as an image, named by what `named` names, and gives it back. */
@@ -552,11 +508,11 @@ export class ChartWindow {
    * it is, scrolled where it was, and a new tally, a new title or a relabel
    * builds it again.
    */
-  private tabulate(tally: GroupsTally | SampleTally): void {
+  private tabulate(tally: Drawn, drawing: Drawing): void {
     const title = this.named();
     if (this.table?.of !== tally || this.table.title !== title) {
       const called = el("bdi", this.chart.title === "" ? "" : "from-file", title);
-      this.table = { of: tally, title, box: table(this.chart.plot, tally, called) };
+      this.table = { of: tally, title, box: drawing.table(called) };
     }
     if (this.plot.firstChild !== this.table.box) this.fill(false, this.table.box);
   }
@@ -579,7 +535,12 @@ export class ChartWindow {
     const told =
       heard === undefined || complete === undefined
         ? undefined
-        : summary(this.named(), heard.name, this.chart.plot, complete);
+        : summaryOf(
+            this.named(),
+            heard.name,
+            complete.coverage.rows,
+            this.kind().drawing(complete)?.told(),
+          );
     for (const part of ["said", "values", "more"] as const) {
       this.told[part].textContent = told?.[part] ?? "";
     }
@@ -588,7 +549,13 @@ export class ChartWindow {
 
   /** named gives what the head calls the chart: the person's title, or the one its plot makes. */
   private named(): string {
-    return this.chart.title === "" ? madeTitle(this.chart.plot) : this.chart.title;
+    return this.chart.title === "" ? this.kind().title() : this.chart.title;
+  }
+
+  /** kind gives what the chart's plot does that depends on its kind. */
+  private kind(): Kind {
+    const { plot } = this.chart;
+    return kindOf(KINDS, plot.t, plot);
   }
 
   /**
@@ -639,7 +606,7 @@ export class ChartWindow {
    * the button of any action that mends it, or nothing for one that has gone.
    */
   private state(heard: Heard | undefined): HTMLElement[] {
-    const said = heard === undefined ? undefined : body(this.chart.plot, heard);
+    const said = heard === undefined ? undefined : body(this.kind(), heard);
     if (said === undefined) return [];
     const box = el("div", "chart-state");
     box.append(el("bdi", "", said.words));

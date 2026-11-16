@@ -12,12 +12,11 @@ import type { Chart, Plot } from "@document";
 import type { GroupsTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
-import { summary } from "@renderer/chart/summary";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import { NO_CORNER } from "@renderer/chart/place";
 import type { Stage } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
-import { BARS, SHORT_ROWS, holding } from "./charted.ts";
+import { BARS, SHORT_ROWS, holding, summaryFor } from "./charted.ts";
 import { frame } from "./smoke/dom-page.ts";
 
 /** The columns the made titles below name. */
@@ -306,7 +305,7 @@ test("the drawing is an image named by the head until a tally completes, then by
   heard = heardOf(read, read);
   made.redraw();
   await frame();
-  const { said, values, more } = summary(madeTitle(BARS.plot), NAME, BARS.plot, read);
+  const { said, values, more } = summaryFor(madeTitle(BARS.plot), NAME, BARS.plot, read);
   expect(pointedAt(image(made.box), "aria-labelledby")).toBe(
     made.box.querySelector(".chart-summary"),
   );
@@ -326,7 +325,7 @@ test("a relabel writes the summary in the language chosen since, out of sight", 
   void setLocale("es", { reload: false });
   made.relabel();
   await frame();
-  const { said } = summary(madeTitle(BARS.plot), NAME, BARS.plot, read);
+  const { said } = summaryFor(madeTitle(BARS.plot), NAME, BARS.plot, read);
   expect(said).toContain("filas por");
   expect(made.box.querySelector(".chart-summary-said")?.textContent).toBe(said);
   expect(made.box.querySelector<HTMLElement>(".chart-summary")?.hidden).toBe(true);

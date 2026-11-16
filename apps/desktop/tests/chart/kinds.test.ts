@@ -1,7 +1,7 @@
 /**
- * @fileoverview Each chart kind's module makes what a window made of its plot
- * before the window looked kinds up: the title, the drawing and its marks,
- * the table, the summary and the caption's own words.
+ * @fileoverview Each chart kind's module makes its plot's parts from the
+ * modules that draw them: the title, the drawing and its marks, the table,
+ * the summary and the caption's own words.
  *
  * @vitest-environment happy-dom
  */
@@ -18,16 +18,16 @@ import { pie } from "@renderer/chart/kinds/pie";
 import { scatter } from "@renderer/chart/kinds/scatter";
 import { belowZero, past, pie as drawPie } from "@renderer/chart/pie";
 import { sampled, scatter as drawScatter } from "@renderer/chart/scatter";
-import { summary, summaryOf } from "@renderer/chart/summary";
-import { table } from "@renderer/chart/table";
-import { targets } from "@renderer/chart/tooltip";
+import { spanned, valued } from "@renderer/chart/summary";
+import type { Told } from "@renderer/chart/summary";
+import { grouped, points, tableOf } from "@renderer/chart/table";
+import { barTargets, pointTargets, sliceTargets } from "@renderer/chart/tooltip";
+import type { Targets } from "@renderer/chart/tooltip";
 import { madeTitle } from "@renderer/chart/window";
 import { el } from "@renderer/shell/util";
 import { SCATTER } from "../charted.ts";
 
 /** The file the summaries name. */
-const NAME = "sales-q3.csv";
-
 /** The plot's height a bar chart draws at, in CSS px. */
 const HEIGHT = 240;
 
@@ -77,34 +77,55 @@ const SAMPLE: SampleTally = {
 const called = (): HTMLElement => el("bdi", "", "rows per region");
 
 /** The marks a drawing gives, as plain values. */
-const marks = (all: ReturnType<typeof targets>["all"]) =>
+const marks = (all: Targets["all"]) =>
   all.map(({ mark, at, front, key }) => [mark, at, front, key]);
 
-/** made checks that `kind` makes what the window made of `plot` and `tally`. */
+/** What a kind's module is to make of a plot and its tally: its parts, from their own modules. */
+interface Parts {
+  title: string;
+  draw(): HTMLElement;
+  targets(drawn: HTMLElement): Targets;
+  table(): [HTMLElement[], HTMLElement[]];
+  told: Told;
+}
+
+/** made checks that `kind` makes `parts` of `plot` and `tally`, and gives back its drawing. */
 function made<P extends Plot>(
   kind: ChartKind<P>,
   plot: P,
   tally: GroupsTally | SampleTally,
-  draw: () => HTMLElement,
+  parts: Parts,
 ) {
   const of = kind(plot);
-  expect(of.title()).toBe(madeTitle(plot));
+  expect(of.title()).toBe(parts.title);
+  expect(madeTitle(plot)).toBe(parts.title);
   const drawing = of.drawing(tally)!;
   const drawn = drawing.draw(HEIGHT);
-  expect(drawn.outerHTML).toBe(draw().outerHTML);
-  expect(marks(drawing.targets(drawn).all)).toStrictEqual(marks(targets(plot, tally, drawn).all));
-  expect(drawing.table(called()).outerHTML).toBe(table(plot, tally, called()).outerHTML);
-  const title = madeTitle(plot);
-  const { rows } = tally.coverage;
-  expect(summaryOf(title, NAME, rows, drawing.told())).toStrictEqual(
-    summary(title, NAME, plot, tally),
-  );
+  expect(drawn.outerHTML).toBe(parts.draw().outerHTML);
+  expect(marks(drawing.targets(drawn).all)).toStrictEqual(marks(parts.targets(drawn).all));
+  expect(drawing.table(called()).outerHTML).toBe(tableOf(parts.table(), called()).outerHTML);
+  expect(drawing.told()).toStrictEqual(parts.told);
   return drawing;
 }
 
+/** groupedParts gives the parts a bar chart or a pie of `plot` makes of GROUPS, under `title`. */
+function groupedParts(
+  plot: Extract<Plot, { t: "bars" | "pie" }>,
+  title: string,
+  draw: () => HTMLElement,
+  targets: (drawn: HTMLElement) => Targets,
+): Parts {
+  return { title, draw, targets, table: () => grouped(plot, GROUPS), told: valued(plot, GROUPS) };
+}
+
 test("a bar chart's kind makes the title, the drawing and its marks, the table and the summary a bar chart made", () => {
-  for (const plot of [ROWS, SUMS]) {
-    const drawing = made(bars, plot, GROUPS, () => drawBars(plot, GROUPS, HEIGHT));
+  for (const [plot, title] of [
+    [ROWS, "rows per region"],
+    [SUMS, "sum of revenue per region"],
+  ] as const) {
+    const draw = () => drawBars(plot, GROUPS, HEIGHT);
+    const targets = (drawn: HTMLElement) => barTargets(plot, GROUPS, drawn);
+    const drawing = made(bars, plot, GROUPS, groupedParts(plot, title, draw, targets));
     expect(drawing.empty).toBe(false);
     expect(drawing.notes()).toStrictEqual([]);
     expect(bars(plot).drawing(EMPTY)?.empty).toBe(true);
@@ -115,8 +136,13 @@ test("a bar chart's kind makes the title, the drawing and its marks, the table a
 });
 
 test("a pie's kind makes what a pie made, and says how it counts the values past those kept and those at or below zero", () => {
-  for (const plot of [SHARES, SHARES_OF_SUM]) {
-    const drawing = made(pie, plot, GROUPS, () => drawPie(plot, GROUPS));
+  for (const [plot, title] of [
+    [SHARES, "share of rows per region"],
+    [SHARES_OF_SUM, "share of revenue per region"],
+  ] as const) {
+    const draw = () => drawPie(plot, GROUPS);
+    const targets = (drawn: HTMLElement) => sliceTargets(plot, GROUPS, drawn);
+    const drawing = made(pie, plot, GROUPS, groupedParts(plot, title, draw, targets));
     expect(drawing.notes()).toStrictEqual([past(plot, GROUPS), belowZero(plot, GROUPS)]);
     expect(pie(plot).drawing(SAMPLE)).toBeUndefined();
   }
@@ -126,7 +152,13 @@ test("a pie's kind makes what a pie made, and says how it counts the values past
 test("a scatter's kind makes what a scatter made, and says what its sample leaves out", () => {
   const plot = SCATTER.plot;
   if (plot.t !== "scatter") throw new Error("the scatter fixture plots a scatter");
-  const drawing = made(scatter, plot, SAMPLE, () => drawScatter(SAMPLE));
+  const drawing = made(scatter, plot, SAMPLE, {
+    title: "revenue against units",
+    draw: () => drawScatter(SAMPLE),
+    targets: (drawn) => pointTargets(plot, SAMPLE, drawn),
+    table: () => points(plot, SAMPLE),
+    told: spanned(plot, SAMPLE),
+  });
   expect(drawing.notes()).toStrictEqual([sampled(SAMPLE)]);
   expect(scatter(plot).drawing({ ...SAMPLE, plotted: 0 })?.empty).toBe(true);
   expect(scatter(plot).drawing(GROUPS)).toBeUndefined();

@@ -12,7 +12,7 @@
 
 import type { Plot } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { Groups, GroupsTally, Sample, SampleTally } from "@engine";
+import type { Groups, Sample } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
@@ -117,20 +117,6 @@ export function points(
     header(columnLabel(name, col), true, true),
   );
   return [heads, sample.x.map((x, i) => row(digits(x), digits(sample.y[i]!)))];
-}
-
-/** parts gives the headers and rows of `tally` as `plot` reads it, or none of a tally of another kind. */
-function parts(plot: Plot, tally: GroupsTally | SampleTally): [HTMLElement[], HTMLElement[]] {
-  if (plot.t === "scatter") return tally.t === "sample" ? points(plot, tally) : [[], []];
-  return tally.t === "groups" ? grouped(plot, tally) : [[], []];
-}
-
-/**
- * table gives `tally` as `plot` reads it, as a table under a caption of
- * `called`, what the head calls the chart, in the window's scroller.
- */
-export function table(plot: Plot, tally: GroupsTally | SampleTally, called: Node): HTMLElement {
-  return tableOf(parts(plot, tally), called);
 }
 
 /**

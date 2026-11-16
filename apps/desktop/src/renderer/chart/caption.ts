@@ -9,8 +9,8 @@
  */
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
-import type { ChartColumn, Plot } from "@document";
-import type { Coverage, GroupsTally, SampleTally, Skipped, Tally } from "@engine";
+import type { ChartColumn } from "@document";
+import type { Coverage, Skipped, Tally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
@@ -19,6 +19,7 @@ import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { said, say } from "@renderer/said";
 import { CHECK_TIMEOUT_MS } from "@renderer/timing";
+import type { Drawing, Drawn, Kind } from "./kind.ts";
 
 /** What parts the caption's words. */
 export const SEP = " · ";
@@ -102,28 +103,24 @@ export function reading(heard: Heard | undefined): number | undefined {
   return share(latest.coverage);
 }
 
-/** empty says whether `tally` has nothing a plot draws: no value, or no row a scatter can place. */
-function empty(tally: GroupsTally | SampleTally): boolean {
-  return tally.t === "groups" ? tally.groups.length === 0 : tally.plotted === 0;
-}
-
 /**
- * drawable gives the tally a window draws: the last complete one while the
- * next is read, or else the latest as it comes. A latest that says the chart
- * cannot read its source leaves nothing to draw, as no earlier tally stands
- * for it, and neither does a tally with nothing in it.
+ * drawable gives the tally a window draws, as `kind` draws it: the last
+ * complete one while the next is read, or else the latest as it comes. A
+ * latest that says the chart cannot read its source leaves nothing to draw,
+ * as no earlier tally stands for it, and neither does a tally with nothing in
+ * it, or one of another kind.
  */
-export function drawable(heard: Heard | undefined): GroupsTally | SampleTally | undefined {
+export function drawable(
+  heard: Heard | undefined,
+  kind: Kind,
+): { tally: Drawn; drawing: Drawing } | undefined {
   const latest = heard?.latest;
   if (latest?.t === "unread") return undefined;
   const tally = heard?.complete ?? latest;
-  return tally === undefined || empty(tally) ? undefined : tally;
-}
-
-/** The columns a plot's values come from, as the head names them. */
-function valued(plot: Plot): string[] {
-  const named = ({ header, col }: ChartColumn): string => columnLabel(header, col);
-  return plot.t === "scatter" ? [named(plot.x), named(plot.y)] : [named(plot.by)];
+  const drawing = tally === undefined ? undefined : kind.drawing(tally);
+  return tally === undefined || drawing === undefined || drawing.empty
+    ? undefined
+    : { tally, drawing };
 }
 
 /**
@@ -133,8 +130,8 @@ function valued(plot: Plot): string[] {
  * that it reads its source before the first tally, or that the tally has no
  * values in the plot's columns yet. A column that has gone offers Edit chart.
  */
-export function body(plot: Plot, heard: Heard): Body | undefined {
-  if (drawable(heard) !== undefined) return undefined;
+export function body(kind: Kind, heard: Heard): Body | undefined {
+  if (drawable(heard, kind) !== undefined) return undefined;
   const { state, latest, name } = heard;
   if (latest?.t === "unread") {
     const words = say(latest.said);
@@ -153,7 +150,8 @@ export function body(plot: Plot, heard: Heard): Body | undefined {
     };
   }
   if (latest === undefined) return { words: m.chart_reading({ name }) };
-  return { words: m.chart_no_values_yet({ columns: list(valued(plot)) }) };
+  const named = ({ header, col }: ChartColumn): string => columnLabel(header, col);
+  return { words: m.chart_no_values_yet({ columns: list(kind.valued.map(named)) }) };
 }
 
 /**

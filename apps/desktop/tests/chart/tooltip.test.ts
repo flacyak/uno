@@ -26,12 +26,11 @@ import {
   pointTargets,
   sliceTargets,
   stood,
-  targets,
 } from "@renderer/chart/tooltip";
 import type { Reading, Target, Targets } from "@renderer/chart/tooltip";
 import type { Press } from "@renderer/keys";
 import { el } from "@renderer/shell/util";
-import { holding } from "../charted.ts";
+import { drawingOf, holding, kindFor } from "../charted.ts";
 
 const REGION = { col: 1, header: "region" };
 const REVENUE = { col: 5, header: "revenue" };
@@ -210,14 +209,14 @@ test("the keys step through the points from left to right, and a pointer finds e
   expect([under(null, 0, 100), under(null, 25, 75), under(null, 100, 0)]).toStrictEqual([0, 1, 2]);
 });
 
-test("targets gives a drawing's marks for its plot's kind, and none for a tally of another", () => {
+test("a kind gives a drawing's marks for its plot, and draws no tally of another kind", () => {
   const complete = { coverage: { rows: 3, total: 3, complete: true } };
   const groups: GroupsTally = { t: "groups", plot: ROWS, ...complete, ...REGIONS };
   const sample: SampleTally = { t: "sample", plot: AGAINST, ...complete, ...SALES };
-  expect(targets(ROWS, groups, bars(ROWS, REGIONS, TALL)).all).toHaveLength(3);
-  expect(targets(SHARES, groups, pie(SHARES, REGIONS)).all).toHaveLength(2);
-  expect(targets(AGAINST, sample, scatter(SALES)).all).toHaveLength(3);
-  expect(targets(ROWS, sample, bars(ROWS, REGIONS, TALL))).toBe(NONE);
+  expect(drawingOf(ROWS, groups).targets(bars(ROWS, REGIONS, TALL)).all).toHaveLength(3);
+  expect(drawingOf(SHARES, groups).targets(pie(SHARES, REGIONS)).all).toHaveLength(2);
+  expect(drawingOf(AGAINST, sample).targets(scatter(SALES)).all).toHaveLength(3);
+  expect(kindFor(ROWS).drawing(sample)).toBeUndefined();
 });
 
 /** A window's room, and a box's size, in px. */

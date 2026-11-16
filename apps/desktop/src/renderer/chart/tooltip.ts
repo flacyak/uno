@@ -14,7 +14,7 @@
  */
 
 import type { ChartColumn, Plot } from "@document";
-import type { Groups, GroupsTally, Sample, SampleTally } from "@engine";
+import type { Groups, Sample } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Press } from "@renderer/keys";
 import { columnLabel, unnamed } from "@renderer/grid/rows";
@@ -227,17 +227,6 @@ export function pointTargets(plot: Scatter, sample: Sample, box: HTMLElement): T
     return near;
   };
   return { all, under };
-}
-
-/**
- * targets gives the marks of `drawn`, as `plot` reads `tally`, or none of a
- * drawing of another kind.
- */
-export function targets(plot: Plot, tally: GroupsTally | SampleTally, drawn: HTMLElement): Targets {
-  if (plot.t === "bars" && tally.t === "groups") return barTargets(plot, tally, drawn);
-  if (plot.t === "pie" && tally.t === "groups") return sliceTargets(plot, tally, drawn);
-  if (plot.t === "scatter" && tally.t === "sample") return pointTargets(plot, tally, drawn);
-  return NONE;
 }
 
 /** A point in the page, or in the window's own px. */

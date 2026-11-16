@@ -10,7 +10,7 @@
  */
 
 import type { ChartColumn, Plot } from "@document";
-import type { Group, Groups, GroupsTally, Sample, SampleTally } from "@engine";
+import type { Group, Groups, Sample } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent } from "@renderer/locale";
@@ -83,24 +83,6 @@ export function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: Sample): T
     yMost: num(most.y),
   });
   return { span, each: [], more: 0 };
-}
-
-/**
- * summary gives what a chart called `title`, over the file `name`, says it
- * shows of `tally`, which `plot` reads: the values from the file apart from
- * the app's words.
- */
-export function summary(
-  title: string,
-  name: string,
-  plot: Plot,
-  tally: GroupsTally | SampleTally,
-): Summary {
-  const { rows } = tally.coverage;
-  if (plot.t === "scatter") {
-    return summaryOf(title, name, rows, tally.t === "sample" ? spanned(plot, tally) : undefined);
-  }
-  return summaryOf(title, name, rows, tally.t === "groups" ? valued(plot, tally) : undefined);
 }
 
 /**

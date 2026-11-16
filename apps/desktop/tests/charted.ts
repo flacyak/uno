@@ -8,9 +8,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 
 import { newManifest, writeDocument } from "@document";
-import type { CarriedChart, Chart } from "@document";
+import type { CarriedChart, Chart, Plot } from "@document";
 import { REGION, REVENUE, ROWS, UNITS } from "@main/smoke/fixture";
 import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/bars";
+import { kindOf } from "@renderer/chart/kind";
+import type { Drawing, Drawn, Kind } from "@renderer/chart/kind";
+import { KINDS } from "@renderer/chart/kinds/index";
+import { summaryOf } from "@renderer/chart/summary";
+import type { Summary } from "@renderer/chart/summary";
 import { FIXTURE, SECOND } from "./smoke/dom-harness.ts";
 
 /** The sales export's source, and the second export's. */
@@ -142,4 +147,21 @@ export function unoOf(charts: Chart[], carried: CarriedChart[] = [], sales = FIX
     extra: new Map(),
     at: "",
   });
+}
+
+/** kindFor is what a window does with `plot`, as this build draws it. */
+export function kindFor(plot: Plot): Kind {
+  return kindOf(KINDS, plot.t, plot);
+}
+
+/** drawingOf is what a window draws of `tally`, which `plot` reads. */
+export function drawingOf(plot: Plot, tally: Drawn): Drawing {
+  const drawing = kindFor(plot).drawing(tally);
+  if (drawing === undefined) throw new Error(`a ${plot.t} draws no ${tally.t}`);
+  return drawing;
+}
+
+/** summaryFor is what a chart called `title` over `name` says it shows of `tally`, which `plot` reads. */
+export function summaryFor(title: string, name: string, plot: Plot, tally: Drawn): Summary {
+  return summaryOf(title, name, tally.coverage.rows, kindFor(plot).drawing(tally)?.told());
 }
