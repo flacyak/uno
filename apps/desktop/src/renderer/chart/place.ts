@@ -218,14 +218,30 @@ export function tucks(room: Room): boolean {
 }
 
 /**
+ * stackWidth gives how wide tucked windows stand: the room's width, short of
+ * as far as `corner` reaches under the top one, so its × stands clear of the
+ * window's as a window's does there. Every head stands as wide, so the stack
+ * keeps one edge.
+ */
+export function stackWidth(room: Room, corner: Corner): number {
+  return room.w - reachAt(NEAR_EDGE, room, corner);
+}
+
+/**
  * tucked gives the rect of a room's `index`th window while the room tucks:
- * only its `head` px head, at the room's full width, stacked from the top. It
- * is one `border` taller than the head, whose band fills the box between its
+ * only its `head` px head, stackWidth wide, stacked from the top. It is one
+ * `border` taller than the head, whose band fills the box between its
  * borders, so the box's foot takes the place of the head's rule and lands on
  * the next window's top.
  */
-export function tucked(index: number, head: number, border: number, room: Room): Rect {
-  return { x: 0, y: index * head, width: room.w, height: head + border };
+export function tucked(
+  index: number,
+  head: number,
+  border: number,
+  room: Room,
+  corner: Corner = NO_CORNER,
+): Rect {
+  return { x: 0, y: index * head, width: stackWidth(room, corner), height: head + border };
 }
 
 /** stackHeight gives how high `count` tucked windows stand, down to the last one's foot. */

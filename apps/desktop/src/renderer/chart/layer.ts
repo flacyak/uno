@@ -24,7 +24,17 @@ import type { ColumnSpan } from "@renderer/grid/view";
 import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
-import { fresh, NO_CORNER, overfull, shown, stackHeight, thin, tucked, tucks } from "./place.ts";
+import {
+  fresh,
+  NO_CORNER,
+  overfull,
+  shown,
+  stackHeight,
+  stackWidth,
+  thin,
+  tucked,
+  tucks,
+} from "./place.ts";
 import type { Corner, Room } from "./place.ts";
 import { ChartWindow } from "./window.ts";
 import type { Stage } from "./window.ts";
@@ -306,11 +316,12 @@ export class ChartLayer implements Stage {
     charts.forEach((chart, index) => {
       const held = this.windowOf(chart);
       held.show(chart, this.charts.sourceLabel(chart.source));
-      const slot = tucked(index, this.head, border, room);
+      const slot = tucked(index, this.head, border, room, corner);
       held.stand(tucking ? { ...slot, y: slot.y - this.reach } : shown(chart.place, room, corner));
     });
     const stack = stackHeight(charts.length, this.head, border);
     this.root.style.setProperty("--stack-height", `${stack}px`);
+    this.root.style.setProperty("--stack-width", `${stackWidth(room, corner)}px`);
     this.root.classList.toggle("tucked", tucking && charts.length > 0);
     this.root.classList.toggle("overfull", spills);
     this.root.classList.toggle("thin", thin(room));

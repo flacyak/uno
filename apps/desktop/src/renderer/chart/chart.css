@@ -94,11 +94,12 @@
 
 /* Tucked heads read as one stack. They are square where they meet, so their rule
  * runs from border to border. One box behind them throws the shadow, so no head
- * darkens another, and layer.ts sets its `--stack-height`. */
+ * darkens another, and layer.ts sets its `--stack-width` and `--stack-height`. */
 .charts.tucked::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto;
+  inset: 0 auto auto 0;
+  width: var(--stack-width);
   height: var(--stack-height);
   border-radius: var(--dialog-radius);
   box-shadow: var(--dialog-shadow);

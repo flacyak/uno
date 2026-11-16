@@ -257,7 +257,8 @@ export const GEOMETRY = `
   const edges = (at) => [at.left, at.top, at.right, at.bottom].join(" ");
   const unsaved = () => document.querySelector(".ws.open .dirty") !== null;
   const HEAD = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
-  const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
+  // Tucked heads stand from the room's left, each as wide, short of the window's × where it reaches.
+  const heads = () => windows().every((at) => at.height === HEAD + border() && at.left === room().left && at.right === windows()[0].right && at.right <= room().right);
 `;
 
 /**
@@ -536,6 +537,7 @@ export const CHARTS: Check[] = [
       const sidebar = document.querySelector("#sidebar").getBoundingClientRect();
       if (top.left !== sidebar.right - border()) return "the top window stands at " + edges(top) + " beside a sidebar to " + sidebar.right;
       if (top.top !== room().top || foot.top !== top.bottom - border()) return "the heads stand at " + edges(top) + " and " + edges(foot);
+      if (top.right !== room().right) return "with no × over the room, the heads end at " + top.right + " in a room to " + room().right;
       return unsaved() ? "tucking marked the workspace unsaved" : "";
     `,
   },
@@ -810,9 +812,10 @@ export const CHARTS: Check[] = [
   },
   {
     // The sheet is held short by hand: main keeps the window taller than this.
-    name: "tucked heads a short room cannot hold stop at its foot, and leave the scrollbar the pointer",
+    name: "tucked heads a short room cannot hold stop at its foot, leave the scrollbar the pointer, and stand clear of the window's ×",
     script: `
       ${GEOMETRY}
+      ${CLEAR_X}
       const sheet = document.querySelector(".win-sheet");
       const under = () => {
         const [, foot] = windows();
@@ -821,9 +824,11 @@ export const CHARTS: Check[] = [
       sheet.style.maxHeight = ${SHORT_SHEET} + "px";
       const stack = await until(() => heads() && windows()[1].bottom > room().bottom);
       const held = under();
+      const crossed = crossing();
       sheet.style.maxHeight = "";
       if (!stack) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       if (held.closest(".chart") !== null) return "a head lies over the scrollbar";
+      if (crossed !== "") return crossed;
       return (await until(() => !heads())) ? "" : "the windows stayed tucked";
     `,
   },
