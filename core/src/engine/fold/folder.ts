@@ -62,6 +62,22 @@ export type MakeFolder<P extends Plot> = (
   marks: readonly Mark[],
 ) => Folder | string;
 
+/** The folder of each kind of plot. A kind with none fails the build. */
+export type Folders = {
+  readonly [K in Plot['t']]: MakeFolder<Extract<Plot, { t: K }>>;
+};
+
+/** folderOf is the folder `folders` makes for `plot`, of kind `t`. */
+export function folderOf<K extends Plot['t']>(
+  folders: Folders,
+  t: K,
+  plot: Extract<Plot, { t: K }>,
+  headers: readonly string[],
+  marks: readonly Mark[],
+): Folder | string {
+  return folders[t](plot, headers, marks);
+}
+
 /**
  * markOf is the decimal mark `marks` gives column `col`, or the point for
  * one it does not reach, as a fold made before any mark was inferred reads.

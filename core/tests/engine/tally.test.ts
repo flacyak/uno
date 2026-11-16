@@ -14,6 +14,7 @@ import { newManifest, writeDocument } from '@document';
 import type { Chart, Plot } from '@document';
 import { TALLY_MS } from '@engine';
 import type {
+  Coverage,
   EditRequest,
   Engine,
   SourceHandle,
@@ -21,6 +22,8 @@ import type {
   Tally,
 } from '@engine';
 import { groupsFolder } from '@engine/fold/groups';
+import { FOLDERS } from '@engine/fold/index';
+import type { Folder, Folders, MakeFolder } from '@engine/fold/index';
 import { sampleFolder } from '@engine/fold/sample';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
@@ -131,9 +134,9 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   return { t: 'groups', plot, coverage, ...fold.snapshot() };
 }
 
-/** folded attaches `charts` and folds the first `rows` of the sheet, a TINY block at a time. */
-function folded(charts: Chart[], rows = ROWS): Tallies {
-  const tallies = new Tallies();
+/** folded attaches `charts` and folds the first `rows` of the sheet, a TINY block at a time, through `folders`. */
+function folded(charts: Chart[], rows = ROWS, folders = FOLDERS): Tallies {
+  const tallies = new Tallies(folders);
   for (const chart of charts) tallies.attach(chart, HEADERS);
   const shown = (col: number) => (row: number) => sales.display(row, col);
   for (let from = 0; from < rows; from += TINY.blockRows) {
@@ -141,6 +144,88 @@ function folded(charts: Chart[], rows = ROWS): Tallies {
     tallies.fold(from / TINY.blockRows, from, end, shown);
   }
   return tallies;
+}
+
+/**
+ * LengthsFolder counts rows by how long the cell of one column is, a fold no
+ * chart kind makes, so a test can tell that the tallies fold through the
+ * folder their table names and know nothing of its kind.
+ */
+class LengthsFolder implements Folder {
+  readonly key: string;
+  readonly cols: readonly number[];
+  readonly lengths: GroupsFold;
+
+  constructor(col: number, lengths = new GroupsFold()) {
+    this.cols = [col];
+    this.key = `lengths ${col}`;
+    this.lengths = lengths;
+  }
+
+  fold(_block: number, { from, end, shown }: Block): void {
+    const cell = shown(this.cols[0]!);
+    for (let row = from; row < end; row++)
+      this.lengths.add(`${cell(row).length}`);
+  }
+
+  unfold(_block: number, { from, end, shown }: Block): void {
+    const cell = shown(this.cols[0]!);
+    for (let row = from; row < end; row++)
+      this.lengths.remove(`${cell(row).length}`);
+  }
+
+  move(
+    _block: number,
+    _row: number,
+    before: readonly string[],
+    after: readonly string[],
+  ): void {
+    const col = this.cols[0]!;
+    this.lengths.remove(`${before[col]!.length}`);
+    this.lengths.add(`${after[col]!.length}`);
+  }
+
+  readsWith(): boolean {
+    return true;
+  }
+
+  again(): Folder {
+    return new LengthsFolder(this.cols[0]!);
+  }
+
+  restored(saved: unknown): Folder | undefined {
+    const back = GroupsFold.restored(saved);
+    return back && new LengthsFolder(this.cols[0]!, back);
+  }
+
+  saved(): object {
+    return this.lengths.saved();
+  }
+
+  tally(plot: Plot, coverage: Coverage): Tally {
+    return { t: 'groups', plot, coverage, ...this.lengths.snapshot() };
+  }
+
+  mend(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+/** A table whose bars count rows by the length of their By cell. */
+const lengthsBars: MakeFolder<Extract<Plot, { t: 'bars' }>> = ({ by }) =>
+  new LengthsFolder(by.col);
+const LENGTHS: Folders = { ...FOLDERS, bars: lengthsBars };
+
+/** lengthsOf is the lengths of `col`'s cells in the first `rows` of `sheet`, as a complete tally of `plot`. */
+function lengthsOf(
+  plot: Plot,
+  col: number,
+  sheet: Sheet = sales,
+  rows = ROWS,
+): Tally {
+  const lengths = new GroupsFold();
+  for (let r = 0; r < rows; r++) lengths.add(`${sheet.display(r, col).length}`);
+  return { t: 'groups', plot, coverage: WHOLE, ...lengths.snapshot() };
 }
 
 /** shownRow is what each column of `sheet` shows for `row`. */
@@ -252,6 +337,29 @@ function holding(path?: string) {
   };
   return { provider, arm, held, release, reads: () => reads };
 }
+
+test('a kind folds through the folder its table names, and moves by an edit and saves through it, with nothing of its kind in the tallies', async () => {
+  const tallies = folded([REGION_ROWS], ROWS, LENGTHS);
+  const plot = REGION_ROWS.plot;
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [REGION_ROWS.id, lengthsOf(plot, REGION)],
+  ]);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REGION, 'Antarctica and beyond');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const ids = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(ids, blocks(sheet));
+  const moved = lengthsOf(plot, REGION, sheet);
+  expect(tallies.read(ROWS, true)).toStrictEqual([[REGION_ROWS.id, moved]]);
+  const saved = tallies.saved();
+  expect(saved[REGION_ROWS.id]?.key).toBe(`lengths ${REGION}`);
+  const reopened = new Tallies(LENGTHS);
+  reopened.restore(JSON.parse(JSON.stringify(saved)), ROWS);
+  reopened.attach(REGION_ROWS, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual([[REGION_ROWS.id, moved]]);
+});
 
 test("a bars or pie chart's folder keeps the key a save names it by, and takes a block back as it folded it", () => {
   const plot = { t: 'pie', by: column(REGION), sum: column(REVENUE) } as const;
