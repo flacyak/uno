@@ -12,6 +12,10 @@ import type { Chart, Plot } from "@document";
 import type { GroupsTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
+import type { ChartKind } from "@renderer/chart/kind";
+import { bars } from "@renderer/chart/kinds/bars";
+import { KINDS } from "@renderer/chart/kinds/index";
+import { undrawn } from "@renderer/chart/kinds/undrawn";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import { NO_CORNER } from "@renderer/chart/place";
 import type { Stage } from "@renderer/chart/window";
@@ -269,9 +273,14 @@ const heardOf = (latest: GroupsTally, complete: GroupsTally | undefined): Heard 
   complete,
 });
 
-/** A window of `chart`, whose chart hears what `heard` says by each draw, over a stage of `more`. */
-function hearing(heard: () => Heard, chart = BARS, more: Partial<Stage> = {}): ChartWindow {
-  const made = new ChartWindow(chart, { ...NO_LAYER, heard, ...more });
+/** A window of `chart`, whose chart hears what `heard` says by each draw, over a stage of `more`, drawn as `kinds` draw. */
+function hearing(
+  heard: () => Heard,
+  chart = BARS,
+  more: Partial<Stage> = {},
+  kinds = KINDS,
+): ChartWindow {
+  const made = new ChartWindow(chart, { ...NO_LAYER, heard, ...more }, kinds);
   made.show(chart, undefined);
   document.body.append(made.box);
   return made;
@@ -292,6 +301,29 @@ const rowHeads = (box: HTMLElement): Array<string | null> =>
 
 const image = (box: HTMLElement): HTMLElement => box.querySelector<HTMLElement>('[role="img"]')!;
 const told = (box: HTMLElement): string => box.querySelector(".chart-summary")?.textContent ?? "";
+
+test("a kind this build reads and does not draw yet opens a window that says so, in the plot and in its table", async () => {
+  const drawnLater: ChartKind<Extract<Plot, { t: "bars" }>> = (plot) => ({
+    ...bars(plot),
+    drawing: () => undrawn,
+  });
+  const made = hearing(
+    () => heardOf(tallyOf(["North"], true), undefined),
+    BARS,
+    {},
+    {
+      ...KINDS,
+      bars: drawnLater,
+    },
+  );
+  await frame();
+  const plot = made.box.querySelector(".chart-plot")!;
+  expect(plot.textContent).toBe("this chart is not drawn yet");
+  expect(title(made.box).textContent).toBe("rows per region");
+  press(made.box, "t");
+  await frame();
+  expect(plot.textContent).toBe("this chart is not drawn yet");
+});
 
 test("the drawing is an image named by the head until a tally completes, then by what the chart says it shows, which a partial never changes", async () => {
   const read = tallyOf(["North", "South"], true);

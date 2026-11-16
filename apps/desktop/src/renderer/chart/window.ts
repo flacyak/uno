@@ -51,7 +51,7 @@ import {
   trouble,
 } from "./caption.ts";
 import { kindOf } from "./kind.ts";
-import type { Drawing, Drawn, Kind } from "./kind.ts";
+import type { Drawing, Drawn, Kind, Kinds } from "./kind.ts";
 import { KINDS } from "./kinds/index.ts";
 import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
 import type { Corner, Rect, Room } from "./place.ts";
@@ -309,6 +309,8 @@ export class ChartWindow {
     /** The chart the window shows, as the layer last said. */
     private chart: Chart,
     private readonly stage: Stage,
+    /** The kind each plot draws as. */
+    private readonly kinds: Kinds = KINDS,
   ) {
     const id = `chart-${++made}`;
     const caption = el("div", "chart-caption");
@@ -555,7 +557,7 @@ export class ChartWindow {
   /** kind gives what the chart's plot does that depends on its kind. */
   private kind(): Kind {
     const { plot } = this.chart;
-    return kindOf(KINDS, plot.t, plot);
+    return kindOf(this.kinds, plot.t, plot);
   }
 
   /**
