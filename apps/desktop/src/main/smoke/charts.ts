@@ -257,8 +257,9 @@ export const GEOMETRY = `
   const edges = (at) => [at.left, at.top, at.right, at.bottom].join(" ");
   const unsaved = () => document.querySelector(".ws.open .dirty") !== null;
   const HEAD = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
-  // Tucked heads stand from the room's left, each as wide, short of the window's × where it reaches.
-  const heads = () => windows().every((at) => at.height === HEAD + border() && at.left === room().left && at.right === windows()[0].right && at.right <= room().right);
+  // Tucked heads end as far short of the room's right as the room reaches under the window's ×.
+  const underX = () => Math.max(0, room().right - (innerWidth - parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"))));
+  const heads = () => windows().every((at) => at.height === HEAD + border() && at.left === room().left && at.right === room().right - underX());
 `;
 
 /**
@@ -537,7 +538,6 @@ export const CHARTS: Check[] = [
       const sidebar = document.querySelector("#sidebar").getBoundingClientRect();
       if (top.left !== sidebar.right - border()) return "the top window stands at " + edges(top) + " beside a sidebar to " + sidebar.right;
       if (top.top !== room().top || foot.top !== top.bottom - border()) return "the heads stand at " + edges(top) + " and " + edges(foot);
-      if (top.right !== room().right) return "with no × over the room, the heads end at " + top.right + " in a room to " + room().right;
       return unsaved() ? "tucking marked the workspace unsaved" : "";
     `,
   },
