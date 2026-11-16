@@ -354,6 +354,8 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   const { width: fullWidth, height } = win.getBounds();
 
   for (const check of CHECKS) {
+    // smoke.js times each check from this line, and names the one it stops in.
+    console.log(`smoke: check ${check.name}`);
     try {
       if (check.ask !== undefined) await ask("smoke", check.ask);
       if (check.send !== undefined) win.webContents.send(...check.send);

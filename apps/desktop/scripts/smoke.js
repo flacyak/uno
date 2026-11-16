@@ -511,7 +511,7 @@ const { code, out } = await drive("smoke", {
     AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
   }),
   answer,
-  // The run's own minute, and what the scheduled chart may wait.
+  // Each check's: a minute, and what the scheduled chart may wait.
   deadlineMs: 60_000 + everyMinute * MINUTE_MS + CHECK_TIMEOUT_MS,
   onTimeout: () => void shut(),
 });

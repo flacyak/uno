@@ -11,9 +11,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 
-import { displayMissing, electronEnv, verdict } from "@scripts/launch";
+import { displayMissing, drive, electronEnv, verdict } from "@scripts/launch";
 import { DRIVEN_OPEN, openPathFor } from "@main/smoke/pick";
 import { savePathFor } from "@main/smoke/save";
 
@@ -190,6 +190,44 @@ test("a hung app is killed by pid, on a deadline", () => {
   expect(src).toMatch(/process\.kill\(child\.pid, "SIGKILL"\)/);
   for (const name of ["smoke.js", "preview.js"])
     expect(read(name), name).toMatch(/deadlineMs:\s*\d/);
+});
+
+/** A deadline short enough for a test, and a step well inside it. */
+const DEADLINE_MS = 2000;
+const STEP_MS = DEADLINE_MS / 4;
+
+/** drives a Node stand-in for the app, running `app`, and gives what drive printed as errors. */
+async function driven(app: string): Promise<{ code: number | null; errors: string[] }> {
+  const errors: string[] = [];
+  const said = vi.spyOn(console, "error").mockImplementation((line) => errors.push(String(line)));
+  const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  try {
+    const { code } = await drive("smoke", {
+      electron: process.execPath,
+      args: ["-e", app],
+      env: process.env,
+      answer: () => true,
+      deadlineMs: DEADLINE_MS,
+    });
+    return { code, errors };
+  } finally {
+    said.mockRestore();
+    write.mockRestore();
+  }
+}
+
+test("each check has the deadline, so a run longer than one goes on", async () => {
+  const steps = 4;
+  const app = `let n = 0; const t = setInterval(() => { console.log("smoke: check " + n); if (++n > ${steps}) { clearInterval(t); } }, ${STEP_MS});`;
+  expect(await driven(app)).toEqual({ code: 0, errors: [] });
+});
+
+test("a hung check is killed at its deadline, and named", async () => {
+  const app = `console.log("smoke: check opens"); console.log("smoke: check hangs"); setInterval(() => {}, ${STEP_MS});`;
+  const { code, errors } = await driven(app);
+  expect(code).toBeNull();
+  expect(errors).toHaveLength(1);
+  expect(errors[0]).toMatch(/^smoke: timed out after \S+s in check "hangs", /);
 });
 
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {
