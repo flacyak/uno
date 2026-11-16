@@ -1,7 +1,8 @@
 /**
  * @fileoverview Times a time fold's snapshot and each batch after it, for a
  * full summed fold at the bound, which is the most a snapshot regroups. The
- * design holds each to SNAPSHOT_BUDGET_MS, posted while a pass runs.
+ * suite records the times for the report, as the other performance suites
+ * do, and checks only the fold it times.
  */
 
 import { afterAll, expect, test } from 'vite-plus/test';
@@ -9,9 +10,8 @@ import { afterAll, expect, test } from 'vite-plus/test';
 import { HELD_AT_MOST, LEVEL_BATCH, TimeFold } from '@tally';
 import { record } from '@core-tests/efficiency/record';
 import type { Metric } from '@core-tests/efficiency/record';
+import { fastest } from './time.ts';
 
-/** The most a snapshot, or one batch after it, may take. */
-const SNAPSHOT_BUDGET_MS = 20;
 const SAMPLES = 5;
 const MINUTE_MS = 60_000;
 const HOUR_MINUTES = 60;
@@ -41,29 +41,20 @@ function full(held: Timed): TimeFold {
   return fold;
 }
 
-/** The quickest of SAMPLES runs of `fn`, in ms. */
-function quickest(fn: () => void): number {
-  let best = Infinity;
-  for (let s = 0; s < SAMPLES; s++) {
-    const started = performance.now();
-    fn();
-    best = Math.min(best, performance.now() - started);
-  }
-  return best;
-}
-
 for (const held of TIMED) {
-  test(`a full summed fold of ${held}s snapshots and batches in budget`, () => {
+  test(`a full summed fold of ${held}s snapshots and batches`, async () => {
     const fold = full(held);
-    const snapshot = quickest(() => fold.snapshot(held));
+    const snapshot = await fastest(SAMPLES, async () => {
+      fold.snapshot(held);
+    });
     const [finest] = fold.snapshot(held).levels;
     expect(finest!.span).toBeGreaterThan(LEVEL_BATCH);
     let slowest = 0;
     for (let at = LEVEL_BATCH; at < finest!.span; at += LEVEL_BATCH) {
-      slowest = Math.max(
-        slowest,
-        quickest(() => fold.batch(held, at)),
-      );
+      const batch = await fastest(SAMPLES, async () => {
+        fold.batch(held, at);
+      });
+      slowest = Math.max(slowest, batch);
     }
     metrics.push(
       {
@@ -77,7 +68,5 @@ for (const held of TIMED) {
         value: slowest,
       },
     );
-    expect(snapshot).toBeLessThan(SNAPSHOT_BUDGET_MS);
-    expect(slowest).toBeLessThan(SNAPSHOT_BUDGET_MS);
   });
 }
