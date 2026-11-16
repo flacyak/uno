@@ -8,12 +8,17 @@
  * by header where the file moved them, with each column's decimal mark.
  */
 
-import type { Chart, ChartColumn, Plot } from '@document';
+import type { Chart, Plot } from '@document';
 import type { Mark } from '@num';
 import type { Said } from '@said';
 import { GroupsFold, SampleFold, isCount, isRecord } from '@tally';
 import type { SavedGroups, SavedSample } from '@tally';
+import { markOf, placeOf } from './fold/folder.ts';
+import type { Block } from './fold/folder.ts';
 import type { Tally } from './protocol.ts';
+
+export { placeOf } from './fold/folder.ts';
+export type { Block } from './fold/folder.ts';
 
 /** How far one chart's fold has got. */
 interface Folding {
@@ -54,16 +59,6 @@ export interface SavedChart {
   rows: number;
   ahead?: [number, number];
   fold: SavedGroups | SavedSample;
-}
-
-/**
- * A block's rows as the folds read them: their range, and what a column of
- * them shows, by row.
- */
-export interface Block {
-  from: number;
-  end: number;
-  shown: (col: number) => (row: number) => string;
 }
 
 /**
@@ -428,14 +423,6 @@ function unfolded(): Omit<Folding, 'plot' | 'key'> {
   return { rows: 0, ahead: undefined, done: false };
 }
 
-/**
- * markOf is the decimal mark `marks` gives column `col`, or the point for
- * one it does not reach, as a fold made before any mark was inferred reads.
- */
-function markOf(marks: readonly Mark[], col: number): Mark {
-  return marks[col] ?? 'point';
-}
-
 /** readsWith says whether `t`'s fold reads its columns with `marks`. */
 function readsWith(t: Tallying, marks: readonly Mark[]): boolean {
   if (t.t === 'groups') {
@@ -567,18 +554,4 @@ function move(
     t.fold.remove(at(before, t.by), at(before, t.sum));
     t.fold.add(at(after, t.by), at(after, t.sum));
   }
-}
-
-/**
- * placeOf finds a chart's column among the headers: where the chart left it
- * while the header there is its own, else where its header is now. The
- * renderer finds the column a tally read the same way.
- */
-export function placeOf(
-  column: ChartColumn,
-  headers: readonly string[],
-): number | undefined {
-  if (headers[column.col] === column.header) return column.col;
-  const at = headers.indexOf(column.header);
-  return at < 0 ? undefined : at;
 }
