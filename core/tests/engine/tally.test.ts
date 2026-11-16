@@ -20,6 +20,7 @@ import type {
   SourceRef,
   Tally,
 } from '@engine';
+import { groupsFolder } from '@engine/fold/groups';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -250,6 +251,29 @@ function holding(path?: string) {
   };
   return { provider, arm, held, release, reads: () => reads };
 }
+
+test("a bars or pie chart's folder keeps the key a save names it by, and takes a block back as it folded it", () => {
+  const plot = { t: 'pie', by: column(REGION), sum: column(REVENUE) } as const;
+  const marks = HEADERS.map(() => 'point' as const);
+  const folder = groupsFolder(plot, HEADERS, marks);
+  if (typeof folder === 'string') throw new Error(`no column ${folder}`);
+  expect(folder.key).toBe(`groups ${REGION} ${REVENUE}`);
+  expect(folder.cols).toStrictEqual([REGION, REVENUE]);
+  const shown = (col: number) => (row: number) => sales.display(row, col);
+  const last = Math.floor((ROWS - 1) / TINY.blockRows);
+  for (let block = 0; block <= last; block++) {
+    const from = block * TINY.blockRows;
+    folder.fold(block, {
+      from,
+      end: Math.min(from + TINY.blockRows, ROWS),
+      shown,
+    });
+  }
+  const kept = last * TINY.blockRows;
+  folder.unfold(last, { from: kept, end: ROWS, shown });
+  const coverage = { rows: kept, total: kept, complete: true };
+  expect(folder.tally(plot, coverage)).toStrictEqual(pure(plot, sales, kept));
+});
 
 test("a chart's column is found where it was, or by its header where the file moved it, and one the file has not names itself", () => {
   const tallies = new Tallies();
