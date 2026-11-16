@@ -13,6 +13,11 @@ import type { Group, GroupsTally, SampleTally } from "@engine";
 import { bars as drawBars } from "@renderer/chart/bars";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
+import { KINDS } from "@renderer/chart/kinds/index";
+import { pie } from "@renderer/chart/kinds/pie";
+import { scatter } from "@renderer/chart/kinds/scatter";
+import { belowZero, past, pie as drawPie } from "@renderer/chart/pie";
+import { sampled, scatter as drawScatter } from "@renderer/chart/scatter";
 import { summary, summaryOf } from "@renderer/chart/summary";
 import { table } from "@renderer/chart/table";
 import { targets } from "@renderer/chart/tooltip";
@@ -33,6 +38,10 @@ const REVENUE = { col: 5, header: "revenue" };
 /** Rows per region, and the sum of revenue per region. */
 const ROWS: Extract<Plot, { t: "bars" }> = { t: "bars", by: REGION };
 const SUMS: Extract<Plot, { t: "bars" }> = { ...ROWS, sum: REVENUE };
+
+/** Each region's share of the rows, and of the revenue. */
+const SHARES: Extract<Plot, { t: "pie" }> = { t: "pie", by: REGION };
+const SHARES_OF_SUM: Extract<Plot, { t: "pie" }> = { ...SHARES, sum: REVENUE };
 
 /** A value sent of `rows` rows, whose cells sum to `sum`. */
 const sent = (value: string, rows: number, sum = rows): Group => ({ value, rows, sum });
@@ -103,4 +112,27 @@ test("a bar chart's kind makes the title, the drawing and its marks, the table a
   }
   expect(bars(SUMS).numbered).toStrictEqual([SUMS.sum]);
   expect(bars(SUMS).valued).toStrictEqual([REGION]);
+});
+
+test("a pie's kind makes what a pie made, and says how it counts the values past those kept and those at or below zero", () => {
+  for (const plot of [SHARES, SHARES_OF_SUM]) {
+    const drawing = made(pie, plot, GROUPS, () => drawPie(plot, GROUPS));
+    expect(drawing.notes()).toStrictEqual([past(plot, GROUPS), belowZero(plot, GROUPS)]);
+    expect(pie(plot).drawing(SAMPLE)).toBeUndefined();
+  }
+  expect(pie(SHARES_OF_SUM).numbered).toStrictEqual([REVENUE]);
+});
+
+test("a scatter's kind makes what a scatter made, and says what its sample leaves out", () => {
+  const plot = SCATTER.plot;
+  if (plot.t !== "scatter") throw new Error("the scatter fixture plots a scatter");
+  const drawing = made(scatter, plot, SAMPLE, () => drawScatter(SAMPLE));
+  expect(drawing.notes()).toStrictEqual([sampled(SAMPLE)]);
+  expect(scatter(plot).drawing({ ...SAMPLE, plotted: 0 })?.empty).toBe(true);
+  expect(scatter(plot).drawing(GROUPS)).toBeUndefined();
+  expect(scatter(plot).numbered).toStrictEqual([plot.x, plot.y]);
+});
+
+test("each plot kind has its module", () => {
+  expect(KINDS).toStrictEqual({ bars, pie, scatter });
 });
