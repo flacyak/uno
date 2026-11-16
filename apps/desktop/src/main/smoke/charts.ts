@@ -913,6 +913,8 @@ export const CHART_SIGNED: Check[] = [
       // The keys leave the grid, as each cell this short sheet shows by the windows is under one.
       said.closest(".chart").focus();
       const words = counted(${SIGNED_ROWS}) + " rows · 1 not a number";
+      // The count comes from the engine's pass over the file.
+      await arrives(() => said.textContent === words && !find.hidden);
       if (said.textContent !== words || find.hidden) return "the caption says " + said.textContent + (find.hidden ? " with no button" : "");
       const [box, line, foot] = [find, said, document.querySelector(".chart-edge-foot")].map((at) => at.getBoundingClientRect());
       if (box.top < line.top || box.bottom > line.bottom) return "the button stands from " + box.top + " to " + box.bottom + ", past the caption's " + line.top + " to " + line.bottom;
@@ -924,7 +926,7 @@ export const CHART_SIGNED: Check[] = [
       if (under !== find) return "over the foot edge's zone the pointer finds " + (under === null ? "nothing" : under.className);
       find.click();
       const cell = () => text("#status-cell");
-      if (!(await until(() => cell() === "revenue · row " + ${SIGNED_ROWS}))) return "the grid stands on " + cell();
+      if (!(await arrives(() => cell() === "revenue · row " + ${SIGNED_ROWS}))) return "the grid stands on " + cell();
       return "";
     `,
   },
