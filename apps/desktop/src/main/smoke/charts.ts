@@ -84,6 +84,7 @@ const TIMED_PERIODS = [DATED_DAYS, DATED_WEEKS];
 /** The one it wrote of rows over dates from 2024 to a placeholder, 9999-12-31, and their years, 2024 to 9999. */
 const PLACED = process.env["UNO_SMOKE_PLACED"] ?? "";
 const PLACED_YEARS = 7_976;
+const PLACED_ROWS = 4;
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
 
 /**
@@ -1167,7 +1168,7 @@ export const CHART_TIME: Check[] = [
     `,
   },
   {
-    name: "an over-time chart whose years run past the batch a tally sends asks for the rest, and draws every year to the last, with no gaps",
+    name: "an over-time chart whose years run past the batch a tally sends asks for the rest, and draws every year to the last, with no gaps, and its caption says it is too narrow for them",
     send: ["menu:open-path", PLACED],
     shot: "chart-time-span",
     script: `
@@ -1176,7 +1177,10 @@ export const CHART_TIME: Check[] = [
       if (!(await arrives(() => slots().length === ${PLACED_YEARS} && last() !== null))) return "the window draws " + slots().length + " periods, the last " + (last() === null ? "with no column" : "with one");
       const columns = document.querySelectorAll(".chart .chart-column").length;
       if (columns !== ${PLACED_YEARS}) return "the window draws " + columns + " columns of ${PLACED_YEARS} years";
-      return document.querySelector(".chart-time.crowded") === null ? "the years keep their gaps" : "";
+      if (document.querySelector(".chart-time.crowded") === null) return "the years keep their gaps";
+      const said = document.querySelector(".chart-said").textContent;
+      const words = "${m.rows_count({ count: PLACED_ROWS })} · ${m.chart_time_crowded({ per: m.chart_per_year() })}";
+      return said === words ? "" : "the caption says " + said;
     `,
   },
 ];

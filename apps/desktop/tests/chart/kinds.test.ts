@@ -6,10 +6,11 @@
  * @vitest-environment happy-dom
  */
 
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 
 import type { Plot } from "@document";
 import type { Group, GroupsTally, SampleTally, TimeTally } from "@engine";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { bars as drawBars } from "@renderer/chart/bars";
 import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
@@ -75,6 +76,10 @@ const SAMPLE: SampleTally = {
   most: { x: 1, y: 2 },
   skipped: { blank: 0, unparsed: 0 },
 };
+
+afterEach(async () => {
+  await setLocale(baseLocale, { reload: false });
+});
 
 /** What the head calls the chart, as the table's caption. */
 const called = (): HTMLElement => el("bdi", "", "rows per region");
@@ -216,4 +221,23 @@ test("an over-time chart's drawing wants the next batch of a level it draws past
     { per: "year", offset: 1_024 },
   ]);
   expect(time(DATED).drawing(TIMES, ROOM)?.wanted?.()).toStrictEqual([]);
+});
+
+test("an over-time chart's caption says when its plot draws coarser than its size, or is too narrow for any size sent", async () => {
+  const weeks = TIMES.levels[1]!.span;
+  const narrow = {
+    ...ROOM,
+    width: 2 * BARS_INSET + ROOM.ch + TICK_GAP + weeks * COLUMN_PITCH_LEAST,
+  };
+  const notes = (plot: typeof DATED, room: typeof ROOM) => time(plot).drawing(TIMES, room)?.notes();
+  expect(notes(DATED, ROOM)).toStrictEqual([""]);
+  expect(notes(DATED, narrow)).toStrictEqual(["drawn per week: too narrow for a column per day"]);
+  expect(notes({ ...DATED, per: "auto" }, narrow)).toStrictEqual([""]);
+  expect(notes(DATED, { ...ROOM, width: 2 * BARS_INSET })).toStrictEqual([
+    "too narrow for a column per month",
+  ]);
+  await setLocale("es", { reload: false });
+  expect(notes(DATED, narrow)).toStrictEqual([
+    "dibujado por semana: demasiado estrecho para una columna por día",
+  ]);
 });

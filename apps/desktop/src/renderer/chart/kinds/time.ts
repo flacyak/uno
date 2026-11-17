@@ -7,6 +7,7 @@
 import type { TimePlot } from "@document";
 import { m } from "@paraglide/messages";
 import { columns, fitted } from "../columns.ts";
+import type { Fitted } from "../columns.ts";
 import type { ChartKind } from "../kind.ts";
 import { NONE } from "../tooltip.ts";
 import { named } from "./bars.ts";
@@ -39,6 +40,18 @@ function title({ at, sum, per }: TimePlot): string {
     : m.chart_title_time_sum({ at: dates, per: size, sum: named(sum) });
 }
 
+/**
+ * narrowed gives what the caption says of a plot that draws `drawn` for
+ * `plot`: that it is too narrow for a column per period of any size sent,
+ * that it draws coarser than the plot's size for want of room, or nothing.
+ */
+function narrowed({ per }: TimePlot, drawn: Fitted): string {
+  const at = PER_WORDS[drawn.level.per]();
+  if (!drawn.fits) return m.chart_time_crowded({ per: at });
+  if (per === "auto" || per === drawn.level.per) return "";
+  return m.chart_time_coarser({ drawn: at, per: PER_WORDS[per]() });
+}
+
 /** time is what a window does with an over-time chart's plot. */
 export const time: ChartKind<TimePlot> = (plot) => ({
   title: () => title(plot),
@@ -54,6 +67,7 @@ export const time: ChartKind<TimePlot> = (plot) => ({
       ...undrawn,
       draw: () => columns(drawn, summed),
       targets: () => NONE,
+      notes: () => [narrowed(plot, drawn)],
       wanted: () => (rows.length < span ? [{ per, offset: rows.length }] : []),
     };
   },

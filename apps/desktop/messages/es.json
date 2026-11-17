@@ -481,6 +481,8 @@
   "chart_per_month": "mes",
   "chart_per_quarter": "trimestre",
   "chart_per_year": "año",
+  "chart_time_coarser": "dibujado por {drawn}: demasiado estrecho para una columna por {per}",
+  "chart_time_crowded": "demasiado estrecho para una columna por {per}",
   "chart_title_share_of_rows": "proporción de filas por {by}",
   "chart_title_share_of_sum": "proporción de {sum} por {by}",
   "chart_title_against": "{y} frente a {x}",
