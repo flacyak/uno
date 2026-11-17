@@ -158,11 +158,16 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a pie and a scatter, and opens on bars", () => {
+test("it offers bars, a pie, a scatter and a chart over time, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.textContent, o.disabled]);
-  const kinds = [m.chart_kind_bars(), m.chart_kind_pie(), m.chart_kind_scatter()];
+  const kinds = [
+    m.chart_kind_bars(),
+    m.chart_kind_pie(),
+    m.chart_kind_scatter(),
+    m.chart_kind_time(),
+  ];
   expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
   expect(kind.value).toBe("bars");
 });
@@ -536,4 +541,79 @@ test("every worded label of the chart form and the formula form sets the column 
     expect(worded.filter((label) => label !== EQUALS && !said.includes(label))).toStrictEqual([]);
   }
   void setLocale(baseLocale, { reload: false });
+});
+
+/** The sales export's date column, and a Unix column of the times its orders came in. */
+const DATE = { col: 0, header: "date" };
+const STAMPS = { header: "placed", kind: "num", flagged: false, unit: "s" } as const;
+const STAMPED = { ...SALES, id: "stamped", band: { columns: [...COLUMNS, STAMPS] } };
+const PLACED = COLUMNS.length;
+
+test("a date column selected in the grid opens the form on a chart over time of it, asking for its dates, size and sum", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: DATE.col });
+  expect(select("kind").value).toBe("time");
+  expect(shown(box)).toStrictEqual([
+    "source",
+    "chart",
+    "dates",
+    "per",
+    "sum of",
+    "title",
+    "checks",
+  ]);
+  expect([...select("per").options].map((o) => o.textContent)).toStrictEqual([
+    "automatic",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+  ]);
+  pick("per", "month");
+  pick("sum", String(REVENUE));
+  press("Enter");
+  await settle();
+  const sum = { col: REVENUE, header: "revenue" };
+  expect(asked).toStrictEqual([
+    inserting({ t: "time", at: DATE, per: "month", sum, order: "month" }),
+    "closed",
+  ]);
+});
+
+test("dates whose order the sample left open read as the language reads them, and a Unix column as its unit", async () => {
+  await setLocale("en-GB", { reload: false });
+  const dated = form(undefined, { t: "insert", col: DATE.col }, STAMPED);
+  expect([...select("at").options].map((o) => o.textContent)).toStrictEqual(["date", "placed"]);
+  press("Enter");
+  await settle();
+  const stamped = form(undefined, { t: "insert", col: PLACED }, STAMPED);
+  press("Enter");
+  await settle();
+  await setLocale(baseLocale, { reload: false });
+  const placed = { col: PLACED, header: "placed" };
+  expect([...dated.asked, ...stamped.asked].filter((a) => a !== "closed")).toStrictEqual([
+    inserting({ t: "time", at: DATE, per: "auto", order: "day" }, "", STAMPED.id),
+    inserting({ t: "time", at: placed, per: "auto", unit: "s" }, "", STAMPED.id),
+  ]);
+});
+
+test("a chart over time opened to change keeps its kind, size, sum and the order it reads its dates in", async () => {
+  const sum = { col: REVENUE, header: "revenue" };
+  const plot: Plot = { t: "time", at: DATE, per: "week", sum, order: "day" };
+  const { asked } = form(undefined, { t: "change", chart: { plot, title: "", refresh: BY_HAND } });
+  expect([select("kind").value, select("at").value, select("per").value]).toStrictEqual([
+    "time",
+    "0",
+    "week",
+  ]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(plot), "closed"]);
+});
+
+test("a source with no date column offers no chart over time", () => {
+  form(undefined, { t: "insert", col: 0 }, ADS);
+  const time = [...select("kind").options].find((o) => o.value === "time")!;
+  expect(time.disabled).toBe(true);
 });

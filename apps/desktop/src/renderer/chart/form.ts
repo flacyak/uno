@@ -1,10 +1,10 @@
 /**
  * @fileoverview The chart form: picks the source, the kind of chart, the
- * column whose values its bars or pie count the rows of, or sum a number column
- * over, or the two number columns a scatter sets against each other, and its
- * title. It opens on the active source, and another source keeps each column it
- * has a header for. Opened on a chart, it shows what the chart shows, and its
- * primary button is Apply.
+ * column whose values or dates its chart counts the rows of, or sums a number
+ * column over, or the two number columns a scatter sets against each other,
+ * and its title. It opens on the active source, and another keeps each column
+ * it has a header for. Opened on a chart, it shows what the chart shows, and
+ * its primary button is Apply.
  *
  * An empty title shows the one the chart makes, which follows the language.
  * Refresh sets how often the chart's source is checked for newer data.
@@ -21,7 +21,8 @@ import {
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
 } from "@document";
-import type { Chart, ChartColumn, Plot } from "@document";
+import type { Chart, ChartColumn, Plot, TimePlot } from "@document";
+import type { Order } from "@date";
 import { placeOf } from "@engine";
 import type { ColumnInfo, Link, PartInfo } from "@engine";
 import { m } from "@paraglide/messages";
@@ -30,17 +31,22 @@ import { columnLabel } from "@renderer/grid/rows";
 import { num } from "@renderer/locale";
 import { PopForm, field } from "@renderer/shell/form";
 import type { MenuPlace } from "@renderer/shell/menu";
+import { getLocale } from "@paraglide/runtime";
 import { el, message, option } from "@renderer/shell/util";
 import { rereads } from "@renderer/workspace";
 import type { Rereads } from "@renderer/workspace";
+import { PER_WORDS } from "./periods.ts";
 import { madeTitle } from "./window.ts";
+import { PER } from "@tally";
 
 /** A source the form charts, as a tab has it: its id, its name, its columns,
  * whether its file is missing, and the file or files a refresh reads again. */
 export interface ChartSource {
   id: string;
   name: string;
-  band: { columns: ReadonlyArray<Pick<ColumnInfo, "header" | "kind" | "flagged">> };
+  band: {
+    columns: ReadonlyArray<Pick<ColumnInfo, "header" | "kind" | "flagged" | "order" | "unit">>;
+  };
   missing: boolean;
   link?: Pick<Link, "path">;
   parts?: readonly PartInfo[];
@@ -67,7 +73,17 @@ const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
   ["bars", m.chart_kind_bars],
   ["pie", m.chart_kind_pie],
   ["scatter", m.chart_kind_scatter],
+  ["time", m.chart_kind_time],
 ];
+
+/** The sizes Per offers, Automatic first, then finest first. */
+const PERS: ReadonlyArray<readonly [TimePlot["per"], () => string]> = [
+  ["auto", m.chart_per_auto],
+  ...PER.map((per) => [per, PER_WORDS[per]] as const),
+];
+
+/** The language whose undecided dates read month first; every other reads day first. */
+const MONTH_FIRST = "en-US";
 
 /** The schedules under an hour the form offers, in minutes between checks. */
 const EVERY_FEW_MINUTES = [5, 15, 30];
@@ -131,7 +147,13 @@ export class ChartForm {
   private readonly x = select("x");
   /** The number column up a scatter, one other than X. */
   private readonly y = select("y");
-  /** The fields bars and a pie ask for, and those a scatter asks for. */
+  /** The date column an over-time chart counts or sums over, and the size of its periods. */
+  private readonly at = select("at");
+  private readonly per = select("per");
+  /** How the chart opened on reads its dates, which it keeps while its date column stays. */
+  private readonly read: TimePlot | undefined;
+  /** The fields an over-time chart asks for before Sum of, and those bars and a pie ask for. */
+  private readonly timed = [field(m.chart_form_at(), this.at), field(m.chart_form_per(), this.per)];
   private readonly grouped = [
     field(m.chart_form_by(), this.by),
     field(m.chart_form_sum(), this.sum),
@@ -158,6 +180,7 @@ export class ChartForm {
   ) {
     this.source = active;
     const changes = opening.t === "change";
+    this.read = changes && opening.chart.plot.t === "time" ? opening.chart.plot : undefined;
     const label = changes ? m.chart_edit() : m.chart_form_title();
     const heading = changes
       ? m.chart_form_title_chart({ title: opening.chart.title || madeTitle(opening.chart.plot) })
@@ -180,10 +203,11 @@ export class ChartForm {
     this.from.addEventListener("change", () => this.choose());
     this.kind.append(...KINDS.map(([t, words]) => option(words(), t)));
     this.kind.addEventListener("change", () => this.ask());
+    this.per.append(...PERS.map(([per, words]) => option(words(), per)));
 
     if (opening.t === "insert") this.offer(opening.col);
     else this.opensOn(opening.chart.plot);
-    for (const column of [this.by, this.sum, this.x, this.y]) {
+    for (const column of [this.at, this.per, this.by, this.sum, this.x, this.y]) {
       column.addEventListener("change", () => this.name());
     }
 
@@ -205,6 +229,7 @@ export class ChartForm {
     const fields = [
       field(m.chart_form_source(), this.from),
       field(m.chart_form_kind(), this.kind),
+      ...this.timed,
       ...this.grouped,
       ...this.paired,
       field(m.chart_form_title_field(), this.title),
@@ -225,26 +250,27 @@ export class ChartForm {
   private choose(): void {
     const chosen = (select: HTMLSelectElement): ChartColumn | undefined =>
       select.value === "" ? undefined : this.column(select.value);
-    const [by, ...kept] = [this.by, this.sum, this.x, this.y].map(chosen);
+    const [by, ...kept] = [this.by, this.sum, this.x, this.y, this.at].map(chosen);
     this.source = this.sources[Number(this.from.value)] ?? this.source;
     if (this.opening.t === "insert") {
       this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
     }
-    this.offer(this.at(by), kept);
+    this.offer(this.placeAt(by), kept);
     this.reveal();
   }
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
     this.kind.value = plot.t;
-    if (plot.t === "scatter") this.offer(this.at(plot.x), [undefined, plot.x, plot.y]);
-    // The form makes no over-time chart yet, so it opens one as bars over its dates.
-    else if (plot.t === "time") this.offer(this.at(plot.at), [plot.sum]);
-    else this.offer(this.at(plot.by), [plot.sum]);
+    if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
+    else if (plot.t === "time") {
+      this.per.value = plot.per;
+      this.offer(this.placeAt(plot.at), [plot.sum, undefined, undefined, plot.at]);
+    } else this.offer(this.placeAt(plot.by), [plot.sum]);
   }
 
-  /** at gives where the source holds `column`, or else its first column. */
-  private at(column: ChartColumn | undefined): number {
+  /** placeAt gives where the source holds `column`, or else its first column. */
+  private placeAt(column: ChartColumn | undefined): number {
     return this.placed(column) ?? 0;
   }
 
@@ -256,6 +282,7 @@ export class ChartForm {
 
   /** first gives the column select the kind chosen asks for first. */
   private first(): HTMLSelectElement {
+    if (this.kind.value === "time") return this.at;
     return this.kind.value === "scatter" ? this.x : this.by;
   }
 
@@ -266,6 +293,8 @@ export class ChartForm {
   private offer(by: number, kept: ReadonlyArray<ChartColumn | undefined> = []): void {
     const columns = this.source.band.columns;
     const numbers: number[] = [];
+    const dates = columns.flatMap((c, i) => (c.kind === "date" || c.unit !== undefined ? [i] : []));
+    this.at.replaceChildren(...dates.map((i) => fromFile(columns[i]!.header, i)));
     this.by.replaceChildren();
     this.sum.replaceChildren(option(m.chart_form_sum_none(), ""));
     this.x.replaceChildren();
@@ -282,6 +311,10 @@ export class ChartForm {
       return at !== undefined && numbers.includes(at) ? at : undefined;
     };
     const [sum, x, y] = kept.map(held);
+    const at = this.placed(kept[3]);
+    this.at.value = String(
+      [at, by].find((i) => i !== undefined && dates.includes(i)) ?? dates[0] ?? "",
+    );
     const xAt = x ?? [by, ...numbers].find((i) => numbers.includes(i) && i !== y) ?? y;
     const yAt = y ?? numbers.find((i) => i !== xAt) ?? xAt;
     this.by.value = String(clamp(by, columns.length - 1));
@@ -292,14 +325,23 @@ export class ChartForm {
     const scatters = numbers.length >= SCATTER_COLUMNS;
     for (const made of this.kind.options) if (made.value === "scatter") made.disabled = !scatters;
     if (!scatters && this.kind.value === "scatter") this.kind.value = "bars";
+    for (const made of this.kind.options)
+      if (made.value === "time") made.disabled = dates.length === 0;
+    if (dates.length === 0 && this.kind.value === "time") this.kind.value = "bars";
+    // A date column selected in the grid opens the form on a chart over time of it.
+    if (this.opening.t === "insert" && this.kind.value === "bars" && dates.includes(by)) {
+      this.kind.value = "time";
+    }
     this.ask();
   }
 
   /** ask shows the fields the kind chosen asks for, and the title it makes. */
   private ask(): void {
-    const scatter = this.kind.value === "scatter";
-    for (const line of this.grouped) line.hidden = scatter;
-    for (const line of this.paired) line.hidden = !scatter;
+    const t = this.kind.value;
+    for (const line of this.timed) line.hidden = t !== "time";
+    this.grouped[0]!.hidden = t === "scatter" || t === "time";
+    this.grouped[1]!.hidden = t === "scatter";
+    for (const line of this.paired) line.hidden = t !== "scatter";
     this.name();
   }
 
@@ -309,9 +351,30 @@ export class ChartForm {
     if (this.kind.value === "scatter") {
       return { t: "scatter", x: this.column(this.x.value), y: this.column(this.y.value) };
     }
+    if (this.kind.value === "time") return this.overTime();
     const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
     return this.sum.value === "" ? { t, by } : { t, by, sum: this.column(this.sum.value) };
+  }
+
+  /**
+   * overTime gives an over-time chart of `at` per Per's size, summing Sum of
+   * if it names a column, its dates read as Unix time where the column is
+   * that, or else in the order the chart opened on read them, while its date
+   * column stays, or the column's sample decided, or else the language's.
+   */
+  private overTime(): TimePlot {
+    const at = this.column(this.at.value);
+    const per = PERS.find(([size]) => size === this.per.value)?.[0] ?? "auto";
+    const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
+    const { unit, order } = this.source.band.columns[at.col] ?? {};
+    if (unit !== undefined) return { t: "time", at, per, ...sum, unit };
+    const read = this.read;
+    const kept =
+      read !== undefined && "order" in read && read.at.col === at.col ? read.order : undefined;
+    const language: Order = getLocale() === MONTH_FIRST ? "month" : "day";
+    const decided = order === "day" || order === "month" ? order : language;
+    return { t: "time", at, per, ...sum, order: kept ?? decided };
   }
 
   /** column gives the source's column whose option has `value`, as a chart reads it. */
