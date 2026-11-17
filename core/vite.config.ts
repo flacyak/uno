@@ -9,6 +9,11 @@ import { timingsReporter } from './tests/timings.ts';
  */
 const TEST_BUDGET_MS = 30_000;
 
+/** The test files that measure core, rather than check it. */
+const MEASURED = ['tests/{lab,efficiency,performance}/**/*.test.ts'];
+/** What vitest leaves out on its own, which an `exclude` of our own replaces. */
+const DEFAULT_EXCLUDE = ['**/node_modules/**', '**/dist/**'];
+
 export default defineConfig({
   // The alias map in ../tsconfig.paths.json, for vitest.
   resolve: { tsconfigPaths: true },
@@ -42,6 +47,18 @@ export default defineConfig({
     reporters: ['default', timingsReporter()],
     testTimeout: TEST_BUDGET_MS,
     hookTimeout: TEST_BUDGET_MS,
+    // Two projects, both run by `vp test`. The lab's research, the efficiency
+    // budgets and the performance timings are 36 of core's 133 files and 241
+    // of its 334 test seconds, one file 65 s on its own, and they measure the
+    // engine, the index and ingest. `vp test --project core` runs the rest in
+    // 25 s, for a change that touches none of those.
+    projects: [
+      {
+        extends: true,
+        test: { name: 'core', exclude: [...DEFAULT_EXCLUDE, ...MEASURED] },
+      },
+      { extends: true, test: { name: 'lab', include: MEASURED } },
+    ],
   },
   lint: {
     options: {
