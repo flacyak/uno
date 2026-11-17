@@ -43,8 +43,8 @@ test('a report names each step, then the slowest files and checks', () => {
     file('desktop/tests/b.test.ts', 3000, 50),
   ];
   const checks = [
-    { name: 'opened', ms: 200, ok: true },
-    { name: 'reloaded', ms: 1065, ok: false },
+    { group: 'open', name: 'opened', ms: 200, ok: true },
+    { group: 'refresh', name: 'reloaded', ms: 1065, ok: false },
   ];
   const md = report(steps, files, checks);
   expect(md).toContain('| test | 31.0 s | 90.1 s | 1 |');
