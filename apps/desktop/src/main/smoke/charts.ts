@@ -392,6 +392,9 @@ export const CHARTS: Check[] = [
       ${GEOMETRY}
       ${CLEAR_X}
       if (!(await arrives(() => windows().length === 2))) return "the windows are " + windows().length + " · " + JSON.stringify(text("#status-msg"));
+      // The shot waits for both windows' bars and the sheet's rows, so it shows the same each run.
+      const drawn = () => document.querySelectorAll(".chart .chart-bar-row").length > 0 && [...document.querySelectorAll(".chart")].every((win) => win.querySelector(".chart-bar") !== null) && text("tbody tr td:nth-child(2)") !== "";
+      if (!(await arrives(drawn))) return "the windows or the sheet are still reading";
       const scroller = document.querySelector(".grid-scroll");
       if (scroller.scrollWidth <= scroller.clientWidth || scroller.scrollHeight <= scroller.clientHeight) {
         return "both scrollbars should show, so this checks nothing";
