@@ -17,6 +17,7 @@ import { lengthsOf } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
 import { BARS_INSET, BAR_GAP, BAR_THICK } from "./rows.ts";
 import { TICK_GAP, gridline, mark, percent } from "./scatter.ts";
+import { ticksOf } from "./timeAxis.ts";
 
 /** The least room a period takes across, in px: a 2 px column and the dataviz skill's 2 px gap. */
 export const COLUMN_PITCH_LEAST = 4;
@@ -37,6 +38,11 @@ function upOf(lengths: readonly number[]): Axis {
   return axis(Math.min(0, ...lengths), Math.max(0, ...lengths));
 }
 
+/** aside gives the room `up`'s labels and their gap take left of the periods, as chart.css lays them out. */
+function aside(up: Axis, room: PlotRoom): number {
+  return Math.ceil(gutter(up) * room.ch) + TICK_GAP;
+}
+
 /**
  * fitted gives the finest of `levels`, finest first, whose periods each get
  * COLUMN_PITCH_LEAST px of `room` past the y axis's labels, as chart.css lays
@@ -47,11 +53,9 @@ export function fitted(
   summed: boolean,
   room: PlotRoom,
 ): Fitted | undefined {
-  const fits = (level: TimeLevel): boolean => {
-    const labels = Math.ceil(gutter(upOf(lengths(level, summed))) * room.ch);
-    const across = room.width - 2 * BARS_INSET - labels - TICK_GAP;
-    return level.span * COLUMN_PITCH_LEAST <= across;
-  };
+  const fits = (level: TimeLevel): boolean =>
+    level.span * COLUMN_PITCH_LEAST <=
+    room.width - 2 * BARS_INSET - aside(upOf(lengths(level, summed)), room);
   const level = levels.find(fits) ?? levels.at(-1);
   return level === undefined ? undefined : { level, fits: fits(level) };
 }
@@ -60,9 +64,10 @@ export function fitted(
  * columns draws `level` as columns of its rows, or of its sums where `summed`,
  * on a y axis from the least of them, or zero, to the most. A period past
  * those sent has its slot, and no column until its batch comes. Where the
- * level does not `fit`, each column takes its whole slot.
+ * level does not `fit`, each column takes its whole slot. Its periods are
+ * labelled under them, as many as stand apart in `room`.
  */
-export function columns({ level, fits }: Fitted, summed: boolean): HTMLElement {
+export function columns({ level, fits }: Fitted, summed: boolean, room: PlotRoom): HTMLElement {
   const box = el("div", "chart-time");
   const sent = lengths(level, summed);
   const up = upOf(sent);
@@ -91,6 +96,14 @@ export function columns({ level, fits }: Fitted, summed: boolean): HTMLElement {
     }
     periods.append(slot);
   }
+  const along = el("div", "chart-ticks x");
+  const across = room.width - 2 * BARS_INSET - aside(up, room);
+  for (const { at, words } of ticksOf(level, across, -aside(up, room), room.ch)) {
+    const tick = el("span", "chart-tick", words);
+    tick.style.setProperty("--at", `${(at + 1 / 2) / level.span}`);
+    tick.style.setProperty("--wide", `${words.length}ch`);
+    along.append(tick);
+  }
   box.classList.toggle("crowded", !fits);
   box.style.setProperty("--zero", `${share(0)}`);
   box.style.setProperty("--inset", `${BARS_INSET}px`);
@@ -98,6 +111,6 @@ export function columns({ level, fits }: Fitted, summed: boolean): HTMLElement {
   box.style.setProperty("--tick-gap", `${TICK_GAP}px`);
   box.style.setProperty("--bar-thick", `${BAR_THICK}px`);
   box.style.setProperty("--bar-gap", `${BAR_GAP}px`);
-  box.append(labels, periods);
+  box.append(labels, periods, along);
   return box;
 }

@@ -65,7 +65,7 @@ export const time: ChartKind<TimePlot> = (plot) => ({
     const { per, span, rows } = drawn.level;
     return {
       ...undrawn,
-      draw: () => columns(drawn, summed),
+      draw: () => columns(drawn, summed, room),
       targets: () => NONE,
       notes: () => [narrowed(plot, drawn)],
       wanted: () => (rows.length < span ? [{ per, offset: rows.length }] : []),

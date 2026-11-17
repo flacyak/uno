@@ -66,14 +66,14 @@ const shares = (box: HTMLElement): Array<string | null> =>
   );
 
 test("each period has a slot in time order, an empty one too, its column its rows' share of an axis from zero", () => {
-  const box = columns(drawn(DAYS), false);
+  const box = columns(drawn(DAYS), false, ROOM);
   expect(shares(box)).toStrictEqual(["0.5", "1", "0", "0.25"]);
   expect(box.style.getPropertyValue("--zero")).toBe("0");
   expect(slots(box).some((slot) => slot.classList.contains("below"))).toBe(false);
 });
 
 test("a sum under zero grows down from zero, and an infinite one as long as the longest finite on its side", () => {
-  const box = columns(drawn(DAYS), true);
+  const box = columns(drawn(DAYS), true, ROOM);
   // The axis runs from -50 to 150 by 50, so zero stands a quarter of the way up.
   expect(box.style.getPropertyValue("--zero")).toBe("0.25");
   expect(shares(box)).toStrictEqual(["0.75", "0.25", "0", "0.75"]);
@@ -86,7 +86,7 @@ test("a sum under zero grows down from zero, and an infinite one as long as the 
 });
 
 test("each tick has a gridline across the periods, and its label beside the plot at the same height", () => {
-  const box = columns(drawn(DAYS), false);
+  const box = columns(drawn(DAYS), false, ROOM);
   const lines = [...box.querySelectorAll(".chart-gridlines .chart-grid.y")];
   const labels = [...box.querySelectorAll<HTMLElement>(".chart-ticks.y .chart-tick")];
   expect(labels.map((label) => label.textContent)).toStrictEqual(["0", "1", "2", "3", "4"]);
@@ -98,7 +98,7 @@ test("each tick has a gridline across the periods, and its label beside the plot
 });
 
 test("a period past the batch sent has its slot and no column, until its batch comes", () => {
-  const box = columns(drawn({ ...DAYS, span: 6 }), false);
+  const box = columns(drawn({ ...DAYS, span: 6 }), false, ROOM);
   expect(shares(box)).toStrictEqual(["0.5", "1", "0", "0.25", null, null]);
 });
 
@@ -124,6 +124,24 @@ test("the y axis's labels take their room from the periods, a whole px, as chart
 test("a plot with room for no level draws the coarsest, each column its whole slot", () => {
   const narrow = fitted(QUARTER, false, { ...ROOM, width: 2 * BARS_INSET });
   expect(narrow).toStrictEqual({ level: QUARTER.at(-1), fits: false });
-  expect(columns(narrow!, false).classList.contains("crowded")).toBe(true);
-  expect(columns(drawn(DAYS), false).classList.contains("crowded")).toBe(false);
+  expect(columns(narrow!, false, ROOM).classList.contains("crowded")).toBe(true);
+  expect(columns(drawn(DAYS), false, ROOM).classList.contains("crowded")).toBe(false);
+});
+
+test("the periods are labelled under their columns, each centred on its column's share of the periods", () => {
+  const box = columns(drawn(DAYS), false, ROOM);
+  const ticks = [...box.querySelectorAll<HTMLElement>(".chart-ticks.x .chart-tick")];
+  expect(ticks.map((tick) => tick.textContent)).toStrictEqual([
+    "Mar 3, 2024",
+    "Mar 4",
+    "Mar 5",
+    "Mar 6",
+  ]);
+  expect(ticks.map((tick) => tick.style.getPropertyValue("--at"))).toStrictEqual([
+    "0.125",
+    "0.375",
+    "0.625",
+    "0.875",
+  ]);
+  expect(ticks[0]!.style.getPropertyValue("--wide")).toBe("11ch");
 });

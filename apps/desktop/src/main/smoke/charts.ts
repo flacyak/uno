@@ -1151,7 +1151,7 @@ export const CHART_PIE: Check[] = [
 /** A check after CHART_PIE, as it opens a workspace of two over-time charts in place of that one. */
 export const CHART_TIME: Check[] = [
   {
-    name: "an over-time chart draws a column per period at the finest size its window holds, each in the accent on the zero gridline, at most a bar thick and a gap from the next, and its caption says when that is coarser than its own",
+    name: "an over-time chart draws a column per period at the finest size its window holds, each in the accent on the zero gridline, at most a bar thick and a gap from the next, its periods labelled under them, apart and inside the plot, and its caption says when that is coarser than its own",
     send: ["menu:open-path", TIMED],
     shot: "chart-time",
     script: `
@@ -1171,6 +1171,22 @@ export const CHART_TIME: Check[] = [
         if (off !== undefined) return "a column stands at " + [off.left, off.top, off.right, off.bottom].join(" ") + " over a baseline at " + base + " in periods from " + area.left + " to " + area.right;
         const near = columns.findIndex((at, i) => i > 0 && at.left - columns[i - 1].right < ${BAR_GAP} - ${RECT_SLACK});
         if (near !== -1) return "two columns stand " + (columns[near].left - columns[near - 1].right) + " px apart";
+        // Each label stands over its column's middle, apart from the next, inside the plot's inset and under the y axis's.
+        const slots = [...win.querySelectorAll(".chart-period")].map(rect);
+        const ticks = [...win.querySelectorAll(".chart-ticks.x .chart-tick")];
+        const plot = rect(win.querySelector(".chart-plot"));
+        const foot = rect(win.querySelector(".chart-ticks.y .chart-tick:first-child"));
+        for (const [i, tick] of ticks.entries()) {
+          const at = rect(tick);
+          const slot = slots[Math.round(parseFloat(tick.style.getPropertyValue("--at")) * slots.length - 0.5)];
+          const middle = (slot.left + slot.right) / 2;
+          if (middle < at.left - ${RECT_SLACK} || middle > at.right + ${RECT_SLACK}) return tick.textContent + " stands from " + at.left + " to " + at.right + ", off its column at " + middle;
+          if (i > 0 && at.left - rect(ticks[i - 1]).right < ${TICK_GAP} - ${RECT_SLACK}) return tick.textContent + " stands " + (at.left - rect(ticks[i - 1]).right) + " px from the label before it";
+          if (at.left < plot.left + ${BARS_INSET} - ${RECT_SLACK} || at.right > plot.right - ${BARS_INSET} + ${RECT_SLACK}) return tick.textContent + " runs into the inset of a plot from " + plot.left + " to " + plot.right;
+          if (at.top - foot.bottom < ${TICK_GAP} - ${RECT_SLACK}) return tick.textContent + " stands " + (at.top - foot.bottom) + " px under the y axis's first label";
+          if (tick.scrollWidth > tick.clientWidth) return tick.textContent + " is cut";
+        }
+        if (ticks.length < 2) return "a window labels " + ticks.length + " periods";
       }
       const worn = style(document.querySelector(".chart-column")).backgroundColor;
       if (worn !== computed("var(--accent)")) return "a column wears " + worn;

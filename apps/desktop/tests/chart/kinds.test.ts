@@ -205,7 +205,7 @@ test("an over-time chart's kind draws its tally as columns of the finest level i
   const narrow = { ...ROOM, width };
   for (const room of [ROOM, narrow]) {
     const drawing = time(DATED).drawing(TIMES, room)!;
-    const drawn = columns(fitted(TIMES.levels, false, room)!, false);
+    const drawn = columns(fitted(TIMES.levels, false, room)!, false, room);
     expect(drawing.draw(HEIGHT).outerHTML).toBe(drawn.outerHTML);
     expect(drawing.empty).toBe(false);
   }

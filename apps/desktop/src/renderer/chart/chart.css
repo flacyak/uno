@@ -489,12 +489,18 @@
   overflow: visible;
 }
 
-/* An over-time chart's plot, from columns.ts, laid out as a scatter's. With
- * no labels under its periods, its foot keeps half its y axis's first line. */
+/* An over-time chart's plot, from columns.ts, laid out as a scatter's. A label
+ * under the periods centres under its column, kept from the gutter's start to
+ * the periods' right edge, which timeAxis.ts reckons with in thinning them. */
 .chart-time {
   --x-first: 0px;
   --x-last: 0px;
-  padding-bottom: round(up, calc(var(--inset) + 0.5lh), 1px);
+}
+
+.chart-time .chart-ticks.x .chart-tick {
+  --low: calc(-1 * (round(up, var(--gutter), 1px) + var(--tick-gap)));
+  left: clamp(var(--low), calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
 }
 
 /* Each period's slot takes one share of the width over the gridlines. Its
