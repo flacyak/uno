@@ -65,6 +65,7 @@ const NO_LAYER: Stage = {
   checks: () => undefined,
   repoint: () => undefined,
   notNumbers: () => undefined,
+  notDates: () => undefined,
   edit: () => undefined,
   refresh: () => undefined,
   batch: () => undefined,

@@ -47,6 +47,7 @@ export const time: ChartKind<TimePlot> = (plot) => ({
   title: () => title(plot),
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.at],
+  dated: { at: plot.at, reading: "order" in plot ? plot.order : plot.unit },
   drawing: (tally, room) => {
     if (tally.t !== "time") return undefined;
     const summed = plot.sum !== undefined;

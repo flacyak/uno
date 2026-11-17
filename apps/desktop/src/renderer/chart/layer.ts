@@ -26,6 +26,7 @@ import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
 import type { Per } from "@tally";
+import type { Dated } from "./kind.ts";
 import { fresh, NO_CORNER, overfull, shown, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Corner, Room } from "./place.ts";
 import { ChartWindow, standAt } from "./window.ts";
@@ -34,7 +35,16 @@ import type { Stage } from "./window.ts";
 /** What a window asks of the shell, which the layer hands on, and the selected cell's box. */
 export type Asks = Pick<
   Stage,
-  "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "refresh" | "remove" | "say" | "checks"
+  | "leave"
+  | "wheelBy"
+  | "repoint"
+  | "notNumbers"
+  | "notDates"
+  | "edit"
+  | "refresh"
+  | "remove"
+  | "say"
+  | "checks"
 > & { selected(): DOMRect | undefined };
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
@@ -227,6 +237,11 @@ export class ChartLayer implements Stage {
   /** repoint opens the sources panel on `source`. */
   repoint(source: string): void {
     this.asks.repoint(source);
+  }
+
+  /** notDates shows `source`, and finds the cells of `dated` its chart could not read as dates. */
+  notDates(source: string, dated: Dated): void {
+    this.asks.notDates(source, dated);
   }
 
   /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */

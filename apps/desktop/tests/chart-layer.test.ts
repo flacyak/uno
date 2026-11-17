@@ -143,6 +143,7 @@ const repoint = vi.fn();
 
 /** What the layer calls to find the cells a window's tally could not read as numbers. */
 const notNumbers = vi.fn();
+const notDates = vi.fn();
 
 /** What the layer calls to open the chart form on a window's chart. */
 const edit = vi.fn();
@@ -173,7 +174,19 @@ let cell: DOMRect | undefined;
 const selected = (): DOMRect | undefined => cell;
 
 /** Everything the layer asks of the shell. */
-const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say, checks, selected };
+const asks = {
+  leave,
+  wheelBy,
+  repoint,
+  notNumbers,
+  notDates,
+  edit,
+  refresh,
+  remove,
+  say,
+  checks,
+  selected,
+};
 
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {

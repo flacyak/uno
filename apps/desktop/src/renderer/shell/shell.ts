@@ -1011,6 +1011,11 @@ export class Shell {
           repoint: (source) => this.withTab(source, (tab) => this.repoint(tab)),
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
+          notDates: (source, dated) =>
+            this.withTab(source, (tab) => {
+              this.select(tab);
+              void this.finder.notDates(dated);
+            }),
           edit: (id, place, on) => void this.editChart(id, place, on),
           refresh: (source) => this.withTab(source, (tab) => void this.refresh(tab)),
           remove: (id, title) => void this.unchart(id, title),

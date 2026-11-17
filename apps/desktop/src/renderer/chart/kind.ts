@@ -6,6 +6,7 @@
 
 import type { ChartColumn, Plot } from "@document";
 import type { Tally } from "@engine";
+import type { Order, UnixUnit } from "@date";
 import type { Per } from "@tally";
 import type { Told } from "./summary.ts";
 import type { Targets } from "./tooltip.ts";
@@ -20,6 +21,12 @@ export type Drawn = Exclude<Tally, { t: "unread" }>;
 export interface PlotRoom {
   readonly width: number;
   readonly ch: number;
+}
+
+/** A date column as a chart reads it: by an order, or as Unix time. */
+export interface Dated {
+  readonly at: ChartColumn;
+  readonly reading: Order | UnixUnit;
 }
 
 /** A batch of periods a drawing draws that its tally has not sent: its size and first place. */
@@ -54,6 +61,8 @@ export interface Kind {
   title(): string;
   /** The columns it reads numbers from, which not-numbers finds. */
   readonly numbered: readonly ChartColumn[];
+  /** The date column it reads, and how, whose cells not-dates finds; none for a kind of no dates. */
+  readonly dated?: Dated;
   /** The columns its values come from, which the plot names before any. */
   readonly valued: readonly ChartColumn[];
   /**

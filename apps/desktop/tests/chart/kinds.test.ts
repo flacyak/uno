@@ -241,3 +241,9 @@ test("an over-time chart's caption says when its plot draws coarser than its siz
     "dibujado por semana: demasiado estrecho para una columna por día",
   ]);
 });
+
+test("an over-time chart's kind names its date column and how it reads it, for its not-dates to find, and no other kind does", () => {
+  expect(time(DATED).dated).toStrictEqual({ at: DATED.at, reading: "day" });
+  expect(time({ t: "time", at: DATED.at, per: "auto", unit: "ms" }).dated?.reading).toBe("ms");
+  expect(bars(ROWS).dated).toBeUndefined();
+});

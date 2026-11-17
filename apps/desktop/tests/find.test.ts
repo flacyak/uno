@@ -323,3 +323,21 @@ test("a chart's not-numbers search ends with a find of the person's own over it,
   expect(moved.join(" ")).toBe("0,0 5,0");
   expect(said).toEqual([""]);
 });
+
+test("an over-time chart's not-dates find starts above the first row of its date column, found by its header, and reads with the chart's reading", async () => {
+  const held = new Held([tab("ledger.csv")]);
+  held.headers = ["amount", "booked"];
+  const moved: number[][] = [];
+  const said: string[] = [];
+  const f = finder(held, moved, said);
+
+  const done = f.notDates({ at: { col: 0, header: "booked" }, reading: "month" });
+  held.miss(10, true);
+  await done;
+
+  expect(held.requests).toEqual([
+    { col: 1, from: -1, dir: 1, match: { t: "not-date", reading: "month" } },
+  ]);
+  expect(moved.join(" ")).toBe("0,1");
+  expect(said).toEqual(["! nothing below row 1 in booked fails to parse as a date"]);
+});

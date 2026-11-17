@@ -52,7 +52,7 @@ import {
   trouble,
 } from "./caption.ts";
 import { kindOf } from "./kind.ts";
-import type { Drawing, Drawn, Kind, Kinds, PlotRoom } from "./kind.ts";
+import type { Dated, Drawing, Drawn, Kind, Kinds, PlotRoom } from "./kind.ts";
 import { KINDS } from "./kinds/index.ts";
 import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
 import type { Corner, Rect, Room } from "./place.ts";
@@ -154,6 +154,8 @@ export interface Stage {
    * not read as a number.
    */
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
+  /** Shows `source`, and finds the first cell of `dated` that its chart could not read as a date. */
+  notDates(source: string, dated: Dated): void;
   /** Opens the chart form on chart `id`, hung at `place`, with the keys on its field `on`. */
   edit(id: string, place: MenuPlace, on?: "refresh"): void;
   /** Asks for chart `id`'s periods at `per` from `offset`, and draws its window again once they come. */
