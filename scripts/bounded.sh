@@ -28,8 +28,15 @@
 # which a process takes with it, and every process a run starts carries
 # UNO_BOUNDED_RUN, which is how the run finds it to stop it.
 #
+# A small run, a check or the tests related to a change, is one that ends in
+# seconds and never starts Electron. With UNO_BOUNDED_LIGHT_SLOTS set, it
+# takes a light slot and a quarter of the CPUs instead of waiting behind a
+# smoke, under the same slice and so the same cap on the machine. A command
+# that names check, lint, fmt, or test with a file or --changed is small;
+# --light says so for any other.
+#
 # Usage:
-#   scripts/bounded.sh [--display] [--timeout <seconds|Nm|Nh>] -- <command>...
+#   scripts/bounded.sh [--display] [--light] [--timeout <seconds|Nm|Nh>] -- <command>...
 #   scripts/bounded.sh status
 #   scripts/bounded.sh reap [--orphans]
 #
@@ -44,6 +51,9 @@
 # The limits come from the environment, with defaults sized for a desktop:
 #   UNO_BOUNDED_SLOTS    runs at once on the machine (1)
 #   UNO_BOUNDED_CPUS     logical CPUs all runs share (half the machine's)
+#   UNO_BOUNDED_LIGHT_SLOTS  small runs at once beside those, each on a quarter
+#                        of the CPUs (0: a small run takes an ordinary slot)
+#   UNO_BOUNDED_LIGHT_CPUS   logical CPUs a small run gets (a quarter)
 #   UNO_BOUNDED_MEMORY   memory all runs share, as systemd takes it (half)
 #   UNO_BOUNDED_TASKS    processes and threads all runs share (4096)
 #   UNO_BOUNDED_TIMEOUT  seconds one run may take (1800)
@@ -54,6 +64,7 @@ readonly STATE="${XDG_CACHE_HOME:-${HOME}/.cache}/uno-bounded"
 readonly SLICE="uno-bounded.slice"
 readonly MARKER="UNO_BOUNDED_RUN"
 readonly SLOTS="${UNO_BOUNDED_SLOTS:-1}"
+readonly LIGHT_SLOTS="${UNO_BOUNDED_LIGHT_SLOTS:-0}"
 readonly TASKS="${UNO_BOUNDED_TASKS:-4096}"
 readonly DEFAULT_TIMEOUT_SECONDS="${UNO_BOUNDED_TIMEOUT:-1800}"
 # How often a waiting run looks for a free slot, and the guard for its run.
@@ -69,6 +80,8 @@ readonly TIMED_OUT_STATUS=124
 # Commands that start Electron: the smoke, the preview, and Electron itself.
 # The happy-dom tests under tests/smoke/ do not match.
 readonly DISPLAY_COMMANDS=' (smoke|preview) |smoke\.js|preview\.js|electron'
+# Commands that end in seconds: a check, or the tests related to a change.
+readonly LIGHT_COMMANDS=' vp (check|lint|fmt)( |$)| vp test .*(--changed|--related|\.test\.ts)'
 # Electron's npm package starts the binary in the folder that
 # ELECTRON_OVERRIDE_DIST_PATH names. This one opens no window.
 HEADLESS_ELECTRON="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/headless-electron"
@@ -205,15 +218,20 @@ cleanup_run() {
 
 #######################################
 # Waits for one of the machine's slots, holds it on fd 8 for as long as this
-# script lives, and sets slot to its number.
+# script lives, and sets slot to its number. A light run ($1 = light) waits
+# for one of the light slots instead, named light-1 and so on.
 #######################################
 take_slot() {
-  local n told=0
+  local kind="${1:-}" n told=0 count="${SLOTS}" prefix=""
+  if [[ "${kind}" == light ]]; then
+    count="${LIGHT_SLOTS}"
+    prefix="light-"
+  fi
   while true; do
-    for ((n = 1; n <= SLOTS; n++)); do
-      exec 8>"${STATE}/slots/${n}.lock"
+    for ((n = 1; n <= count; n++)); do
+      exec 8>"${STATE}/slots/${prefix}${n}.lock"
       if flock -n 8; then
-        slot="${n}"
+        slot="${prefix}${n}"
         return
       fi
       exec 8>&-
@@ -268,10 +286,11 @@ guard() {
 # Runs a command bounded. See the top of the file.
 #######################################
 run() {
-  local display=0 timeout="${DEFAULT_TIMEOUT_SECONDS}"
+  local display=0 light=0 timeout="${DEFAULT_TIMEOUT_SECONDS}"
   while (($# > 0)); do
     case "$1" in
       --display) display=1 ;;
+      --light) light=1 ;;
       --timeout) timeout="$(seconds_of "$2")"; shift ;;
       --) shift; break ;;
       *) break ;;
@@ -286,15 +305,21 @@ run() {
     exec "$@"
   fi
   [[ " $* " =~ ${DISPLAY_COMMANDS} ]] && display=1
+  [[ " $* " =~ ${LIGHT_COMMANDS} ]] && light=1
+  # A light run takes a light slot only where there are any, and never the
+  # display.
+  ((light && LIGHT_SLOTS > 0 && !display)) || light=0
 
   mkdir -p "${STATE}/slots" "${STATE}/runs"
   local slot
-  take_slot
+  if ((light)); then take_slot light; else take_slot; fi
   ((display)) && take_display
 
-  local id cpus
+  local id cpus want_cpus
   id="$(date +%s)-$$"
-  cpus="$(cpu_list "${UNO_BOUNDED_CPUS:-$(($(cpu_count) / 2))}")"
+  want_cpus="${UNO_BOUNDED_CPUS:-$(($(cpu_count) / 2))}"
+  ((light)) && want_cpus="${UNO_BOUNDED_LIGHT_CPUS:-$(($(cpu_count) / 4))}"
+  cpus="$(cpu_list "${want_cpus}")"
   local dir="${STATE}/runs/${id}"
   mkdir -p "${dir}/tmp"
   printf 'pid=%s\nslot=%s\ndisplay=%s\ncwd=%s\ncommand=%s\n' \
@@ -313,8 +338,10 @@ run() {
   [[ -n "${cpus}" ]] && command -v taskset >/dev/null \
     && wrap+=(taskset -c "${cpus}")
   if have_systemd; then
+    # The slice's cap is every run's share together, whatever this run gets,
+    # so a light run beside a heavy one takes nothing from it.
     local cpu_count_used
-    cpu_count_used="$(expand_list "${cpus}" | wc -l)"
+    cpu_count_used="$(expand_list "$(cpu_list "${UNO_BOUNDED_CPUS:-$(($(cpu_count) / 2))}")" | wc -l)"
     systemctl --user set-property --runtime "${SLICE}" \
       "CPUQuota=$((cpu_count_used * 100))%" \
       "MemoryMax=${UNO_BOUNDED_MEMORY:-$(half_memory)}" MemorySwapMax=0 \
