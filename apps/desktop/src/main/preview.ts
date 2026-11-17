@@ -276,6 +276,15 @@ const KEYED_REST = "tbody tr:nth-child(20) td:nth-child(2)";
 const INSERT_CHART_KEYS = "CmdOrCtrl+Shift+G";
 
 /**
+ * The dates story's beats: a date written day first selected, the chart form
+ * opened on it by Ctrl+Shift+G, its dates read day first, per week, and Enter
+ * for a window of its weeks.
+ */
+const DATES = { column: 500, open: 2_400, order: 5_000, per: 7_600, enter: 10_200, end: 13_000 };
+/** How many Downs take Per from Automatic to Week, past Hour, which dates alone leave off. */
+const TO_WEEK = 2;
+
+/**
  * The kinds story's beats: the insert story's, once for a pie of region and
  * once for a scatter of units, with the kind chosen in the form before Enter.
  * Each Down chooses the next kind after bars, KIND_STEP_MS apart. The gutter
@@ -891,6 +900,7 @@ const STORIES: Record<string, Story> = {
   tip: { end: TIP.stop, script: playTip },
   insert: { end: INSERT.end, script: playInsert },
   kinds: { end: KINDS_END, script: playKinds },
+  dates: { end: DATES.end, script: playDates },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
   reread: { end: REREAD.end, script: playReread },
@@ -1067,6 +1077,33 @@ async function playInsert(win: BrowserWindow, at: Clock): Promise<void> {
   await at(INSERT.enter);
   press(win, "Return");
   await at(INSERT.end);
+}
+
+/**
+ * playDates performs the dates story: a date selected, the chart form opened
+ * by its keys, Up in Reads for day first, Down twice in Per for Week, and Enter.
+ */
+async function playDates(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(DATES.column);
+  // The gutter comes first, so the date is a row's second cell.
+  await pressOn("tbody tr:nth-child(3) td:nth-child(2)");
+  await glideTo(KEYED_REST);
+  await at(DATES.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo('.chart-form select[name="order"]');
+  await at(DATES.order);
+  // The keys open in Dates, and Reads comes after it.
+  press(win, "Tab");
+  press(win, "Up");
+  await glideTo('.chart-form select[name="per"]');
+  await at(DATES.per);
+  press(win, "Tab");
+  await presses(win, "Down", TO_WEEK, KIND_STEP_MS);
+  await at(DATES.enter);
+  press(win, "Return");
+  await at(DATES.end);
 }
 
 /**
