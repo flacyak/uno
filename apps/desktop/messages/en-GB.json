@@ -467,6 +467,8 @@
   "chart_per_year": "year",
   "chart_time_coarser": "drawn per {drawn}: too narrow for a column per {per}",
   "chart_time_crowded": "too narrow for a column per {per}",
+  "chart_quarter": "Q{n} {year}",
+  "chart_quarter_short": "Q{n}",
   "chart_title_share_of_rows": "share of rows per {by}",
   "chart_title_share_of_sum": "share of {sum} per {by}",
   "chart_title_against": "{y} against {x}",
