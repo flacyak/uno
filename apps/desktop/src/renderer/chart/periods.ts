@@ -120,3 +120,13 @@ export function fullName(per: Per, key: number): string {
   const hour = (at: number): string => write("hour false", FORMATS.hour[0], at);
   return m.chart_period_hour({ day: write("long", LONG, key), from: hour(key), to: hour(key + 1) });
 }
+
+/** What each size is called in a made title, a caption and a table, in the app's language. */
+export const PER_WORDS: Readonly<Record<Per, () => string>> = {
+  hour: m.chart_per_hour,
+  day: m.chart_per_day,
+  week: m.chart_per_week,
+  month: m.chart_per_month,
+  quarter: m.chart_per_quarter,
+  year: m.chart_per_year,
+};

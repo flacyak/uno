@@ -1,30 +1,20 @@
 /**
  * @fileoverview An over-time chart's kind: rows, or the sum of another column,
- * per period of a date column, as columns at the finest size its plot holds.
- * Its marks, table and summary land later, and its table says so until then.
+ * per period of a date column, as columns at the finest size its plot holds,
+ * its table and summary of the same periods. A tally with no date has none.
  */
 
 import type { TimePlot } from "@document";
 import { m } from "@paraglide/messages";
 import { columns, fitted } from "../columns.ts";
+import { PER_WORDS } from "../periods.ts";
 import type { Fitted } from "../columns.ts";
 import type { ChartKind } from "../kind.ts";
+import { spannedOver } from "../summary.ts";
+import { tableOf, timed } from "../table.ts";
 import { periodTargets } from "../tooltip.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
-
-/** The sizes an over-time chart draws per. */
-type Per = Exclude<TimePlot["per"], "auto">;
-
-/** What each size is called in a made title, in the app's language. */
-export const PER_WORDS: Readonly<Record<Per, () => string>> = {
-  hour: m.chart_per_hour,
-  day: m.chart_per_day,
-  week: m.chart_per_week,
-  month: m.chart_per_month,
-  quarter: m.chart_per_quarter,
-  year: m.chart_per_year,
-};
 
 /** title gives the title an over-time plot makes, per its size or over its span. */
 function title({ at, sum, per }: TimePlot): string {
@@ -64,9 +54,12 @@ export const time: ChartKind<TimePlot> = (plot) => ({
     if (drawn === undefined) return { ...undrawn, empty: true };
     const { per, span, rows } = drawn.level;
     return {
-      ...undrawn,
+      empty: false,
+      fit: () => undefined,
       draw: () => columns(drawn, summed, room),
       targets: (box) => periodTargets(drawn.level, summed, box),
+      table: (called) => tableOf(timed(plot, tally, drawn.level), called),
+      told: () => spannedOver(plot, drawn.level),
       notes: () => [narrowed(plot, drawn)],
       wanted: () => (rows.length < span ? [{ per, offset: rows.length }] : []),
     };

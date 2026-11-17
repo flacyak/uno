@@ -9,11 +9,13 @@
  * apart from them, so a window can mark them as the file's.
  */
 
-import type { ChartColumn, Plot } from "@document";
+import type { ChartColumn, Plot, TimePlot } from "@document";
 import type { Group, Groups, Sample } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent } from "@renderer/locale";
+import type { TimeLevel } from "@tally";
+import { fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
 
 /** How many values a summary names before it counts the rest: three, as a sentence reads. */
@@ -81,6 +83,25 @@ export function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: Sample): T
     y: label(plot.y),
     yLeast: num(least.y),
     yMost: num(most.y),
+  });
+  return { span, each: [], more: 0 };
+}
+
+/**
+ * spannedOver gives what an over-time chart's summary says of `level`, as
+ * `plot` measures it: its first period and its last, and the one that holds
+ * the most, with what it holds.
+ */
+export function spannedOver({ sum }: TimePlot, level: TimeLevel): Told {
+  const sizes = sum === undefined ? level.rows : level.sum;
+  const most = sizes.reduce((at, size, i) => (size > sizes[at]! ? i : at), 0);
+  const name = (i: number): string => fullName(level.per, level.from + i);
+  const value = num(sizes[most]!);
+  const span = m.chart_summary_time({
+    from: name(0),
+    to: name(level.span - 1),
+    most: name(most),
+    value,
   });
   return { span, each: [], more: 0 };
 }

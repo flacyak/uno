@@ -471,6 +471,8 @@
   "chart_quarter_short": "Q{n}",
   "chart_period_week": "week of {day}",
   "chart_period_hour": "{day}, {from} to {to}",
+  "chart_table_undated": "no date",
+  "chart_summary_time": "From {from} to {to}, the most in {most}: {value}.",
   "chart_title_share_of_rows": "share of rows per {by}",
   "chart_title_share_of_sum": "share of {sum} per {by}",
   "chart_title_against": "{y} against {x}",

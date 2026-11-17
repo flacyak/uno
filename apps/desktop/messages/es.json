@@ -487,6 +487,8 @@
   "chart_quarter_short": "T{n}",
   "chart_period_week": "semana del {day}",
   "chart_period_hour": "{day}, de {from} a {to}",
+  "chart_table_undated": "sin fecha",
+  "chart_summary_time": "De {from} a {to}, el máximo en {most}: {value}.",
   "chart_title_share_of_rows": "proporción de filas por {by}",
   "chart_title_share_of_sum": "proporción de {sum} por {by}",
   "chart_title_against": "{y} frente a {x}",

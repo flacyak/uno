@@ -90,6 +90,8 @@ const TIMED_DAY_3 = ".chart .chart-period:nth-child(4)";
 const TIMED_FIRST = "Wednesday, July 1, 2026";
 const TIMED_THIRD = "Friday, July 3, 2026";
 const TIMED_LAST = "Tuesday, September 29, 2026";
+/** The first and last of them as its table's rows head them. */
+const TIMED_ROWS = ["Jul 1, 2026", "Sep 29, 2026"];
 /** What their captions say: the second draws weeks for want of room for days. */
 const TIMED_SAID = [
   m.rows_count({ count: ROWS }),
@@ -1229,6 +1231,27 @@ export const CHART_TIME: Check[] = [
       if (!(await until(() => said().endsWith(" ${TIMED_LAST}")))) return "after End the box says " + said();
       win.querySelector(".chart-plot").dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
       return (await until(() => said().endsWith(" ${TIMED_FIRST}"))) ? "" : "after Home the box says " + said();
+    `,
+  },
+  {
+    name: "t puts an over-time chart's table in its plot's place, a row a period in time order, and the summary names the span",
+    shot: "chart-time-table",
+    script: `
+      const win = document.querySelector(".chart");
+      win.querySelector(".chart-plot").dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      const heads = () => [...win.querySelectorAll(".chart-table tbody th")].map((th) => th.textContent);
+      if (!(await until(() => heads().length === ${DATED_DAYS}))) return "the table heads " + heads().length + " rows";
+      if (heads()[0] !== "${TIMED_ROWS[0]}" || heads().at(-1) !== "${TIMED_ROWS[1]}") return "the table runs from " + heads()[0] + " to " + heads().at(-1);
+      const told = win.querySelector(".chart-summary").textContent;
+      return told.includes("From ${TIMED_FIRST} to ${TIMED_LAST}, the most in ") ? "" : "the summary says " + told;
+    `,
+  },
+  {
+    name: "t again brings an over-time chart's columns back",
+    script: `
+      const win = document.querySelector(".chart");
+      win.querySelector(".chart-plot").dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      return (await until(() => win.querySelector(".chart-column") !== null)) ? "" : "t brings no columns back";
     `,
   },
   {
