@@ -633,14 +633,64 @@ test("a source with no date column offers no chart over time", () => {
 const WRITTEN = { header: "booked", kind: "date", flagged: false, order: "either" } as const;
 const BOOKED = [["03/04/2024"], ["13/04/2024 09:30"]];
 const BOOKINGS = { ...SALES, id: "bookings", band: banded([WRITTEN], BOOKED) };
+const BOOKED_AT = { col: 0, header: "booked" };
 
 /** The words of each option of the select named `name`, and whether it is off. */
 const options = (name: string): Array<[string | null, boolean]> =>
   [...select(name).options].map((o) => [o.textContent, o.disabled]);
+
+test("dates written year last offer their order as a cell of them that reads both ways, the language's chosen where the sample decided none", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: 0 }, BOOKINGS);
+  expect(shown(box)).toContain("reads");
+  expect(options("order")).toStrictEqual([
+    ["03/04/2024: April 3", false],
+    ["03/04/2024: March 4", false],
+  ]);
+  expect(select("order").value).toBe("month");
+  pick("order", "day");
+  press("Enter");
+  await settle();
+  expect(asked[0]).toBe(
+    inserting({ t: "time", at: BOOKED_AT, per: "auto", order: "day" }, "", BOOKINGS.id),
+  );
+});
+
+test("the order's words fit the form in each language, day and month named with the cell's year as written", async () => {
+  await setLocale("es", { reload: false });
+  form(undefined, { t: "insert", col: 0 }, BOOKINGS);
+  await setLocale(baseLocale, { reload: false });
+  expect(options("order").map(([words]) => words)).toStrictEqual([
+    "03/04/2024: 3 abril",
+    "03/04/2024: 4 marzo",
+  ]);
+});
+
+test("a sample that decided its order chooses it, an order no cell shows reads in words, and ISO dates ask none", () => {
+  const decided = { ...BOOKINGS, band: banded([{ ...WRITTEN, order: "day" }], [["13/04/2024"]]) };
+  form(undefined, { t: "insert", col: 0 }, decided);
+  expect(select("order").value).toBe("day");
+  expect(options("order").map(([words]) => words)).toStrictEqual(["day first", "month first"]);
+  const { box } = form(undefined, { t: "insert", col: 0 });
+  expect(shown(box)).not.toContain("reads");
+});
 
 test("Hour is offered for a date column that writes a time of day, and not for one of dates alone", () => {
   form(undefined, { t: "insert", col: 0 }, BOOKINGS);
   expect(options("per")[1]).toStrictEqual(["hour", false]);
   form(undefined, { t: "insert", col: 0 }, { ...BOOKINGS, band: banded([WRITTEN], [BOOKED[0]!]) });
   expect(options("per")[1]).toStrictEqual(["hour", true]);
+});
+
+test("a chart opened to change keeps the order it reads in, whatever the sample now decides", async () => {
+  const plot: Plot = { t: "time", at: BOOKED_AT, per: "day", order: "month" };
+  const decided = { ...BOOKINGS, band: banded([{ ...WRITTEN, order: "day" }], BOOKED) };
+  const { asked } = form(
+    undefined,
+    { t: "change", chart: { plot, title: "", refresh: BY_HAND } },
+    decided,
+  );
+  expect(select("order").value).toBe("month");
+  press("Enter");
+  await settle();
+  expect(asked[0]).toBe(inserting(plot, "", BOOKINGS.id));
 });

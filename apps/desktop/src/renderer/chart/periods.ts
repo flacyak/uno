@@ -17,6 +17,7 @@ const YEAR_MONTHS = 12;
 const QUARTER_MONTHS = 3;
 const YEAR_QUARTERS = 4;
 const HOUR_MS = 3_600_000;
+const MINUTE_MS = 60_000;
 const NARROW = /\u202f/gu;
 const NO_BREAK = "\u00a0";
 
@@ -130,3 +131,8 @@ export const PER_WORDS: Readonly<Record<Per, () => string>> = {
   quarter: m.chart_per_quarter,
   year: m.chart_per_year,
 };
+
+/** monthOf gives the month `minute` minutes from 1970 falls in, as the language names it. */
+export function monthOf(minute: number): string {
+  return format("month long", { month: "long" }).format(new Date(minute * MINUTE_MS));
+}
