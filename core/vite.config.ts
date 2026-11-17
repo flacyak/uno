@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite-plus';
 
+import { timingsReporter } from './tests/timings.ts';
+
 /**
  * How long a test or a hook may take. A CI runner's disk can stall for a
  * minute, and a test of 40 ms then runs past the default 5 s. A hang still
@@ -36,6 +38,8 @@ export default defineConfig({
   test: {
     // Fails a test file that leaves a file handle open.
     setupFiles: ['tests/handles.ts'],
+    // Writes what each file cost when UNO_TIMINGS names a folder.
+    reporters: ['default', timingsReporter()],
     testTimeout: TEST_BUDGET_MS,
     hookTimeout: TEST_BUDGET_MS,
   },

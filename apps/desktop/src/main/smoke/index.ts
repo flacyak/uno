@@ -205,6 +205,23 @@ const FULL_ZOOM = 1;
 /** A window size limit of none. */
 const NO_LIMIT = 0;
 
+/** One check as it ran: how long it took, and whether it passed. */
+export interface CheckTiming {
+  name: string;
+  ms: number;
+  ok: boolean;
+}
+
+/**
+ * record writes every check's timing into the run's folder as checks.json,
+ * for scripts/timings.ts at the repository root to read.
+ */
+async function record(timed: CheckTiming[]): Promise<void> {
+  const dir = process.env["UNO_SMOKE"];
+  if (dir === undefined || dir === "") return;
+  await writeFile(join(dir, "checks.json"), JSON.stringify(timed));
+}
+
 /**
  * shoot writes a picture of the window into the run's folder as <name>.png,
  * once the page has drawn and the compositor has caught up.
@@ -353,7 +370,10 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
 
   const { width: fullWidth, height } = win.getBounds();
 
+  const timed: CheckTiming[] = [];
   for (const check of CHECKS) {
+    const started = performance.now();
+    let ok = true;
     try {
       if (check.ask !== undefined) await ask("smoke", check.ask);
       if (check.send !== undefined) win.webContents.send(...check.send);
@@ -387,16 +407,20 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
         if (check.shot !== undefined) await shoot(win, check.shot);
       } else {
         console.error(`  FAIL ${check.name}: ${failure}`);
-        failed++;
+        ok = false;
       }
     } catch (err) {
       console.error(`  FAIL ${check.name}: ${(err as Error).message}`);
-      failed++;
+      ok = false;
     }
+    if (!ok) failed++;
+    timed.push({ name: check.name, ms: Math.round(performance.now() - started), ok });
   }
 
-  // A picture of the whole window, for checking the layout.
+  // A picture of the whole window, for checking the layout, and what every
+  // check took.
   await shoot(win, "window");
+  await record(timed);
 
   if (failed === 0) console.log("smoke: all checks passed");
   else console.error(`smoke: ${failed} check(s) failed`);
