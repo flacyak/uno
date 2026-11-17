@@ -8,7 +8,7 @@
  * a Web Worker, or a MessageChannel.
  */
 
-import type { ShownOrder, UnixUnit } from '@date';
+import type { Order, ShownOrder, UnixUnit } from '@date';
 import type { CarriedChart, Chart, ChartPlace, Plot } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Mark } from '@num';
@@ -223,9 +223,15 @@ export interface FindRequest {
   /**
    * Match a cell that fails to parse as its column's kind, one a chart's tally
    * could not read as a number (not blank, and no number once its formatting
-   * is removed, as a fold reads it), or one whose text contains `text`.
+   * is removed, as a fold reads it), one an over-time chart could not read
+   * as a date with its `reading` (not blank), or one whose text contains
+   * `text`.
    */
-  match: { t: 'unparsed' } | { t: 'not-number' } | { t: 'text'; text: string };
+  match:
+    | { t: 'unparsed' }
+    | { t: 'not-number' }
+    | { t: 'not-date'; reading: Order | UnixUnit }
+    | { t: 'text'; text: string };
 }
 
 export interface Found {

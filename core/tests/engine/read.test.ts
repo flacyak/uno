@@ -9,6 +9,7 @@ import { join } from 'node:path';
 
 import { expect, test } from 'vite-plus/test';
 
+import type { Order, UnixUnit } from '@date';
 import {
   Band,
   Engine,
@@ -276,6 +277,29 @@ test('a find for what a tally could not read as a number reads the column with i
     expect((await find('not-number')).row).toBe(SAMPLE_ROWS + 1);
     // 1.234,56 is a number, but a formatted one.
     expect((await find('unparsed')).row).toBe(SAMPLE_ROWS);
+  } finally {
+    done();
+  }
+});
+
+test("a find for what an over-time chart could not read as a date reads with the chart's order, and finds a cell the other order reads", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const dates = ['04/03/2024', '13/01/2024', 'soon', '01/13/2024'];
+    const csv = ['when', ...dates].join('\n');
+    const src = await openOne(engine, {
+      name: 'when.csv',
+      blob: new Blob([csv]),
+    });
+    await indexed(src);
+    const notDate = (reading: Order | UnixUnit, from = -1) =>
+      src.find({ col: 0, from, dir: 1, match: { t: 'not-date', reading } });
+    // Month first, 13/01/2024 is no date, though a day-first chart reads it.
+    expect((await notDate('month')).row).toBe(1);
+    expect((await notDate('day')).row).toBe(2);
+    expect((await notDate('month', 1)).row).toBe(2);
+    expect((await notDate('day', 2)).row).toBe(3);
+    expect((await notDate('s')).row).toBe(0);
   } finally {
     done();
   }
