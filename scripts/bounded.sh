@@ -17,7 +17,8 @@
 #   limits all runs share;
 # - gets a temporary directory of its own on disk, as TMPDIR;
 # - starts Electron with no screen, so no run opens a window;
-# - is stopped at a deadline, even if nothing is left to stop it; and
+# - is stopped at a deadline of the machine's awake time, even if nothing
+#   is left to stop it; and
 # - once it ends, however it ends, has every process it started stopped,
 #   those that moved themselves to a scope of their own included, and its
 #   temporary directory removed.
@@ -237,14 +238,20 @@ take_display() {
 }
 
 #######################################
-# Watches run $1 from outside it: stops it at its deadline $3 (epoch
-# seconds), and cleans up once the script $2 that started it is gone, even
-# if that script was killed before it could.
+# Watches run $1 from outside it: stops it once it has run $3 seconds, and
+# cleans up once the script $2 that started it is gone, even if that script
+# was killed before it could.
+#
+# The seconds are the machine's awake time, as the smoke's own deadlines
+# count them: a sleep(1) of the run's length, whose clock stands still while
+# the machine sleeps. A run the machine slept through goes on where it was.
 #######################################
 guard() {
-  local id="$1" owner="$2" deadline="$3"
+  local id="$1" owner="$2" timeout="$3"
+  sleep "${timeout}" &
+  local clock=$!
   while kill -0 "${owner}" 2>/dev/null; do
-    if (($(date +%s) >= deadline)) && [[ ! -e "${STATE}/runs/${id}/deadline" ]]; then
+    if ! kill -0 "${clock}" 2>/dev/null && [[ ! -e "${STATE}/runs/${id}/deadline" ]]; then
       touch "${STATE}/runs/${id}/deadline"
       systemctl --user stop "uno-bounded-${id}.scope" >/dev/null 2>&1 || true
       local -a left
@@ -253,6 +260,7 @@ guard() {
     fi
     sleep "${POLL_SECONDS}"
   done
+  kill "${clock}" 2>/dev/null || true
   [[ -d "${STATE}/runs/${id}" ]] && cleanup_run "${id}"
 }
 
@@ -295,8 +303,7 @@ run() {
   trap 'cleanup_run "${id}"' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
-  setsid bash "${BASH_SOURCE[0]}" __guard "${id}" "$$" \
-    "$(($(date +%s) + timeout))" \
+  setsid bash "${BASH_SOURCE[0]}" __guard "${id}" "$$" "${timeout}" \
     </dev/null >/dev/null 2>&1 8>&- 9>&- &
 
   local -a wrap=(env "${MARKER}=${id}" "TMPDIR=${dir}/tmp"
