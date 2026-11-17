@@ -21,6 +21,7 @@ import type {
   SourceRef,
   Tally,
 } from '@engine';
+import { counted } from '@engine/fold/counted';
 import { groupsFolder } from '@engine/fold/groups';
 import { FOLDERS } from '@engine/fold/index';
 import type { Folder, Folders, MakeFolder } from '@engine/fold/index';
@@ -359,6 +360,41 @@ test('a kind folds through the folder its table names, and moves by an edit and 
   reopened.attach(REGION_ROWS, HEADERS);
   expect(reopened.from()).toBe(ROWS);
   expect(reopened.read(ROWS, true)).toStrictEqual([[REGION_ROWS.id, moved]]);
+});
+
+test('a counted folder counts each row by its cell, sums the column it names with its mark, and moves an edited row', () => {
+  const fold = new GroupsFold('sum', 'comma');
+  const unread = () => undefined;
+  const folder = counted(REGION, REVENUE, fold, {
+    key: 'counted',
+    again: () => folder,
+    restored: unread,
+    tally: (plot, coverage) => ({
+      t: 'groups',
+      plot,
+      coverage,
+      ...fold.snapshot(),
+    }),
+  });
+  expect(folder.cols).toStrictEqual([REGION, REVENUE]);
+  const marks = HEADERS.map(() => 'point' as const);
+  expect(folder.readsWith(marks)).toBe(false);
+  expect(
+    folder.readsWith(marks.map((m, col) => (col === REVENUE ? 'comma' : m))),
+  ).toBe(true);
+  const cells = ['', 'North', '', '', '', '1,5'];
+  const shown = (col: number) => () => cells[col] ?? '';
+  folder.fold(0, { from: 0, end: 2, shown });
+  const after = cells.map((cell, col) => (col === REGION ? 'South' : cell));
+  folder.move(0, 1, cells, after);
+  expect(fold.snapshot().groups).toStrictEqual([
+    { value: 'North', rows: 1, sum: 1.5 },
+    { value: 'South', rows: 1, sum: 1.5 },
+  ]);
+  folder.unfold(0, { from: 0, end: 1, shown });
+  expect(fold.snapshot().groups).toStrictEqual([
+    { value: 'South', rows: 1, sum: 1.5 },
+  ]);
 });
 
 test("a bars or pie chart's folder keeps the key a save names it by, and takes a block back as it folded it", () => {
