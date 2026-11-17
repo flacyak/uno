@@ -1302,6 +1302,14 @@ export const CHART_TIME: Check[] = [
       return said.endsWith(offer) ? "" : "the caption says " + said;
     `,
   },
+  {
+    name: "a date column's kind badge says on hover how its dates read",
+    script: `
+      const head = [...document.querySelectorAll("thead th")].find((th) => th.textContent.startsWith("Ad_Date"));
+      const said = head?.querySelector(".badge")?.title;
+      return said === "${m.column_order_day_hint()}" ? "" : "Ad_Date's badge says " + said;
+    `,
+  },
 ];
 
 /** Checks after CHART_PIE, as they open a workspace of bars with a blank value in place of that one. */
