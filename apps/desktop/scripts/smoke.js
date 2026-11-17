@@ -287,12 +287,12 @@ await writeFile(
 
 // A workspace of two over-time charts of the fixture's 91 days: rows per day
 // in a new window's size at the sheet's foot, which holds a column a day,
-// and revenue over its dates in a window of the least width at its top,
-// which holds weeks and not days.
+// and revenue per day in a window of the least width at its top, which
+// holds weeks and not days, and says so.
 const timed = join(scratch, "sent", "timed.uno");
 const dated = { col: 0, header: "date" };
 const perDay = { t: "time", at: dated, per: "day", order: "day" };
-const revenueOver = { ...perDay, sum: { col: 5, header: "revenue" }, per: "auto" };
+const revenuePerDay = { ...perDay, sum: { col: 5, header: "revenue" } };
 const timedChart = { source: salesSource.id, title: "", refresh: 0 };
 await writeFile(
   timed,
@@ -306,7 +306,7 @@ await writeFile(
       {
         ...timedChart,
         id: "c2",
-        plot: revenueOver,
+        plot: revenuePerDay,
         place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
       },
     ],

@@ -34,7 +34,7 @@ import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { POINT_OPACITY, TICK_GAP } from "@renderer/chart/scatter";
 import { DEFAULT_THEME, THEMES } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
-import { DATED_DAYS, DATED_WEEKS } from "./fixture.ts";
+import { BLANK_ROWS, DATED_DAYS, DATED_WEEKS, ROWS, counted } from "./fixture.ts";
 
 /** The workspace smoke.js wrote. */
 const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
@@ -80,6 +80,15 @@ const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
  */
 const TIMED = process.env["UNO_SMOKE_TIMED"] ?? "";
 const TIMED_PERIODS = [DATED_DAYS, DATED_WEEKS];
+/** What their captions say: the second draws weeks for want of room for days. */
+const TIMED_SAID = [
+  m.rows_count({ count: ROWS }),
+  [
+    m.rows_count({ count: ROWS }),
+    m.chart_blank({ count: counted(BLANK_ROWS) }),
+    m.chart_time_coarser({ drawn: m.chart_per_week(), per: m.chart_per_day() }),
+  ].join(" · "),
+];
 
 /** The one it wrote of rows over dates from 2024 to a placeholder, 9999-12-31, and their years, 2024 to 9999. */
 const PLACED = process.env["UNO_SMOKE_PLACED"] ?? "";
@@ -1142,7 +1151,7 @@ export const CHART_PIE: Check[] = [
 /** A check after CHART_PIE, as it opens a workspace of two over-time charts in place of that one. */
 export const CHART_TIME: Check[] = [
   {
-    name: "an over-time chart draws a column per period at the finest size its window holds, each in the accent on the zero gridline, at most a bar thick and a gap from the next",
+    name: "an over-time chart draws a column per period at the finest size its window holds, each in the accent on the zero gridline, at most a bar thick and a gap from the next, and its caption says when that is coarser than its own",
     send: ["menu:open-path", TIMED],
     shot: "chart-time",
     script: `
@@ -1164,7 +1173,9 @@ export const CHART_TIME: Check[] = [
         if (near !== -1) return "two columns stand " + (columns[near].left - columns[near - 1].right) + " px apart";
       }
       const worn = style(document.querySelector(".chart-column")).backgroundColor;
-      return worn === computed("var(--accent)") ? "" : "a column wears " + worn;
+      if (worn !== computed("var(--accent)")) return "a column wears " + worn;
+      const said = windows().map((win) => win.querySelector(".chart-said").textContent);
+      return said.join(" | ") === ${JSON.stringify(TIMED_SAID.join(" | "))} ? "" : "the captions say " + said.join(" | ");
     `,
   },
   {
