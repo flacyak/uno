@@ -229,16 +229,21 @@ test("an over-time chart's caption says when its plot draws coarser than its siz
     ...ROOM,
     width: 2 * BARS_INSET + ROOM.ch + TICK_GAP + weeks * COLUMN_PITCH_LEAST,
   };
-  const notes = (plot: typeof DATED, room: typeof ROOM) => time(plot).drawing(TIMES, room)?.notes();
-  expect(notes(DATED, ROOM)).toStrictEqual([""]);
-  expect(notes(DATED, narrow)).toStrictEqual(["drawn per week: too narrow for a column per day"]);
-  expect(notes({ ...DATED, per: "auto" }, narrow)).toStrictEqual([""]);
-  expect(notes(DATED, { ...ROOM, width: 2 * BARS_INSET })).toStrictEqual([
+  const said = (plot: typeof DATED, room: typeof ROOM) => {
+    const drawing = time(plot).drawing(TIMES, room);
+    return [drawing?.kept?.(), ...(drawing?.notes() ?? [])];
+  };
+  expect(said(DATED, ROOM)).toStrictEqual(["", ""]);
+  expect(said(DATED, narrow)).toStrictEqual(["drawn per week", "too narrow for a column per day"]);
+  expect(said({ ...DATED, per: "auto" }, narrow)).toStrictEqual(["", ""]);
+  expect(said(DATED, { ...ROOM, width: 2 * BARS_INSET })).toStrictEqual([
+    "",
     "too narrow for a column per month",
   ]);
   await setLocale("es", { reload: false });
-  expect(notes(DATED, narrow)).toStrictEqual([
-    "dibujado por semana: demasiado estrecho para una columna por día",
+  expect(said(DATED, narrow)).toStrictEqual([
+    "dibujado por semana",
+    "demasiado estrecho para una columna por día",
   ]);
 });
 

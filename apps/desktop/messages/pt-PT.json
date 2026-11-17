@@ -484,7 +484,7 @@
   "chart_per_month": "mês",
   "chart_per_quarter": "trimestre",
   "chart_per_year": "ano",
-  "chart_time_coarser": "desenhado por {drawn}: demasiado estreito para uma coluna por {per}",
+  "chart_time_drawn": "desenhado por {drawn}",
   "chart_time_crowded": "demasiado estreito para uma coluna por {per}",
   "chart_quarter": "T{n} {year}",
   "chart_quarter_short": "T{n}",

@@ -51,6 +51,12 @@ export interface Drawing {
   told(): Told;
   /** notes gives what the caption says after its counts, for the kind. */
   notes(): string[];
+  /**
+   * kept gives what the caption keeps whole before its notes, as it keeps its
+   * buttons, where they give way: an over-time chart's size where it draws
+   * coarser than its own. None for a kind that keeps nothing.
+   */
+  kept?(): string;
   /** wanted gives the batches the drawing lacks, none for one drawn whole. */
   wanted?(): Wanted[];
 }

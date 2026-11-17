@@ -898,8 +898,8 @@
  * and the words of the source's checks after it take what is left. Where a
  * window is too narrow for it, the words after the button give way first, as
  * they take only the room the rest leaves, down to none, and then the words
- * before it, each ending in an ellipsis while any of it shows; the button and
- * the · before it stay whole. `--find-reach` is how far the button's box
+ * before it, each ending in an ellipsis while any of it shows; the button, the
+ * · before it and what the kind keeps whole stay whole. `--find-reach` is how far the button's box
  * stands past its words, its padding and its border; the padding keeps that
  * box inside the caption's where no words follow it, off the grip's box,
  * though the grip's reach still stands over its last `--grip-reach` there.
@@ -929,6 +929,7 @@
 }
 
 .chart-said-dot,
+.chart-said-kept,
 .chart-find,
 .chart-find-dates,
 .chart-every {

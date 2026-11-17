@@ -468,7 +468,7 @@
   "chart_per_month": "month",
   "chart_per_quarter": "quarter",
   "chart_per_year": "year",
-  "chart_time_coarser": "drawn per {drawn}: too narrow for a column per {per}",
+  "chart_time_drawn": "drawn per {drawn}",
   "chart_time_crowded": "too narrow for a column per {per}",
   "chart_quarter": "Q{n} {year}",
   "chart_quarter_short": "Q{n}",

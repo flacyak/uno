@@ -30,16 +30,20 @@ function title({ at, sum, per }: TimePlot): string {
     : m.chart_title_time_sum({ at: dates, per: size, sum: named(sum) });
 }
 
+/** coarser says whether a plot that draws `drawn` for `plot` draws coarser than the plot's size for want of room. */
+function coarser({ per }: TimePlot, drawn: Fitted): boolean {
+  return drawn.fits && per !== "auto" && per !== drawn.level.per;
+}
+
 /**
  * narrowed gives what the caption says of a plot that draws `drawn` for
- * `plot`: that it is too narrow for a column per period of any size sent,
- * that it draws coarser than the plot's size for want of room, or nothing.
+ * `plot`: that it is too narrow for a column per period of any size sent, or
+ * of the plot's size where it draws coarser, or nothing.
  */
-function narrowed({ per }: TimePlot, drawn: Fitted): string {
-  const at = PER_WORDS[drawn.level.per]();
-  if (!drawn.fits) return m.chart_time_crowded({ per: at });
-  if (per === "auto" || per === drawn.level.per) return "";
-  return m.chart_time_coarser({ drawn: at, per: PER_WORDS[per]() });
+function narrowed(plot: TimePlot, drawn: Fitted): string {
+  if (!drawn.fits) return m.chart_time_crowded({ per: PER_WORDS[drawn.level.per]() });
+  if (plot.per === "auto" || !coarser(plot, drawn)) return "";
+  return m.chart_time_crowded({ per: PER_WORDS[plot.per]() });
 }
 
 /** time is what a window does with an over-time chart's plot. */
@@ -62,6 +66,8 @@ export const time: ChartKind<TimePlot> = (plot) => ({
       table: (called) => tableOf(timed(plot, tally, drawn.level), called),
       told: () => spannedOver(plot, drawn.level),
       notes: () => [narrowed(plot, drawn)],
+      kept: () =>
+        coarser(plot, drawn) ? m.chart_time_drawn({ drawn: PER_WORDS[drawn.level.per]() }) : "",
       wanted: () => (rows.length < span ? [{ per, offset: rows.length }] : []),
     };
   },

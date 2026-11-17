@@ -98,7 +98,8 @@ const TIMED_SAID = [
   [
     m.rows_count({ count: ROWS }),
     m.chart_blank({ count: counted(BLANK_ROWS) }),
-    m.chart_time_coarser({ drawn: m.chart_per_week(), per: m.chart_per_day() }),
+    m.chart_time_drawn({ drawn: m.chart_per_week() }),
+    m.chart_time_crowded({ per: m.chart_per_day() }),
   ].join(" · "),
 ];
 
@@ -1213,7 +1214,13 @@ export const CHART_TIME: Check[] = [
       const worn = style(document.querySelector(".chart-column")).backgroundColor;
       if (worn !== computed("var(--accent)")) return "a column wears " + worn;
       const said = windows().map((win) => win.querySelector(".chart-said").textContent);
-      return said.join(" | ") === ${JSON.stringify(TIMED_SAID.join(" | "))} ? "" : "the captions say " + said.join(" | ");
+      if (said.join(" | ") !== ${JSON.stringify(TIMED_SAID.join(" | "))}) return "the captions say " + said.join(" | ");
+      // The least window's size it draws at stays whole where the words after it give way.
+      for (const kept of document.querySelectorAll(".chart-said-kept")) {
+        const room = rect(kept.closest(".chart-said"));
+        if (rect(kept).right > room.right + ${RECT_SLACK}) return kept.textContent + " runs to " + rect(kept).right + " past its caption's " + room.right;
+      }
+      return "";
     `,
   },
   {

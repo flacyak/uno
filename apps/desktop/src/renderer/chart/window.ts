@@ -285,11 +285,13 @@ export class ChartWindow {
   };
   /**
    * What the caption says of what the plot draws: the words before the
-   * button, the · between them and it, the button, and the words after it.
+   * button, the · between them and it, the button, what the kind keeps whole,
+   * and the words after it.
    */
   private readonly said = el("span", "chart-said");
   private readonly before = el("span", "chart-said-before");
   private readonly dot = el("span", "chart-said-dot");
+  private readonly kept = el("span", "chart-said-kept");
   private readonly after = el("span", "chart-said-after");
   /** What the caption says of the source's checks, at its right end: the
    * schedule, the button that opens the chart form on it, and the words after it. */
@@ -385,6 +387,7 @@ export class ChartWindow {
       this.findDates,
       this.dot,
       this.find,
+      this.kept,
       this.after,
       this.dotOrder,
       this.reorder,
@@ -508,10 +511,11 @@ export class ChartWindow {
       this.stage.batch(this.chart.id, per, offset);
     }
     const after = drawn === undefined ? [] : drawn.drawing.notes();
+    const kept = drawn?.drawing.kept?.() ?? "";
     const other = otherOrder(latest, this.kind().dated?.reading);
     this.order = other?.order;
     const said = [...after, other?.said ?? ""];
-    this.say([coverage(latest), blank(latest)], notDates(latest), notNumbers(latest), said);
+    this.say([coverage(latest), blank(latest)], notDates(latest), notNumbers(latest), kept, said);
     this.offer(other?.button ?? "");
     const why = cannotRead(heard);
     this.again.disabled = why !== undefined;
@@ -644,8 +648,8 @@ export class ChartWindow {
   /**
    * say writes the caption: the words `before` the buttons, `dates`, the date
    * cells its chart could not read, and `count`, the cells that were not
-   * numbers, as buttons, and the words `after` them, those that say
-   * something, with · between them, and the whole in its title, as a narrow
+   * numbers, as buttons, then `kept`, which stays whole as they do, and the
+   * words `after` them, those that say something, with · between them, and the whole in its title, as a narrow
    * window cuts them. Each button is one element whichever words stand around
    * it, so a repaint never takes the keys from it; a count of none hides it,
    * and gives the keys it held to the window.
@@ -654,6 +658,7 @@ export class ChartWindow {
     before: readonly string[],
     dates: string,
     count: string,
+    kept: string,
     after: readonly string[],
   ): void {
     const lead = before.filter((part) => part !== "").join(SEP);
@@ -670,7 +675,8 @@ export class ChartWindow {
     this.dotDates.textContent = lead !== "" && dates !== "" ? SEP : "";
     this.dot.textContent = (lead !== "" || dates !== "") && count !== "" ? SEP : "";
     const any = lead !== "" || dates !== "" || count !== "";
-    this.after.textContent = trail !== "" && any ? SEP + trail : trail;
+    this.kept.textContent = kept !== "" && any ? SEP + kept : kept;
+    this.after.textContent = trail !== "" && (any || kept !== "") ? SEP + trail : trail;
     this.said.title = this.said.textContent;
   }
 
