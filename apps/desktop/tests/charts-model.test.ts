@@ -198,10 +198,12 @@ test("a just-opened file is clean", async () => {
   await opened(FILE, async (w) => expect(w.dirty).toBe(false));
 });
 
-test("adding, removing, and changing a chart's source, kind, columns, title or schedule mark it unsaved", async () => {
+test("adding, removing, and changing a chart's source, kind, columns, title, schedule, size or reading mark it unsaved", async () => {
   const by: ChartColumn = { col: REGION, header: "region" };
   const units: ChartColumn = { col: UNITS, header: "units" };
   const scatter: Chart = { ...BARS, id: "c2", plot: { t: "scatter", x: by, y: units } };
+  const at: ChartColumn = { col: 0, header: "date" };
+  const time: Chart = { ...BARS, id: "c3", plot: { t: "time", at, per: "day", order: "day" } };
   const changes: ReadonlyArray<readonly [Chart, Partial<Shown>]> = [
     [BARS, { title: "Rows" }],
     [BARS, { refresh: 5 }],
@@ -211,8 +213,11 @@ test("adding, removing, and changing a chart's source, kind, columns, title or s
     [BARS, { plot: { t: "bars", by: { ...by, header: "area" } } }],
     [BARS, { plot: { t: "bars", by, sum: units } }],
     [scatter, { plot: { t: "scatter", x: by, y: by } }],
+    [time, { plot: { t: "time", at, per: "week", order: "day" } }],
+    [time, { plot: { t: "time", at, per: "day", order: "month" } }],
+    [time, { plot: { t: "time", at, per: "day", unit: "s" } }],
   ];
-  await opened(uno(unoOf([BARS, scatter])), async (w) => {
+  await opened(uno(unoOf([BARS, scatter, time])), async (w) => {
     for (const [chart, shown] of changes) {
       await w.charts.change(chart.id, shown);
       expect(w.dirty, JSON.stringify(shown)).toBe(true);

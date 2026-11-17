@@ -9,7 +9,7 @@
  */
 
 import { isPlace } from "@document";
-import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
+import type { Chart, ChartColumn, ChartPlace, Plot, TimePlot } from "@document";
 import { Refusal } from "@engine";
 import type { Drawn } from "./chart/kind.ts";
 import type { Added, CarriedPlace, Engine, Place, Tally } from "@engine";
@@ -71,13 +71,21 @@ function samePlot(a: Plot, b: Plot): boolean {
   );
 }
 
+/** Returns whether two plots read their dates alike at one size, as any two not over time do. */
+function sameReading(a: Plot, b: Plot): boolean {
+  if (a.t !== "time" || b.t !== "time") return true;
+  const reading = (plot: TimePlot): string => ("order" in plot ? plot.order : plot.unit);
+  return a.per === b.per && reading(a) === reading(b);
+}
+
 /** Returns whether two records show the same. Neither's place counts. */
 function sameShown(a: Chart, b: Chart): boolean {
   return (
     a.source === b.source &&
     a.title === b.title &&
     a.refresh === b.refresh &&
-    samePlot(a.plot, b.plot)
+    samePlot(a.plot, b.plot) &&
+    sameReading(a.plot, b.plot)
   );
 }
 
