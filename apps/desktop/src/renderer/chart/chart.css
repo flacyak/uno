@@ -808,7 +808,9 @@
  * ticks' size, and a row is as high as a head's button, which its digits sit
  * in with room. A person can select from it, where the window lets nothing
  * else be selected. Its caption is a screen reader's: in the page, out of
- * sight. A cell stands as far from the window's edge as the head's words. Its
+ * sight. A cell stands as far from the window's edge as the head's words, and
+ * as far from the cell before it, so a window of the least width holds a
+ * period, its rows and a sum of eight digits with no bar across it. Its
  * own ground paints the header row's band and rule across the top, under the
  * bar where no cell reaches, so the band runs to the window's edge as the
  * grid's does. */
@@ -837,10 +839,14 @@
 .chart-table th,
 .chart-table td {
   height: var(--x-size);
-  padding: 0 10px;
+  padding: 0 0 0 10px;
   font-weight: 400;
   text-align: left;
   white-space: nowrap;
+}
+
+.chart-table :is(th, td):last-child {
+  padding-right: 10px;
 }
 
 /* The header row stays at the top as the rows scroll, as the grid's does, in

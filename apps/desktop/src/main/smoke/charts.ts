@@ -1272,6 +1272,20 @@ export const CHART_TIME: Check[] = [
     `,
   },
   {
+    name: "the table of a least-width over-time chart's eight-digit sums fits its window with no bar across it, and t brings its columns back",
+    script: `
+      const win = document.querySelectorAll(".chart")[1];
+      const plot = () => win.querySelector(".chart-plot");
+      plot().dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      if (!(await until(() => win.querySelector(".chart-table tbody th") !== null))) return "t puts no table in place";
+      const table = win.querySelector(".chart-table");
+      const wide = table.scrollWidth - table.clientWidth;
+      plot().dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      if (!(await until(() => win.querySelector(".chart-column") !== null))) return "t brings no columns back";
+      return wide > 0 ? "the table runs " + wide + " px past its window" : "";
+    `,
+  },
+  {
     name: "an over-time chart whose years run past the batch a tally sends asks for the rest, and draws every year to the last, with no gaps, and its caption says it is too narrow for them",
     send: ["menu:open-path", PLACED],
     shot: "chart-time-span",
