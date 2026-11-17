@@ -80,6 +80,10 @@ const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
  */
 const TIMED = process.env["UNO_SMOKE_TIMED"] ?? "";
 const TIMED_PERIODS = [DATED_DAYS, DATED_WEEKS];
+
+/** The one it wrote of rows over dates from 2024 to a placeholder, 9999-12-31, and their years, 2024 to 9999. */
+const PLACED = process.env["UNO_SMOKE_PLACED"] ?? "";
+const PLACED_YEARS = 7_976;
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
 
 /**
@@ -1160,6 +1164,19 @@ export const CHART_TIME: Check[] = [
       }
       const worn = style(document.querySelector(".chart-column")).backgroundColor;
       return worn === computed("var(--accent)") ? "" : "a column wears " + worn;
+    `,
+  },
+  {
+    name: "an over-time chart whose years run past the batch a tally sends asks for the rest, and draws every year to the last, with no gaps",
+    send: ["menu:open-path", PLACED],
+    shot: "chart-time-span",
+    script: `
+      const slots = () => [...document.querySelectorAll(".chart .chart-period")];
+      const last = () => slots().at(-1)?.querySelector(".chart-column") ?? null;
+      if (!(await arrives(() => slots().length === ${PLACED_YEARS} && last() !== null))) return "the window draws " + slots().length + " periods, the last " + (last() === null ? "with no column" : "with one");
+      const columns = document.querySelectorAll(".chart .chart-column").length;
+      if (columns !== ${PLACED_YEARS}) return "the window draws " + columns + " columns of ${PLACED_YEARS} years";
+      return document.querySelector(".chart-time.crowded") === null ? "the years keep their gaps" : "";
     `,
   },
 ];

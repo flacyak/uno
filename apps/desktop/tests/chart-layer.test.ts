@@ -34,6 +34,7 @@ import { madeTitle } from "@renderer/chart/window";
 import type { Heard, SourceState } from "@renderer/charts";
 import { clock, num } from "@renderer/locale";
 import type { Checks } from "@renderer/refresh";
+import type { Per } from "@tally";
 import { BARS, MOVED, PIE, SCATTER, SHARES, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
@@ -107,6 +108,7 @@ interface Model {
   sourceLabel(source: string): string | undefined;
   move: (id: string, place: ChartPlace) => void;
   heard: (id: string) => Heard | undefined;
+  batch: (id: string, per: Per, offset: number) => Promise<boolean>;
 }
 
 const root = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
@@ -219,6 +221,7 @@ function modelOf(...charts: Chart[]): Model {
     carried: [],
     sourceLabel: () => undefined,
     heard: () => undefined,
+    batch: () => Promise.resolve(false),
     move: vi.fn((id: string, place: ChartPlace) => {
       model.all = model.all.map((chart) => (chart.id === id ? { ...chart, place } : chart));
     }),

@@ -6,6 +6,7 @@
 
 import type { ChartColumn, Plot } from "@document";
 import type { Tally } from "@engine";
+import type { Per } from "@tally";
 import type { Told } from "./summary.ts";
 import type { Targets } from "./tooltip.ts";
 
@@ -19,6 +20,12 @@ export type Drawn = Exclude<Tally, { t: "unread" }>;
 export interface PlotRoom {
   readonly width: number;
   readonly ch: number;
+}
+
+/** A batch of periods a drawing draws that its tally has not sent: its size and first place. */
+export interface Wanted {
+  readonly per: Per;
+  readonly offset: number;
 }
 
 /** What a window draws of one tally, as its chart's kind reads it. */
@@ -37,6 +44,8 @@ export interface Drawing {
   told(): Told;
   /** notes gives what the caption says after its counts, for the kind. */
   notes(): string[];
+  /** wanted gives the batches the drawing lacks, none for one drawn whole. */
+  wanted?(): Wanted[];
 }
 
 /** What a window does with one plot that depends on its kind. */

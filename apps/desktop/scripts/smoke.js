@@ -315,6 +315,45 @@ await writeFile(
   }),
 );
 
+// A workspace of rows over the dates of a file whose last is a placeholder,
+// 9999-12-31, in a new window's size. Its 7,976 years are past the batch a
+// tally sends, so the window asks for the rest. It stands at the sheet's
+// foot, clear of the selected cell.
+const placedFile = join(scratch, "sent", "placeholders.csv");
+const placedRows = ["2024-03-04", "2024-03-05", "2025-01-10", "9999-12-31"];
+await writeFile(placedFile, `${["date", ...placedRows].join("\n")}\n`);
+const placed = join(scratch, "sent", "placeholders.uno");
+const placedSource = {
+  id: "placeholders",
+  name: "placeholders.csv",
+  path: placedFile,
+  rows: placedRows.length,
+  cols: 1,
+  state: { active: { row: 0, col: 0 } },
+};
+const placedOver = { t: "time", at: { col: 0, header: "date" }, per: "auto", order: "day" };
+await writeFile(
+  placed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [placedSource],
+    active: placedSource.id,
+    log: [],
+    charts: [
+      {
+        id: "c1",
+        source: placedSource.id,
+        plot: placedOver,
+        title: "",
+        refresh: 0,
+        place: { ...chartSize, x: 1, y: 1 },
+      },
+    ],
+    extra: new Map(),
+    at: placed,
+  }),
+);
+
 // A workspace of pies of the second export's rows, in a new window's size: one
 // per Location, which it writes four ways, and one per Device, which it writes
 // nine, so its six largest have a slice each and the rest an Other. A third,
@@ -530,6 +569,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_ALONG: along,
     UNO_SMOKE_PIES: pies,
     UNO_SMOKE_TIMED: timed,
+    UNO_SMOKE_PLACED: placed,
     UNO_SMOKE_STATES: states,
     UNO_SMOKE_BLANKS: blanks,
     UNO_SMOKE_SCHEDULED: scheduled,

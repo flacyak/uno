@@ -67,6 +67,7 @@ const NO_LAYER: Stage = {
   notNumbers: () => undefined,
   edit: () => undefined,
   refresh: () => undefined,
+  batch: () => undefined,
   remove: () => undefined,
   say: () => undefined,
 };
@@ -374,6 +375,21 @@ test("a window's kind reads its tally for the plot's width and a tick's characte
   await frame();
   expect(rooms.length).toBeGreaterThan(0);
   expect(rooms.every((room) => room.width === ROOM.width && room.ch === ROOM.ch)).toBe(true);
+});
+
+test("a drawing that lacks periods its tally has not sent asks the stage for them, by its chart, size and offset", async () => {
+  const wanting: ChartKind<Extract<Plot, { t: "bars" }>> = (plot) => ({
+    ...bars(plot),
+    drawing: (tally, room) => ({
+      ...bars(plot).drawing(tally, room)!,
+      wanted: () => [{ per: "month", offset: 1_024 }],
+    }),
+  });
+  const batch = vi.fn();
+  const read = tallyOf(["North"], true);
+  hearing(() => heardOf(read, read), BARS, { batch }, { ...KINDS, bars: wanting });
+  await frame();
+  expect(batch).toHaveBeenCalledWith(BARS.id, "month", 1_024);
 });
 
 test("the drawing is an image named by the head until a tally completes, then by what the chart says it shows, which a partial never changes", async () => {

@@ -208,3 +208,12 @@ test("an over-time chart's kind draws its tally as columns of the finest level i
   expect(time(DATED).drawing({ ...TIMES, levels: [] }, ROOM)?.empty).toBe(true);
   expect(time(DATED).drawing(GROUPS, ROOM)).toBeUndefined();
 });
+
+test("an over-time chart's drawing wants the next batch of a level it draws past the periods sent, and none of one sent whole", () => {
+  const years = { per: "year" as const, from: 0, span: 2_000, offset: 0, rows: [1], sum: [] };
+  const long = { ...TIMES, levels: [{ ...years, rows: Array.from({ length: 1_024 }, () => 1) }] };
+  expect(time(DATED).drawing(long, ROOM)?.wanted?.()).toStrictEqual([
+    { per: "year", offset: 1_024 },
+  ]);
+  expect(time(DATED).drawing(TIMES, ROOM)?.wanted?.()).toStrictEqual([]);
+});

@@ -49,6 +49,12 @@ export const time: ChartKind<TimePlot> = (plot) => ({
     const summed = plot.sum !== undefined;
     const drawn = fitted(tally.levels, summed, room);
     if (drawn === undefined) return { ...undrawn, empty: true };
-    return { ...undrawn, draw: () => columns(drawn, summed), targets: () => NONE };
+    const { per, span, rows } = drawn.level;
+    return {
+      ...undrawn,
+      draw: () => columns(drawn, summed),
+      targets: () => NONE,
+      wanted: () => (rows.length < span ? [{ per, offset: rows.length }] : []),
+    };
   },
 });

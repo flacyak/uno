@@ -12,6 +12,7 @@ import { PART_FIXTURES, PART_NAMES, PART_ROWS } from "@core-tests/testdata/sales
 import { readContainer } from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
 import type { SourceRef } from "@engine";
+import { LEVEL_BATCH } from "@tally";
 import type { Drawn } from "@renderer/chart/kind";
 import { REGION, ROWS, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
@@ -466,5 +467,32 @@ test("a source goes by the stem of its file once there are several to tell apart
 
     const fresh = await w.relink(only!, { name: "sales.2025.q3.csv", path: FIXTURE });
     expect(w.charts.sourceLabel(fresh.id)).toBe("sales.2025.q3");
+  });
+});
+
+test("an over-time chart's later batches join its complete tally where its periods end, and no other", async () => {
+  const hours: Chart = {
+    ...BARS,
+    plot: { t: "time", at: { col: 0, header: "date" }, per: "hour", order: "day" },
+  };
+  await opened(FILE, async (w) => {
+    const { id } = await w.charts.add(hours);
+    const levelOf = (per: string) => {
+      const complete = w.charts.heard(id)?.complete;
+      return complete?.t === "time"
+        ? complete.levels.find((level) => level.per === per)
+        : undefined;
+    };
+    await expect.poll(() => levelOf("hour")?.rows.length, TALLY_WAIT).toBe(LEVEL_BATCH);
+    const { span } = levelOf("hour")!;
+    expect(await w.charts.batch(id, "hour", 2 * LEVEL_BATCH)).toBe(false);
+    for (let offset = LEVEL_BATCH; offset < span; offset += LEVEL_BATCH) {
+      expect(await w.charts.batch(id, "hour", offset)).toBe(true);
+    }
+    const sum = (rows: readonly number[]): number => rows.reduce((a, b) => a + b, 0);
+    expect(levelOf("hour")?.rows.length).toBe(span);
+    expect(sum(levelOf("hour")!.rows)).toBe(sum(levelOf("day")!.rows));
+    expect(await w.charts.batch(id, "hour", LEVEL_BATCH)).toBe(false);
+    expect(await w.charts.batch("c9", "hour", LEVEL_BATCH)).toBe(false);
   });
 });

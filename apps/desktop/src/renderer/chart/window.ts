@@ -38,6 +38,7 @@ import type { Press } from "@renderer/keys";
 import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { Words, button, el } from "@renderer/shell/util";
+import type { Per } from "@tally";
 import {
   SEP,
   blank,
@@ -155,6 +156,8 @@ export interface Stage {
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
   /** Opens the chart form on chart `id`, hung at `place`, with the keys on its field `on`. */
   edit(id: string, place: MenuPlace, on?: "refresh"): void;
+  /** Asks for chart `id`'s periods at `per` from `offset`, and draws its window again once they come. */
+  batch(id: string, per: Per, offset: number): void;
   /** Reads `source` again by hand: Reload for one file, an append of new files for several. */
   refresh(source: string): void;
   /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
@@ -458,7 +461,8 @@ export class ChartWindow {
    * source was last checked, or in --flag what held its newer data back or
    * failed its check. The track under the head shows how far the chart has
    * read, while it reads, and a chart with nothing to draw says why in the
-   * plot's place.
+   * plot's place. A drawing that lacks periods its tally has not sent asks
+   * for them.
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
@@ -469,6 +473,9 @@ export class ChartWindow {
     if (drawn === undefined) this.fill(false, ...this.state(heard, room));
     else if (this.tabled) this.tabulate(drawn.tally, drawn.drawing);
     else this.draw(drawn.drawing, named);
+    for (const { per, offset } of drawn?.drawing.wanted?.() ?? []) {
+      this.stage.batch(this.chart.id, per, offset);
+    }
     const after = drawn === undefined ? [] : drawn.drawing.notes();
     this.say([coverage(latest), blank(latest)], notNumbers(latest), after);
     const why = cannotRead(heard);

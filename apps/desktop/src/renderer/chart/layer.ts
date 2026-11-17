@@ -25,6 +25,7 @@ import type { ColumnSpan } from "@renderer/grid/view";
 import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
+import type { Per } from "@tally";
 import { fresh, NO_CORNER, overfull, shown, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Corner, Room } from "./place.ts";
 import { ChartWindow, standAt } from "./window.ts";
@@ -37,7 +38,7 @@ export type Asks = Pick<
 > & { selected(): DOMRect | undefined };
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
-type Shown = Pick<Charts, "all" | "carried" | "sourceLabel" | "move" | "heard">;
+type Shown = Pick<Charts, "all" | "carried" | "sourceLabel" | "move" | "heard" | "batch">;
 
 /** The thinnest a border draws, in device px. */
 const THINNEST_BORDER = 1;
@@ -72,6 +73,7 @@ export class ChartLayer implements Stage {
     sourceLabel: () => undefined,
     move: () => undefined,
     heard: () => undefined,
+    batch: () => Promise.resolve(false),
   };
   /** Fills the grid's scroller inside its bars, so the two boxes differ by a bar. */
   private readonly gauge = el("div", "chart-gauge");
@@ -260,6 +262,13 @@ export class ChartLayer implements Stage {
   /** heard gives what chart `id` last heard, for its window to draw. */
   heard(id: string): Heard | undefined {
     return this.charts.heard(id);
+  }
+
+  /** batch asks for chart `id`'s periods at `per` from `offset`, and draws its window again once they join. */
+  batch(id: string, per: Per, offset: number): void {
+    void this.charts.batch(id, per, offset).then((joined) => {
+      if (joined) this.tallied(id);
+    });
   }
 
   /** checks gives when `source` was last checked, for its windows' captions. */

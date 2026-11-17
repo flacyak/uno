@@ -13,6 +13,7 @@ import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { Refusal } from "@engine";
 import type { Drawn } from "./chart/kind.ts";
 import type { Added, CarriedPlace, Engine, Place, Tally } from "@engine";
+import type { Per, TimeLevel } from "@tally";
 
 import type { State } from "./sources.ts";
 
@@ -85,6 +86,18 @@ function reads(held: Tallied | undefined, source: string, plot: Plot): held is T
   return held?.source === source && samePlot(held.latest.plot, plot);
 }
 
+/**
+ * joined gives `level` with `batch` after the periods it holds, where the
+ * batch is of its size and span and starts where they end, or `level` as it
+ * is where the fold has moved since or the batch is another's.
+ */
+function joined(level: TimeLevel, batch: TimeLevel): TimeLevel {
+  const { per, from, span, offset } = batch;
+  const next = per === level.per && from === level.from && span === level.span;
+  if (!next || offset !== level.rows.length) return level;
+  return { ...level, rows: [...level.rows, ...batch.rows], sum: [...level.sum, ...batch.sum] };
+}
+
 export class Charts {
   /** The charts by id, oldest first, as the engine answered for them. */
   private readonly answered = new Map<string, Chart>();
@@ -96,6 +109,8 @@ export class Charts {
   /** What each chart last heard. It stays through a change, so a refusal
    * gives it back. */
   private readonly tallied = new Map<string, Tallied>();
+  /** The batches asked for and not yet answered, by chart id, size and offset. */
+  private readonly asking = new Set<string>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The sources of the charts this workspace carries and cannot show. */
@@ -232,6 +247,33 @@ export class Charts {
       complete: current ? held.complete : undefined,
       rereading: current && held.rereading === true,
     };
+  }
+
+  /**
+   * batch asks the engine for chart `id`'s periods at `per` from `offset`, once
+   * at a time, and joins them to its last complete tally. It resolves to
+   * whether they joined, which none do where the chart or its tally has gone
+   * or its fold has moved since.
+   */
+  async batch(id: string, per: Per, offset: number): Promise<boolean> {
+    const asked = `${id} ${per} ${offset}`;
+    if (this.asking.has(asked)) return false;
+    this.asking.add(asked);
+    try {
+      const batch = await this.engine.batch(id, per, offset);
+      const held = this.tallied.get(id);
+      const complete = held?.complete;
+      if (batch === undefined || held === undefined || complete?.t !== "time") return false;
+      const levels = complete.levels.map((level) => joined(level, batch));
+      if (levels.every((level, i) => level === complete.levels[i])) return false;
+      this.tallied.set(id, { ...held, complete: { ...complete, levels } });
+      return true;
+    } catch (e) {
+      if (e instanceof Refusal) return false;
+      throw e;
+    } finally {
+      this.asking.delete(asked);
+    }
   }
 
   /** Notes that `source` is being read again: each chart over it is reading
