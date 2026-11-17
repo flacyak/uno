@@ -31,6 +31,14 @@ const COLUMNS = [
   { header: "revenue", kind: "text", flagged: true },
 ] as const;
 
+/** A band of `columns` holding `rows`, cell by cell. */
+function banded(
+  columns: ChartSource["band"]["columns"],
+  rows: ReadonlyArray<readonly string[]> = [],
+): ChartSource["band"] {
+  return { columns, ready: (row) => row < rows.length, raw: (row, col) => rows[row]?.[col] ?? "" };
+}
+
 /** The column selected in the grid: region. */
 const REGION = 1;
 
@@ -44,27 +52,27 @@ const REVENUE = 5;
 const SALES = {
   id: "sales",
   name: "sales-q3.csv",
-  band: { columns: COLUMNS },
+  band: banded(COLUMNS),
   missing: false,
   link: { path: "/exports/sales-q3.csv" },
 };
 const ADS = {
   id: "ads",
   name: "ads-q3.csv",
-  band: { columns: [COLUMNS[4], COLUMNS[REGION]] },
+  band: banded([COLUMNS[4], COLUMNS[REGION]]),
   missing: false,
   link: { path: "/exports/ads-q3.csv" },
 };
-const GONE = { id: "gone", name: "ads-q2.csv", band: { columns: [] }, missing: true };
+const GONE = { id: "gone", name: "ads-q2.csv", band: banded([]), missing: true };
 /** Then the sales export's sums, revenue before units, and its takings, revenue beside a cost. */
-const SUMS = { ...SALES, id: "sums", band: { columns: [COLUMNS[REVENUE], COLUMNS[UNITS]] } };
+const SUMS = { ...SALES, id: "sums", band: banded([COLUMNS[REVENUE], COLUMNS[UNITS]]) };
 const COST = { header: "cost", kind: "num", flagged: false } as const;
-const TAKINGS = { ...SALES, id: "takings", band: { columns: [COLUMNS[REVENUE], COST] } };
+const TAKINGS = { ...SALES, id: "takings", band: banded([COLUMNS[REVENUE], COST]) };
 /** Then one that names units twice and region twice, and the second of each. */
 const TWINS = {
   ...SALES,
   id: "twins",
-  band: { columns: [COLUMNS[UNITS], COLUMNS[UNITS], COLUMNS[REGION], COLUMNS[REGION]] },
+  band: banded([COLUMNS[UNITS], COLUMNS[UNITS], COLUMNS[REGION], COLUMNS[REGION]]),
 };
 const UNITS_TWIN = 1;
 const REGION_TWIN = 3;
@@ -546,7 +554,7 @@ test("every worded label of the chart form and the formula form sets the column 
 /** The sales export's date column, and a Unix column of the times its orders came in. */
 const DATE = { col: 0, header: "date" };
 const STAMPS = { header: "placed", kind: "num", flagged: false, unit: "s" } as const;
-const STAMPED = { ...SALES, id: "stamped", band: { columns: [...COLUMNS, STAMPS] } };
+const STAMPED = { ...SALES, id: "stamped", band: banded([...COLUMNS, STAMPS]) };
 const PLACED = COLUMNS.length;
 
 test("a date column selected in the grid opens the form on a chart over time of it, asking for its dates, size and sum", async () => {
@@ -584,7 +592,10 @@ test("a date column selected in the grid opens the form on a chart over time of 
 test("dates whose order the sample left open read as the language reads them, and a Unix column as its unit", async () => {
   await setLocale("en-GB", { reload: false });
   const dated = form(undefined, { t: "insert", col: DATE.col }, STAMPED);
-  expect([...select("at").options].map((o) => o.textContent)).toStrictEqual(["date", "placed"]);
+  expect([...select("at").options].map((o) => o.textContent)).toStrictEqual([
+    "date",
+    "placed (Unix seconds)",
+  ]);
   press("Enter");
   await settle();
   const stamped = form(undefined, { t: "insert", col: PLACED }, STAMPED);
@@ -616,4 +627,20 @@ test("a source with no date column offers no chart over time", () => {
   form(undefined, { t: "insert", col: 0 }, ADS);
   const time = [...select("kind").options].find((o) => o.value === "time")!;
   expect(time.disabled).toBe(true);
+});
+
+/** A source of dates written year last, the first of whose cells reads both ways, decided by none or by its sample. */
+const WRITTEN = { header: "booked", kind: "date", flagged: false, order: "either" } as const;
+const BOOKED = [["03/04/2024"], ["13/04/2024 09:30"]];
+const BOOKINGS = { ...SALES, id: "bookings", band: banded([WRITTEN], BOOKED) };
+
+/** The words of each option of the select named `name`, and whether it is off. */
+const options = (name: string): Array<[string | null, boolean]> =>
+  [...select(name).options].map((o) => [o.textContent, o.disabled]);
+
+test("Hour is offered for a date column that writes a time of day, and not for one of dates alone", () => {
+  form(undefined, { t: "insert", col: 0 }, BOOKINGS);
+  expect(options("per")[1]).toStrictEqual(["hour", false]);
+  form(undefined, { t: "insert", col: 0 }, { ...BOOKINGS, band: banded([WRITTEN], [BOOKED[0]!]) });
+  expect(options("per")[1]).toStrictEqual(["hour", true]);
 });

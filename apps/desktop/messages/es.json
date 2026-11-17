@@ -506,6 +506,8 @@
   "chart_form_at": "fechas",
   "chart_form_per": "por",
   "chart_per_auto": "automático",
+  "kind_unix_s": "segundos Unix",
+  "kind_unix_ms": "milisegundos Unix",
   "chart_form_x": "x",
   "chart_form_y": "y",
   "chart_form_title_field": "título",

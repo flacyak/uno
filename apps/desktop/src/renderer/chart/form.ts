@@ -22,9 +22,10 @@ import {
   TITLE_AT_MOST,
 } from "@document";
 import type { Chart, ChartColumn, Plot, TimePlot } from "@document";
-import type { Order } from "@date";
+import { readDate } from "@date";
+import type { Order, UnixUnit } from "@date";
 import { placeOf } from "@engine";
-import type { ColumnInfo, Link, PartInfo } from "@engine";
+import type { Band, ColumnInfo, Link, PartInfo } from "@engine";
 import { m } from "@paraglide/messages";
 import { clamp } from "@renderer/grid/metrics";
 import { columnLabel } from "@renderer/grid/rows";
@@ -44,7 +45,7 @@ import { PER } from "@tally";
 export interface ChartSource {
   id: string;
   name: string;
-  band: {
+  band: Pick<Band, "raw" | "ready"> & {
     columns: ReadonlyArray<Pick<ColumnInfo, "header" | "kind" | "flagged" | "order" | "unit">>;
   };
   missing: boolean;
@@ -82,8 +83,17 @@ const PERS: ReadonlyArray<readonly [TimePlot["per"], () => string]> = [
   ...PER.map((per) => [per, PER_WORDS[per]] as const),
 ];
 
+/** How many of a source's first rows the form reads a date column's cells from. */
+const SAMPLE_ROWS = 200;
+
 /** The language whose undecided dates read month first; every other reads day first. */
 const MONTH_FIRST = "en-US";
+
+/** What a Unix column's unit is called. */
+const UNIT_WORDS: Readonly<Record<UnixUnit, () => string>> = {
+  s: m.kind_unix_s,
+  ms: m.kind_unix_ms,
+};
 
 /** The schedules under an hour the form offers, in minutes between checks. */
 const EVERY_FEW_MINUTES = [5, 15, 30];
@@ -203,6 +213,7 @@ export class ChartForm {
     this.from.addEventListener("change", () => this.choose());
     this.kind.append(...KINDS.map(([t, words]) => option(words(), t)));
     this.kind.addEventListener("change", () => this.ask());
+    this.at.addEventListener("change", () => this.dated());
     this.per.append(...PERS.map(([per, words]) => option(words(), per)));
 
     if (opening.t === "insert") this.offer(opening.col);
@@ -294,7 +305,14 @@ export class ChartForm {
     const columns = this.source.band.columns;
     const numbers: number[] = [];
     const dates = columns.flatMap((c, i) => (c.kind === "date" || c.unit !== undefined ? [i] : []));
-    this.at.replaceChildren(...dates.map((i) => fromFile(columns[i]!.header, i)));
+    this.at.replaceChildren(
+      ...dates.map((i) => {
+        const { header, unit } = columns[i]!;
+        const made = fromFile(header, i);
+        if (unit !== undefined) made.textContent += ` (${UNIT_WORDS[unit]()})`;
+        return made;
+      }),
+    );
     this.by.replaceChildren();
     this.sum.replaceChildren(option(m.chart_form_sum_none(), ""));
     this.x.replaceChildren();
@@ -332,7 +350,7 @@ export class ChartForm {
     if (this.opening.t === "insert" && this.kind.value === "bars" && dates.includes(by)) {
       this.kind.value = "time";
     }
-    this.ask();
+    this.dated();
   }
 
   /** ask shows the fields the kind chosen asks for, and the title it makes. */
@@ -355,6 +373,23 @@ export class ChartForm {
     const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
     return this.sum.value === "" ? { t, by } : { t, by, sum: this.column(this.sum.value) };
+  }
+
+  /** dated offers Hour where a cell of the chosen date column writes a time of day. */
+  private dated(): void {
+    const col = Number(this.at.value);
+    const unit = this.source.band.columns[col]?.unit;
+    const cells: string[] = [];
+    for (let row = 0; row < SAMPLE_ROWS && this.source.band.ready(row); row++) {
+      cells.push(this.source.band.raw(row, col));
+    }
+    // A cell writes a time of day whichever order it reads in.
+    const minute = (v: string): number | undefined =>
+      unit === undefined ? (readDate(v, "day") ?? readDate(v, "month")) : readDate(v, unit);
+    const timed = cells.some((v) => (minute(v) ?? 0) % DAY_MINUTES !== 0);
+    const hour = [...this.per.options].find((made) => made.value === "hour")!;
+    hour.disabled = !timed && this.per.value !== "hour";
+    this.ask();
   }
 
   /**
