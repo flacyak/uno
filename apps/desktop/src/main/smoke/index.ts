@@ -11,6 +11,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { BrowserWindow } from "electron";
 
+import type { CheckTiming } from "@core-tests/timings";
 import { ask } from "@main/ask";
 import { pick, through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
@@ -204,13 +205,6 @@ const FULL_ZOOM = 1;
 
 /** A window size limit of none. */
 const NO_LIMIT = 0;
-
-/** One check as it ran: how long it took, and whether it passed. */
-export interface CheckTiming {
-  name: string;
-  ms: number;
-  ok: boolean;
-}
 
 /**
  * record writes every check's timing into the run's folder as checks.json,
