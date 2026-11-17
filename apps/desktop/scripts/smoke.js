@@ -285,6 +285,36 @@ await writeFile(
   }),
 );
 
+// A workspace of two over-time charts of the fixture's 91 days: rows per day
+// in a new window's size at the sheet's foot, which holds a column a day,
+// and revenue over its dates in a window of the least width at its top,
+// which holds weeks and not days.
+const timed = join(scratch, "sent", "timed.uno");
+const dated = { col: 0, header: "date" };
+const perDay = { t: "time", at: dated, per: "day", order: "day" };
+const revenueOver = { ...perDay, sum: { col: 5, header: "revenue" }, per: "auto" };
+const timedChart = { source: salesSource.id, title: "", refresh: 0 };
+await writeFile(
+  timed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [salesSource],
+    active: salesSource.id,
+    log: [],
+    charts: [
+      { ...timedChart, id: "c1", plot: perDay, place: { ...chartSize, x: 0, y: 1 } },
+      {
+        ...timedChart,
+        id: "c2",
+        plot: revenueOver,
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: timed,
+  }),
+);
+
 // A workspace of pies of the second export's rows, in a new window's size: one
 // per Location, which it writes four ways, and one per Device, which it writes
 // nine, so its six largest have a slice each and the rest an Other. A third,
@@ -499,6 +529,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_SCATTERED: scattered,
     UNO_SMOKE_ALONG: along,
     UNO_SMOKE_PIES: pies,
+    UNO_SMOKE_TIMED: timed,
     UNO_SMOKE_STATES: states,
     UNO_SMOKE_BLANKS: blanks,
     UNO_SMOKE_SCHEDULED: scheduled,

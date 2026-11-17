@@ -28,12 +28,13 @@
 
 import { m } from "@paraglide/messages";
 import { SPAN_LEAST } from "@renderer/chart/bars";
-import { BARS_INSET } from "@renderer/chart/rows";
+import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
 import { LABEL_GAP, PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { POINT_OPACITY, TICK_GAP } from "@renderer/chart/scatter";
 import { DEFAULT_THEME, THEMES } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
+import { DATED_DAYS, DATED_WEEKS } from "./fixture.ts";
 
 /** The workspace smoke.js wrote. */
 const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
@@ -71,6 +72,14 @@ const ALONG_LABELS = [
  * of the least size.
  */
 const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
+
+/**
+ * The one it wrote of two over-time charts of the fixture's dates: rows per
+ * day in a new window, and revenue over them in one of the least width, and
+ * how many periods each draws.
+ */
+const TIMED = process.env["UNO_SMOKE_TIMED"] ?? "";
+const TIMED_PERIODS = [DATED_DAYS, DATED_WEEKS];
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
 
 /**
@@ -1121,6 +1130,36 @@ export const CHART_PIE: Check[] = [
       const keys = [...list.querySelectorAll(".chart-legend-key")].map((key) => style(key).backgroundColor);
       const fills = [...list.querySelectorAll(".chart-slice")].map((slice) => style(slice).fill);
       return keys.join(" ") === fills.join(" ") ? "" : "the list's keys wear " + keys.join(" and ") + " beside slices of " + fills.join(" and ");
+    `,
+  },
+];
+
+/** A check after CHART_PIE, as it opens a workspace of two over-time charts in place of that one. */
+export const CHART_TIME: Check[] = [
+  {
+    name: "an over-time chart draws a column per period at the finest size its window holds, each in the accent on the zero gridline, at most a bar thick and a gap from the next",
+    send: ["menu:open-path", TIMED],
+    shot: "chart-time",
+    script: `
+      ${CHROME}
+      const windows = () => [...document.querySelectorAll(".chart")];
+      const drawn = () => windows().length === ${TIMED_PERIODS.length} && windows().every((win) => win.querySelector(".chart-column") !== null);
+      if (!(await arrives(drawn))) return "the windows draw no columns";
+      const counts = windows().map((win) => win.querySelectorAll(".chart-period").length);
+      if (counts.join() !== "${TIMED_PERIODS.join()}") return "the windows draw " + counts.join(" and ") + " periods";
+      const rect = (at) => at.getBoundingClientRect();
+      for (const win of windows()) {
+        const zero = [...win.querySelectorAll(".chart-grid.y")].find((line) => line.getAttribute("y1") === "100%");
+        const base = (rect(zero).top + rect(zero).bottom) / 2;
+        const area = rect(win.querySelector(".chart-periods"));
+        const columns = [...win.querySelectorAll(".chart-column")].map(rect);
+        const off = columns.find((at) => Math.abs(at.bottom - base) > 1 || at.width > ${BAR_THICK} + ${RECT_SLACK} || at.left < area.left || at.right > area.right);
+        if (off !== undefined) return "a column stands at " + [off.left, off.top, off.right, off.bottom].join(" ") + " over a baseline at " + base + " in periods from " + area.left + " to " + area.right;
+        const near = columns.findIndex((at, i) => i > 0 && at.left - columns[i - 1].right < ${BAR_GAP} - ${RECT_SLACK});
+        if (near !== -1) return "two columns stand " + (columns[near].left - columns[near - 1].right) + " px apart";
+      }
+      const worn = style(document.querySelector(".chart-column")).backgroundColor;
+      return worn === computed("var(--accent)") ? "" : "a column wears " + worn;
     `,
   },
 ];

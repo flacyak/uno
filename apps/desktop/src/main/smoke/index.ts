@@ -29,6 +29,7 @@ import {
   CHART_SCATTER,
   CHART_SIGNED,
   CHART_STATES,
+  CHART_TIME,
 } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { CONNECTIONS } from "./connections.ts";
@@ -95,6 +96,7 @@ const CHECKS: Check[] = [
   ...CHART_TABLE,
   ...CHART_ALONG,
   ...CHART_PIE,
+  ...CHART_TIME,
   ...CHART_BLANK,
   ...CHART_STATES,
   ...CHART_EDITS,
