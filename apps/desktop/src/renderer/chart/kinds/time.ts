@@ -1,12 +1,14 @@
 /**
  * @fileoverview An over-time chart's kind: rows, or the sum of another column,
- * per period of a date column. Its record lands before its drawing, so its
- * window says it is not drawn yet.
+ * per period of a date column, as columns at the finest size its plot holds.
+ * Its marks, table and summary land later, and its table says so until then.
  */
 
 import type { TimePlot } from "@document";
 import { m } from "@paraglide/messages";
+import { columns, fitted } from "../columns.ts";
 import type { ChartKind } from "../kind.ts";
+import { NONE } from "../tooltip.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -42,5 +44,11 @@ export const time: ChartKind<TimePlot> = (plot) => ({
   title: () => title(plot),
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.at],
-  drawing: () => undrawn,
+  drawing: (tally, room) => {
+    if (tally.t !== "time") return undefined;
+    const summed = plot.sum !== undefined;
+    const drawn = fitted(tally.levels, summed, room);
+    if (drawn === undefined) return { ...undrawn, empty: true };
+    return { ...undrawn, draw: () => columns(drawn, summed), targets: () => NONE };
+  },
 });

@@ -14,8 +14,18 @@ import { el } from "@renderer/shell/util";
 import { axis, gutter, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
 import { lengthsOf } from "./bars.ts";
+import type { PlotRoom } from "./kind.ts";
 import { BARS_INSET, BAR_GAP, BAR_THICK } from "./rows.ts";
 import { TICK_GAP, gridline, mark, percent } from "./scatter.ts";
+
+/** The least room a period takes across, in px: a 2 px column and the dataviz skill's 2 px gap. */
+export const COLUMN_PITCH_LEAST = 4;
+
+/** The level a plot draws, and whether each of its periods has COLUMN_PITCH_LEAST px. */
+export interface Fitted {
+  level: TimeLevel;
+  fits: boolean;
+}
 
 /** lengths gives how long each period of `level` sent draws, by its sum where `summed`. */
 function lengths(level: TimeLevel, summed: boolean): number[] {
@@ -28,11 +38,31 @@ function upOf(lengths: readonly number[]): Axis {
 }
 
 /**
+ * fitted gives the finest of `levels`, finest first, whose periods each get
+ * COLUMN_PITCH_LEAST px of `room` past the y axis's labels, as chart.css lays
+ * them out, or the coarsest where none does. It is undefined of no levels.
+ */
+export function fitted(
+  levels: readonly TimeLevel[],
+  summed: boolean,
+  room: PlotRoom,
+): Fitted | undefined {
+  const fits = (level: TimeLevel): boolean => {
+    const labels = Math.ceil(gutter(upOf(lengths(level, summed))) * room.ch);
+    const across = room.width - 2 * BARS_INSET - labels - TICK_GAP;
+    return level.span * COLUMN_PITCH_LEAST <= across;
+  };
+  const level = levels.find(fits) ?? levels.at(-1);
+  return level === undefined ? undefined : { level, fits: fits(level) };
+}
+
+/**
  * columns draws `level` as columns of its rows, or of its sums where `summed`,
  * on a y axis from the least of them, or zero, to the most. A period past
- * those sent has its slot, and no column until its batch comes.
+ * those sent has its slot, and no column until its batch comes. Where the
+ * level does not `fit`, each column takes its whole slot.
  */
-export function columns(level: TimeLevel, summed: boolean): HTMLElement {
+export function columns({ level, fits }: Fitted, summed: boolean): HTMLElement {
   const box = el("div", "chart-time");
   const sent = lengths(level, summed);
   const up = upOf(sent);
@@ -61,6 +91,7 @@ export function columns(level: TimeLevel, summed: boolean): HTMLElement {
     }
     periods.append(slot);
   }
+  box.classList.toggle("crowded", !fits);
   box.style.setProperty("--zero", `${share(0)}`);
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--gutter", `${gutter(up)}ch`);

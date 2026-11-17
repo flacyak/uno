@@ -445,7 +445,8 @@
  * size, so its ch is theirs. A point at an axis's end shows whole past it. The
  * SVG paints from the whole px nearest its start, so the points start on one,
  * and a gridline lands where its label centres. */
-.chart-scatter {
+.chart-scatter,
+.chart-time {
   display: grid;
   grid-template: minmax(0, 1fr) auto / round(up, var(--gutter), 1px) minmax(0, 1fr);
   column-gap: var(--tick-gap);
@@ -486,6 +487,59 @@
   width: 100%;
   height: 100%;
   overflow: visible;
+}
+
+/* An over-time chart's plot, from columns.ts, laid out as a scatter's. With
+ * no labels under its periods, its foot keeps half its y axis's first line. */
+.chart-time {
+  --x-first: 0px;
+  --x-last: 0px;
+  padding-bottom: round(up, calc(var(--inset) + 0.5lh), 1px);
+}
+
+/* Each period's slot takes one share of the width over the gridlines. Its
+ * column, in its middle as wide as a bar is thick or its slot less the bars'
+ * gap, in whole px so every column paints alike, runs from zero up, or down
+ * under zero, square at the baseline and round at the data's end, and takes
+ * its whole slot, a px at least, where the periods have no room for gaps. */
+.chart-periods {
+  position: relative;
+  display: flex;
+}
+
+.chart-gridlines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-period {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.chart-column {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(var(--zero) * 100%);
+  width: round(down, min(var(--bar-thick), 100% - var(--bar-gap)), 1px);
+  height: calc(var(--share) * 100%);
+  margin-inline: auto;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+}
+
+.chart-period.below .chart-column {
+  top: calc((1 - var(--zero)) * 100%);
+  bottom: auto;
+  border-radius: 0 0 4px 4px;
+}
+
+.chart-time.crowded .chart-column {
+  width: max(1px, 100%);
 }
 
 /* The dialogs' divider, where --rule-2, mixed with --paper, all but meets a dark
@@ -691,6 +745,7 @@
  * and a pie's slices, its thinnest too, stand apart by the page's. */
 @media (forced-colors: active) {
   .chart-bar,
+  .chart-column,
   .chart-coverage::after {
     background: CanvasText;
     forced-color-adjust: none;

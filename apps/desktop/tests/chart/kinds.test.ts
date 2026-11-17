@@ -9,8 +9,9 @@
 import { expect, test } from "vite-plus/test";
 
 import type { Plot } from "@document";
-import type { Group, GroupsTally, SampleTally } from "@engine";
+import type { Group, GroupsTally, SampleTally, TimeTally } from "@engine";
 import { bars as drawBars } from "@renderer/chart/bars";
+import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
 import { KINDS } from "@renderer/chart/kinds/index";
@@ -18,7 +19,8 @@ import { pie } from "@renderer/chart/kinds/pie";
 import { scatter } from "@renderer/chart/kinds/scatter";
 import { time } from "@renderer/chart/kinds/time";
 import { belowZero, past, pie as drawPie } from "@renderer/chart/pie";
-import { sampled, scatter as drawScatter } from "@renderer/chart/scatter";
+import { BARS_INSET } from "@renderer/chart/rows";
+import { TICK_GAP, sampled, scatter as drawScatter } from "@renderer/chart/scatter";
 import { spanned, valued } from "@renderer/chart/summary";
 import type { Told } from "@renderer/chart/summary";
 import { grouped, points, tableOf } from "@renderer/chart/table";
@@ -168,4 +170,41 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 
 test("each plot kind has its module", () => {
   expect(KINDS).toStrictEqual({ bars, pie, scatter, time });
+});
+
+/** Rows per day of the sales export's dates, sent from days to years. */
+const DATED: Extract<Plot, { t: "time" }> = {
+  t: "time",
+  at: { col: 0, header: "date" },
+  per: "day",
+  order: "day",
+};
+const TIMES: TimeTally = {
+  t: "time",
+  plot: DATED,
+  coverage: { rows: 7, total: 7, complete: true },
+  levels: [
+    { per: "day", from: 20_635, span: 9, offset: 0, rows: [3, 0, 0, 0, 0, 0, 0, 0, 4], sum: [] },
+    { per: "week", from: 2_948, span: 2, offset: 0, rows: [3, 4], sum: [] },
+    { per: "month", from: 678, span: 1, offset: 0, rows: [7], sum: [] },
+  ],
+  undated: { rows: 0, sum: 0 },
+  dates: { blank: 0, unparsed: 0, other: 0 },
+  skipped: { blank: 0, unparsed: 0 },
+};
+
+test("an over-time chart's kind draws its tally as columns of the finest level its plot holds", () => {
+  // Room for one character of labels and the two weeks' columns, and not the nine days'.
+  const weeks = TIMES.levels[1]!.span;
+  const width = 2 * BARS_INSET + ROOM.ch + TICK_GAP + weeks * COLUMN_PITCH_LEAST;
+  const narrow = { ...ROOM, width };
+  for (const room of [ROOM, narrow]) {
+    const drawing = time(DATED).drawing(TIMES, room)!;
+    const drawn = columns(fitted(TIMES.levels, false, room)!, false);
+    expect(drawing.draw(HEIGHT).outerHTML).toBe(drawn.outerHTML);
+    expect(drawing.empty).toBe(false);
+  }
+  expect(fitted(TIMES.levels, false, narrow)?.level.per).toBe("week");
+  expect(time(DATED).drawing({ ...TIMES, levels: [] }, ROOM)?.empty).toBe(true);
+  expect(time(DATED).drawing(GROUPS, ROOM)).toBeUndefined();
 });
