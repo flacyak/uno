@@ -19,7 +19,7 @@ import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { said, say } from "@renderer/said";
 import { CHECK_TIMEOUT_MS } from "@renderer/timing";
-import type { Drawing, Drawn, Kind } from "./kind.ts";
+import type { Drawing, Drawn, Kind, PlotRoom } from "./kind.ts";
 
 /** What parts the caption's words. */
 export const SEP = " · ";
@@ -104,8 +104,8 @@ export function reading(heard: Heard | undefined): number | undefined {
 }
 
 /**
- * drawable gives the tally a window draws, as `kind` draws it: the last
- * complete one while the next is read, or else the latest as it comes. A
+ * drawable gives the tally a window draws, as `kind` draws it in `room`: the
+ * last complete one while the next is read, or else the latest as it comes. A
  * latest that says the chart cannot read its source leaves nothing to draw,
  * as no earlier tally stands for it, and neither does a tally with nothing in
  * it, or one of another kind.
@@ -113,11 +113,12 @@ export function reading(heard: Heard | undefined): number | undefined {
 export function drawable(
   heard: Heard | undefined,
   kind: Kind,
+  room: PlotRoom,
 ): { tally: Drawn; drawing: Drawing } | undefined {
   const latest = heard?.latest;
   if (latest?.t === "unread") return undefined;
   const tally = heard?.complete ?? latest;
-  const drawing = tally === undefined ? undefined : kind.drawing(tally);
+  const drawing = tally === undefined ? undefined : kind.drawing(tally, room);
   return tally === undefined || drawing === undefined || drawing.empty
     ? undefined
     : { tally, drawing };
@@ -125,13 +126,14 @@ export function drawable(
 
 /**
  * body gives what the plot says in place of a chart it cannot draw, or
- * undefined where it draws one: why the chart cannot read its column, that its
- * source is missing or waits on its bucket, with the action that mends it,
- * that it reads its source before the first tally, or that the tally has no
- * values in the plot's columns yet. A column that has gone offers Edit chart.
+ * undefined where it draws one in `room`: why the chart cannot read its
+ * column, that its source is missing or waits on its bucket, with the action
+ * that mends it, that it reads its source before the first tally, or that the
+ * tally has no values in the plot's columns yet. A column that has gone
+ * offers Edit chart.
  */
-export function body(kind: Kind, heard: Heard): Body | undefined {
-  if (drawable(heard, kind) !== undefined) return undefined;
+export function body(kind: Kind, heard: Heard, room: PlotRoom): Body | undefined {
+  if (drawable(heard, kind, room) !== undefined) return undefined;
   const { state, latest, name } = heard;
   if (latest?.t === "unread") {
     const words = say(latest.said);

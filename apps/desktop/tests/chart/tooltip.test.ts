@@ -30,7 +30,7 @@ import {
 import type { Reading, Target, Targets } from "@renderer/chart/tooltip";
 import type { Press } from "@renderer/keys";
 import { el } from "@renderer/shell/util";
-import { drawingOf, holding, kindFor } from "../charted.ts";
+import { ROOM as PLOT_ROOM, drawingOf, holding, kindFor } from "../charted.ts";
 
 const REGION = { col: 1, header: "region" };
 const REVENUE = { col: 5, header: "revenue" };
@@ -216,7 +216,7 @@ test("a kind gives a drawing's marks for its plot, and draws no tally of another
   expect(drawingOf(ROWS, groups).targets(bars(ROWS, REGIONS, TALL)).all).toHaveLength(3);
   expect(drawingOf(SHARES, groups).targets(pie(SHARES, REGIONS)).all).toHaveLength(2);
   expect(drawingOf(AGAINST, sample).targets(scatter(SALES)).all).toHaveLength(3);
-  expect(kindFor(ROWS).drawing(sample)).toBeUndefined();
+  expect(kindFor(ROWS).drawing(sample, PLOT_ROOM)).toBeUndefined();
 });
 
 /** A window's room, and a box's size, in px. */

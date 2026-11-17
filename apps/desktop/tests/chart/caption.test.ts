@@ -25,7 +25,7 @@ import type { Heard } from "@renderer/charts";
 import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { MINUTE_MS } from "@renderer/timing";
-import { BARS, SCATTER, kindFor } from "../charted.ts";
+import { BARS, ROOM, SCATTER, kindFor } from "../charted.ts";
 
 /** The sales export's rows, and how many of them a tally two fifths through has read. */
 const ROWS = 4812;
@@ -173,45 +173,51 @@ const NO_POINTS: SampleTally = {
 const DRAWN = { ...tallyOf(ROWS, ROWS), groups: [{ value: "North", rows: ROWS, sum: 0 }] };
 
 test("the plot says it reads before the first tally, why it cannot read its column, with Edit chart, and that a tally has no values yet, in the language chosen", () => {
-  expect(body(kindFor(BARS.plot), heardOf(undefined))).toStrictEqual({ words: `reading ${NAME}…` });
+  expect(body(kindFor(BARS.plot), heardOf(undefined), ROOM)).toStrictEqual({
+    words: `reading ${NAME}…`,
+  });
   const edit = { words: "Edit chart", opens: "form" };
   const gone = { words: `${NAME} has no column called region`, action: edit };
-  expect(body(kindFor(BARS.plot), heardOf(UNREAD))).toStrictEqual(gone);
-  expect(body(kindFor(BARS.plot), heardOf(tallyOf(ROWS, ROWS)))).toStrictEqual({
+  expect(body(kindFor(BARS.plot), heardOf(UNREAD), ROOM)).toStrictEqual(gone);
+  expect(body(kindFor(BARS.plot), heardOf(tallyOf(ROWS, ROWS)), ROOM)).toStrictEqual({
     words: "no values in region yet",
   });
-  expect(body(kindFor(SCATTER.plot), heardOf(NO_POINTS))).toStrictEqual({
+  expect(body(kindFor(SCATTER.plot), heardOf(NO_POINTS), ROOM)).toStrictEqual({
     words: "no values in units, revenue yet",
   });
   // The column that has gone stands against a complete tally of before it went.
-  expect(body(kindFor(BARS.plot), { ...heardOf(UNREAD), complete: DRAWN })).toStrictEqual(gone);
-  expect(body(kindFor(BARS.plot), heardOf(DRAWN))).toBeUndefined();
+  expect(body(kindFor(BARS.plot), { ...heardOf(UNREAD), complete: DRAWN }, ROOM)).toStrictEqual(
+    gone,
+  );
+  expect(body(kindFor(BARS.plot), heardOf(DRAWN), ROOM)).toBeUndefined();
   void setLocale("es", { reload: false });
-  expect(body(kindFor(BARS.plot), heardOf(undefined))).toStrictEqual({ words: `leyendo ${NAME}…` });
-  expect(body(kindFor(BARS.plot), heardOf(tallyOf(ROWS, ROWS)))).toStrictEqual({
+  expect(body(kindFor(BARS.plot), heardOf(undefined), ROOM)).toStrictEqual({
+    words: `leyendo ${NAME}…`,
+  });
+  expect(body(kindFor(BARS.plot), heardOf(tallyOf(ROWS, ROWS)), ROOM)).toStrictEqual({
     words: "aún no hay valores en region",
   });
-  expect(body(kindFor(BARS.plot), heardOf(UNREAD))?.action?.words).toBe("Editar gráfico");
+  expect(body(kindFor(BARS.plot), heardOf(UNREAD), ROOM)?.action?.words).toBe("Editar gráfico");
 });
 
 test("the plot says its source is missing or waits on its bucket, with Re-point or Connect, in the language chosen", () => {
   const missing = { ...heardOf(undefined), state: "missing" } as const;
   const waiting = { ...heardOf(undefined), state: "unconnected", bucket: "open-data" } as const;
-  expect(body(kindFor(BARS.plot), missing)).toStrictEqual({
+  expect(body(kindFor(BARS.plot), missing, ROOM)).toStrictEqual({
     words: `${NAME} is missing`,
     action: { words: "Re-point", opens: "panel" },
   });
-  expect(body(kindFor(BARS.plot), waiting)).toStrictEqual({
+  expect(body(kindFor(BARS.plot), waiting, ROOM)).toStrictEqual({
     words: "open-data is not connected",
     action: { words: "Connect open-data", opens: "panel" },
   });
   void setLocale("es", { reload: false });
   const repoint = { words: "Redirigir", opens: "panel" };
-  expect(body(kindFor(BARS.plot), missing)).toStrictEqual({
+  expect(body(kindFor(BARS.plot), missing, ROOM)).toStrictEqual({
     words: `falta ${NAME}`,
     action: repoint,
   });
-  expect(body(kindFor(BARS.plot), waiting)).toStrictEqual({
+  expect(body(kindFor(BARS.plot), waiting, ROOM)).toStrictEqual({
     words: "open-data no está conectado",
     action: { words: "Conectar open-data", opens: "panel" },
   });

@@ -51,7 +51,7 @@ import {
   trouble,
 } from "./caption.ts";
 import { kindOf } from "./kind.ts";
-import type { Drawing, Drawn, Kind, Kinds } from "./kind.ts";
+import type { Drawing, Drawn, Kind, Kinds, PlotRoom } from "./kind.ts";
 import { KINDS } from "./kinds/index.ts";
 import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
 import type { Corner, Rect, Room } from "./place.ts";
@@ -100,6 +100,12 @@ const SCROLLS = ".chart-scrolls";
  * fractional, and the sizes it adds up to are rounded, so an end can read short.
  */
 const SCROLL_END_SLACK = 1;
+
+/**
+ * How many characters the window measures a tick's character over, so the
+ * room it gives a drawing holds a fraction of a px.
+ */
+const CH_GAUGED = 10;
 
 /** The key that puts the table in the plot's place, and the plot back. */
 const TABLE_KEY = "t";
@@ -260,6 +266,8 @@ export class ChartWindow {
    * file's, and the count of the rest, each in a span of its own.
    */
   private readonly summary = el("div", "chart-summary");
+  /** A tick's characters out of sight, which the window measures a tick's character by. */
+  private readonly gauge = el("span", "chart-gauged", "0".repeat(CH_GAUGED));
   private readonly told: Record<keyof Summary, HTMLElement> = {
     said: el("span", "chart-summary-said"),
     values: el("bdi", "chart-summary-values from-file"),
@@ -318,6 +326,7 @@ export class ChartWindow {
     this.title.id = `${id}-title`;
     this.summary.id = `${id}-summary`;
     this.summary.hidden = true;
+    this.gauge.setAttribute("aria-hidden", "true");
     this.tip = new Tooltip(this.plot, this.box, `${id}-tip`);
     this.summary.append(this.told.said, " ", this.told.values, " ", this.told.more);
 
@@ -368,6 +377,7 @@ export class ChartWindow {
       this.plot,
       this.tip.box,
       this.summary,
+      this.gauge,
       this.track,
       caption,
       right,
@@ -452,10 +462,11 @@ export class ChartWindow {
    */
   private paint(): void {
     const heard = this.stage.heard(this.chart.id);
-    const drawn = drawable(heard, this.kind());
+    const room = this.plotRoom();
+    const drawn = drawable(heard, this.kind(), room);
     const latest = heard?.latest;
-    const named = this.summarise(heard);
-    if (drawn === undefined) this.fill(false, ...this.state(heard));
+    const named = this.summarise(heard, room);
+    if (drawn === undefined) this.fill(false, ...this.state(heard, room));
     else if (this.tabled) this.tabulate(drawn.tally, drawn.drawing);
     else this.draw(drawn.drawing, named);
     const after = drawn === undefined ? [] : drawn.drawing.notes();
@@ -529,10 +540,11 @@ export class ChartWindow {
   /**
    * summarise writes what the drawing says it shows, from the last complete
    * tally, so a partial never changes it, and gives the id of what names the
-   * drawing: the summary, or the head's title until a tally completes. Each
-   * paint writes it again, so a relabel and a new title reach it.
+   * drawing: the summary, or the head's title until a tally completes. Its
+   * kind reads the tally for `room`. Each paint writes it again, so a relabel
+   * and a new title reach it.
    */
-  private summarise(heard: Heard | undefined): string {
+  private summarise(heard: Heard | undefined, room: PlotRoom): string {
     const complete = heard?.complete;
     const told =
       heard === undefined || complete === undefined
@@ -541,7 +553,7 @@ export class ChartWindow {
             this.named(),
             heard.name,
             complete.coverage.rows,
-            this.kind().drawing(complete)?.told(),
+            this.kind().drawing(complete, room)?.told(),
           );
     for (const part of ["said", "values", "more"] as const) {
       this.told[part].textContent = told?.[part] ?? "";
@@ -552,6 +564,12 @@ export class ChartWindow {
   /** named gives what the head calls the chart: the person's title, or the one its plot makes. */
   private named(): string {
     return this.chart.title === "" ? this.kind().title() : this.chart.title;
+  }
+
+  /** plotRoom measures the room the plot gives a drawing. */
+  private plotRoom(): PlotRoom {
+    const ch = this.gauge.getBoundingClientRect().width / CH_GAUGED;
+    return { width: this.plot.clientWidth, ch };
   }
 
   /** kind gives what the chart's plot does that depends on its kind. */
@@ -604,11 +622,12 @@ export class ChartWindow {
   }
 
   /**
-   * state gives what the plot shows in place of a chart it cannot draw, with
-   * the button of any action that mends it, or nothing for one that has gone.
+   * state gives what the plot shows in place of a chart it cannot draw in
+   * `room`, with the button of any action that mends it, or nothing for one
+   * that has gone.
    */
-  private state(heard: Heard | undefined): HTMLElement[] {
-    const said = heard === undefined ? undefined : body(this.kind(), heard);
+  private state(heard: Heard | undefined, room: PlotRoom): HTMLElement[] {
+    const said = heard === undefined ? undefined : body(this.kind(), heard, room);
     if (said === undefined) return [];
     const box = el("div", "chart-state");
     box.append(el("bdi", "", said.words));

@@ -12,6 +12,15 @@ import type { Targets } from "./tooltip.ts";
 /** A tally a chart can draw: any but why its source could not be read. */
 export type Drawn = Exclude<Tally, { t: "unread" }>;
 
+/**
+ * The room a plot gives its drawing, as the window measures it: its width,
+ * and a tick's character, which a mono label takes its length in. Both in px.
+ */
+export interface PlotRoom {
+  readonly width: number;
+  readonly ch: number;
+}
+
 /** What a window draws of one tally, as its chart's kind reads it. */
 export interface Drawing {
   /** Whether the tally holds nothing to draw. */
@@ -38,8 +47,11 @@ export interface Kind {
   readonly numbered: readonly ChartColumn[];
   /** The columns its values come from, which the plot names before any. */
   readonly valued: readonly ChartColumn[];
-  /** drawing reads `tally` for the plot, or is undefined of another kind's. */
-  drawing(tally: Drawn): Drawing | undefined;
+  /**
+   * drawing reads `tally` for the plot, to draw in `room`, or is undefined of
+   * another kind's.
+   */
+  drawing(tally: Drawn, room: PlotRoom): Drawing | undefined;
 }
 
 /** A kind of chart, as what it does with each plot of it. */

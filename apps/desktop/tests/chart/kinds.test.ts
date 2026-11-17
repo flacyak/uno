@@ -26,7 +26,7 @@ import { barTargets, pointTargets, sliceTargets } from "@renderer/chart/tooltip"
 import type { Targets } from "@renderer/chart/tooltip";
 import { madeTitle } from "@renderer/chart/window";
 import { el } from "@renderer/shell/util";
-import { SCATTER } from "../charted.ts";
+import { ROOM, SCATTER } from "../charted.ts";
 
 /** The file the summaries name. */
 /** The plot's height a bar chart draws at, in CSS px. */
@@ -100,7 +100,7 @@ function made<P extends Plot>(
   const of = kind(plot);
   expect(of.title()).toBe(parts.title);
   expect(madeTitle(plot)).toBe(parts.title);
-  const drawing = of.drawing(tally)!;
+  const drawing = of.drawing(tally, ROOM)!;
   const drawn = drawing.draw(HEIGHT);
   expect(drawn.outerHTML).toBe(parts.draw().outerHTML);
   expect(marks(drawing.targets(drawn).all)).toStrictEqual(marks(parts.targets(drawn).all));
@@ -129,8 +129,8 @@ test("a bar chart's kind makes the title, the drawing and its marks, the table a
     const drawing = made(bars, plot, GROUPS, groupedParts(plot, title, draw, targets));
     expect(drawing.empty).toBe(false);
     expect(drawing.notes()).toStrictEqual([]);
-    expect(bars(plot).drawing(EMPTY)?.empty).toBe(true);
-    expect(bars(plot).drawing(SAMPLE)).toBeUndefined();
+    expect(bars(plot).drawing(EMPTY, ROOM)?.empty).toBe(true);
+    expect(bars(plot).drawing(SAMPLE, ROOM)).toBeUndefined();
   }
   expect(bars(SUMS).numbered).toStrictEqual([SUMS.sum]);
   expect(bars(SUMS).valued).toStrictEqual([REGION]);
@@ -145,7 +145,7 @@ test("a pie's kind makes what a pie made, and says how it counts the values past
     const targets = (drawn: HTMLElement) => sliceTargets(plot, GROUPS, drawn);
     const drawing = made(pie, plot, GROUPS, groupedParts(plot, title, draw, targets));
     expect(drawing.notes()).toStrictEqual([past(plot, GROUPS), belowZero(plot, GROUPS)]);
-    expect(pie(plot).drawing(SAMPLE)).toBeUndefined();
+    expect(pie(plot).drawing(SAMPLE, ROOM)).toBeUndefined();
   }
   expect(pie(SHARES_OF_SUM).numbered).toStrictEqual([REVENUE]);
 });
@@ -161,8 +161,8 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
     told: spanned(plot, SAMPLE),
   });
   expect(drawing.notes()).toStrictEqual([sampled(SAMPLE)]);
-  expect(scatter(plot).drawing({ ...SAMPLE, plotted: 0 })?.empty).toBe(true);
-  expect(scatter(plot).drawing(GROUPS)).toBeUndefined();
+  expect(scatter(plot).drawing({ ...SAMPLE, plotted: 0 }, ROOM)?.empty).toBe(true);
+  expect(scatter(plot).drawing(GROUPS, ROOM)).toBeUndefined();
   expect(scatter(plot).numbered).toStrictEqual([plot.x, plot.y]);
 });
 

@@ -417,10 +417,19 @@
   left: auto;
 }
 
+/* The characters window.ts measures a tick's character by, written as a tick
+ * is, out of sight and out of the window's flow. */
+.chart-gauged {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* An axis's tick, from axes.ts: in the caption's ink, which reads at 4.5:1 on
  * every ground, its digits in columns, on one line. The window is mono, so the
  * gutter axes.ts gives in ch holds the widest at this size. */
-.chart-tick {
+.chart-tick,
+.chart-gauged {
   color: var(--ink-3);
   font-size: 11px;
   font-variant-numeric: tabular-nums;

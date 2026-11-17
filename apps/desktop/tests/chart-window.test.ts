@@ -12,7 +12,7 @@ import type { Chart, Plot } from "@document";
 import type { GroupsTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
-import type { ChartKind } from "@renderer/chart/kind";
+import type { ChartKind, PlotRoom } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { undrawn } from "@renderer/chart/kinds/undrawn";
@@ -20,7 +20,7 @@ import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import { NO_CORNER } from "@renderer/chart/place";
 import type { Stage } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
-import { BARS, SHORT_ROWS, holding, summaryFor } from "./charted.ts";
+import { BARS, ROOM, SHORT_ROWS, holding, summaryFor } from "./charted.ts";
 import { frame } from "./smoke/dom-page.ts";
 
 /** The columns the made titles below name. */
@@ -229,6 +229,7 @@ test("the head, the track and the caption are drawn, with a grip that says nothi
     "chart-plot",
     "chart-tip",
     "chart-summary",
+    "chart-gauged",
     "chart-coverage",
     "chart-caption",
     "chart-edge chart-edge-right",
@@ -346,6 +347,33 @@ test("a kind this build reads and does not draw yet opens a window that says so,
   press(made.box, "t");
   await frame();
   expect(plot.textContent).toBe("this chart is not drawn yet");
+});
+
+test("a window's kind reads its tally for the plot's width and a tick's character, as the window measures them", async () => {
+  const rooms: PlotRoom[] = [];
+  const measured: ChartKind<Extract<Plot, { t: "bars" }>> = (plot) => ({
+    ...bars(plot),
+    drawing: (tally, room) => {
+      rooms.push(room);
+      return bars(plot).drawing(tally, room);
+    },
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+    function (this: HTMLElement) {
+      return this.classList.contains("chart-plot") ? ROOM.width : 0;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      const across = this.textContent.length * ROOM.ch;
+      return new DOMRect(0, 0, this.classList.contains("chart-gauged") ? across : 0, 0);
+    },
+  );
+  const read = tallyOf(["North"], true);
+  hearing(() => heardOf(read, read), BARS, {}, { ...KINDS, bars: measured });
+  await frame();
+  expect(rooms.length).toBeGreaterThan(0);
+  expect(rooms.every((room) => room.width === ROOM.width && room.ch === ROOM.ch)).toBe(true);
 });
 
 test("the drawing is an image named by the head until a tally completes, then by what the chart says it shows, which a partial never changes", async () => {
