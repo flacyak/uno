@@ -58,7 +58,7 @@ function share(axis: Axis, value: number): number {
 }
 
 /** percent writes `share` of the plot as SVG takes it. */
-function percent(share: number): string {
+export function percent(share: number): string {
   return `${share * 100}%`;
 }
 
@@ -73,7 +73,13 @@ function scales(axis: Axis): boolean {
 }
 
 /** gridline gives a line across the plot from `x1`, `y1` to `x2`, `y2`. */
-function gridline(cls: string, x1: string, y1: string, x2: string, y2: string): SVGLineElement {
+export function gridline(
+  cls: string,
+  x1: string,
+  y1: string,
+  x2: string,
+  y2: string,
+): SVGLineElement {
   const line = mark("line", `chart-grid ${cls}`);
   for (const [name, at] of Object.entries({ x1, y1, x2, y2 })) line.setAttribute(name, at);
   return line;

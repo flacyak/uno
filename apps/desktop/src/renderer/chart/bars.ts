@@ -55,19 +55,8 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
     size: measure(g),
     tip: num(measure(g)),
   }));
-  // A sum past the largest double reads as infinite, and draws as long as the
-  // longest finite bar on its own side, so the scale stays the finite sums'.
-  // Where its side has none it takes the other side's longest, and any length
-  // where no sum is finite.
-  const finite = drawn.map(({ size }) => size).filter(Number.isFinite);
-  const length = (size: number): number => {
-    if (Number.isFinite(size)) return size;
-    const own = longest(finite.filter((other) => Math.sign(other) === Math.sign(size)));
-    const reach = own > 0 ? own : longest(finite);
-    return Math.sign(size) * (reach > 0 ? reach : ANY_LENGTH);
-  };
   // Every bar starts at zero, on one scale from the least length to the largest.
-  const lengths = drawn.map(({ size }) => length(size));
+  const lengths = lengthsOf(drawn.map(({ size }) => size));
   const low = Math.min(0, ...lengths);
   const span = Math.max(0, ...lengths) - low;
 
@@ -79,15 +68,32 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
   box.style.setProperty("--zero", `${span === 0 ? 0 : -low / span}`);
   box.style.setProperty("--room-above", room(drawn.filter(({ size }) => size >= 0)));
   box.style.setProperty("--room-below", room(drawn.filter(({ size }) => size < 0)));
-  for (const { label, size, tip } of drawn) {
+  for (const [i, { label, size, tip }] of drawn.entries()) {
     const track = el("div", "chart-bar-track");
     track.classList.toggle("below", size < 0);
-    track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(length(size)) / span}`);
+    track.style.setProperty("--share", `${span === 0 ? 0 : Math.abs(lengths[i]!) / span}`);
     track.append(el("div", "chart-bar"), el("span", "chart-bar-tip", tip));
     box.append(row(label, track));
   }
   box.append(...lines);
   return box;
+}
+
+/**
+ * lengthsOf gives how long each of `sizes` draws from zero. A sum past the
+ * largest double reads as infinite, and draws as long as the longest finite
+ * size on its own side, so the scale stays the finite sizes'. Where its side
+ * has none it takes the other side's longest, and any length where no size is
+ * finite.
+ */
+export function lengthsOf(sizes: readonly number[]): number[] {
+  const finite = sizes.filter(Number.isFinite);
+  return sizes.map((size) => {
+    if (Number.isFinite(size)) return size;
+    const own = longest(finite.filter((other) => Math.sign(other) === Math.sign(size)));
+    const reach = own > 0 ? own : longest(finite);
+    return Math.sign(size) * (reach > 0 ? reach : ANY_LENGTH);
+  });
 }
 
 /** The longest of `sizes` from zero, or 0 where there are none. */
