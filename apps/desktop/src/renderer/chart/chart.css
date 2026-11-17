@@ -156,12 +156,18 @@
   cursor: default;
 }
 
+/* A title shows its columns' names as the file writes them, as the grid's
+ * header row does: in their own case, at the font's own spacing. It clips
+ * only across, for its ellipsis, so an underscore, which stands below the
+ * font's descent, shows. */
 .chart-title {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
+  overflow: clip visible;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 /* As far from the window's edge as from the head's top and from its 1 px rule. */

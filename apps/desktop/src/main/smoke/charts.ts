@@ -750,7 +750,7 @@ export const CHARTS: Check[] = [
       title.textContent = said;
       if (left !== stood) return "the × moved from " + stood + " to " + left;
       if (runs <= shows) return "the title wraps, running " + runs + "px in " + shows + "px";
-      return style(title).overflowX === "hidden" && style(title).textOverflow === "ellipsis" ? "" : "the title shows no ellipsis";
+      return style(title).overflowX === "clip" && style(title).textOverflow === "ellipsis" ? "" : "the title shows no ellipsis";
     `,
   },
   {
@@ -1314,6 +1314,19 @@ export const CHART_TIME: Check[] = [
       find().click();
       const cell = () => text("#status-cell");
       return (await until(() => cell() === "${MISREAD_FIRST}")) ? "" : "the grid stands on " + cell();
+    `,
+  },
+  {
+    name: "a chart's head and the status line show a column's name as the grid's header row does, Ad_Date with its case and its underscore",
+    script: `
+      const title = document.querySelector(".chart .chart-title");
+      if (!title.innerText.includes("Ad_Date")) return "the head shows " + title.innerText;
+      // An underscore stands below the font's descent, so a box that holds a name clips it only across.
+      for (const box of [title, document.querySelector("#status-cell .col")]) {
+        const clips = getComputedStyle(box).overflowY;
+        if (clips !== "visible") return box.className + " clips " + clips + " down";
+      }
+      return "";
     `,
   },
   {
