@@ -29,6 +29,7 @@
  * source was last checked, once a read ends.
  */
 
+import type { Order } from "@date";
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
@@ -49,6 +50,7 @@ import {
   every,
   notDates,
   notNumbers,
+  otherOrder,
   reading,
   trouble,
 } from "./caption.ts";
@@ -157,6 +159,8 @@ export interface Stage {
   notNumbers(source: string, columns: readonly ChartColumn[]): void;
   /** Shows `source`, and finds the first cell of `dated` that its chart could not read as a date. */
   notDates(source: string, dated: Dated): void;
+  /** Reads chart `id`'s dates in `order` from now on, folding them again. */
+  reorder(id: string, order: Order): void;
   /** Opens the chart form on chart `id`, hung at `place`, with the keys on its field `on`. */
   edit(id: string, place: MenuPlace, on?: "refresh"): void;
   /** Asks for chart `id`'s periods at `per` from `offset`, and draws its window again once they come. */
@@ -303,6 +307,12 @@ export class ChartWindow {
   });
   /** What stands between the caption's words and that count. */
   private readonly dotDates = el("span", "chart-said-dot");
+  /** The caption's button that reads the chart's dates in the order its cells need, and what it reads them in. */
+  private readonly reorder = button("chart-find-dates", "", () => {
+    if (this.order !== undefined) this.stage.reorder(this.chart.id, this.order);
+  });
+  private order: Order | undefined;
+  private readonly dotOrder = el("span", "chart-said-dot");
   /** The head's button that reads the chart's source again. */
   private readonly again = button("chart-head-button chart-refresh", "", () => this.refresh());
   /** The head's button that puts the table in the plot's place, pressed in while it stands there. */
@@ -368,7 +378,17 @@ export class ChartWindow {
     // The buttons show once a tally counts cells that were not numbers, or not dates.
     this.find.hidden = true;
     this.findDates.hidden = true;
-    this.said.append(this.before, this.dotDates, this.findDates, this.dot, this.find, this.after);
+    this.reorder.hidden = true;
+    this.said.append(
+      this.before,
+      this.dotDates,
+      this.findDates,
+      this.dot,
+      this.find,
+      this.after,
+      this.dotOrder,
+      this.reorder,
+    );
     this.checking.append(this.schedule, this.afterSchedule);
     caption.append(this.said, this.checking, grip);
 
@@ -488,7 +508,11 @@ export class ChartWindow {
       this.stage.batch(this.chart.id, per, offset);
     }
     const after = drawn === undefined ? [] : drawn.drawing.notes();
-    this.say([coverage(latest), blank(latest)], notDates(latest), notNumbers(latest), after);
+    const other = otherOrder(latest, this.kind().dated?.reading);
+    this.order = other?.order;
+    const said = [...after, other?.said ?? ""];
+    this.say([coverage(latest), blank(latest)], notDates(latest), notNumbers(latest), said);
+    this.offer(other?.button ?? "");
     const why = cannotRead(heard);
     this.again.disabled = why !== undefined;
     this.again.title = why ?? "";
@@ -648,6 +672,19 @@ export class ChartWindow {
     const any = lead !== "" || dates !== "" || count !== "";
     this.after.textContent = trail !== "" && any ? SEP + trail : trail;
     this.said.title = this.said.textContent;
+  }
+
+  /**
+   * offer shows the button that reads the chart's dates in the order its
+   * cells need, after the caption's words, or hides it, and gives the keys it
+   * held to the window.
+   */
+  private offer(words: string): void {
+    if (words === "" && document.activeElement === this.reorder)
+      this.box.focus({ preventScroll: true });
+    this.reorder.hidden = words === "";
+    this.reorder.textContent = words;
+    this.dotOrder.textContent = words === "" ? "" : SEP;
   }
 
   /**

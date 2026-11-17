@@ -20,6 +20,7 @@ import {
   every,
   notDates,
   notNumbers,
+  otherOrder,
   trouble,
 } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
@@ -159,6 +160,27 @@ test("the caption counts the date cells an over-time chart could not read, one o
   }
   expect(notDates(undated(0))).toBe("");
   expect(notDates(leftOut(0, LEFT_OUT))).toBe("");
+});
+
+test("where some dates read only in the other order, the caption says how many and offers that order, in the language chosen", async () => {
+  // One date reads in no order, so the count of those that read day first says more than "not dates".
+  const misread = {
+    ...undated(LEFT_OUT + 1),
+    dates: { blank: 0, unparsed: LEFT_OUT + 1, other: LEFT_OUT },
+  };
+  const all = { ...misread, dates: { blank: 0, unparsed: LEFT_OUT, other: LEFT_OUT } };
+  expect(otherOrder(misread, "month")).toStrictEqual({
+    order: "day",
+    said: "1,200 read only day first",
+    button: "read day first",
+  });
+  expect(otherOrder(misread, "day")?.order).toBe("month");
+  expect(otherOrder(all, "month")?.said).toBe("");
+  expect(otherOrder(misread, "s")).toBeUndefined();
+  expect(otherOrder(undated(LEFT_OUT), "month")).toBeUndefined();
+  await setLocale("pt-BR", { reload: false });
+  expect(otherOrder(misread, "month")?.said).toBe("1.200 só se leem dia primeiro");
+  await setLocale(baseLocale, { reload: false });
 });
 
 /** What each language says of one cell that was not a number, and of LEFT_OUT. */

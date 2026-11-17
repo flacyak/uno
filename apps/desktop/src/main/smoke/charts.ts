@@ -1292,6 +1292,16 @@ export const CHART_TIME: Check[] = [
       return (await until(() => cell() === "${MISREAD_FIRST}")) ? "" : "the grid stands on " + cell();
     `,
   },
+  {
+    name: "where those dates read only day first, the caption offers to read them so after its counts",
+    shot: "chart-time-reorder",
+    script: `
+      const said = document.querySelector(".chart-said").textContent;
+      // Every date it could not read reads day first, so the count says how many, and the button what.
+      const offer = "${m.chart_not_dates({ count: MISREAD_DATES })} · ${m.chart_read_order({ order: m.chart_order_day() })}";
+      return said.endsWith(offer) ? "" : "the caption says " + said;
+    `,
+  },
 ];
 
 /** Checks after CHART_PIE, as they open a workspace of bars with a blank value in place of that one. */

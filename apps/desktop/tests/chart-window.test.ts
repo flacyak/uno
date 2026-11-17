@@ -9,7 +9,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, Plot } from "@document";
-import type { GroupsTally } from "@engine";
+import type { GroupsTally, TimeTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
 import type { ChartKind, PlotRoom } from "@renderer/chart/kind";
@@ -66,6 +66,7 @@ const NO_LAYER: Stage = {
   repoint: () => undefined,
   notNumbers: () => undefined,
   notDates: () => undefined,
+  reorder: () => undefined,
   edit: () => undefined,
   refresh: () => undefined,
   batch: () => undefined,
@@ -391,6 +392,35 @@ test("a drawing that lacks periods its tally has not sent asks the stage for the
   hearing(() => heardOf(read, read), BARS, { batch }, { ...KINDS, bars: wanting });
   await frame();
   expect(batch).toHaveBeenCalledWith(BARS.id, "month", 1_024);
+});
+
+test("an over-time chart's caption offers the order its dates read only in, and its button asks the stage for it", async () => {
+  const at = { col: 0, header: "date" };
+  const plot: Plot = { t: "time", at, per: "auto", order: "month" };
+  const tally: TimeTally = {
+    t: "time",
+    plot,
+    coverage: { rows: 3, total: 3, complete: true },
+    levels: [{ per: "day", from: 0, span: 1, offset: 0, rows: [1], sum: [] }],
+    undated: { rows: 2, sum: 0 },
+    dates: { blank: 0, unparsed: 2, other: 2 },
+    skipped: { blank: 0, unparsed: 0 },
+  };
+  const reorder = vi.fn();
+  const timed = { ...BARS, plot };
+  const made = hearing(
+    () => ({ state: "fine", name: NAME, latest: tally, complete: tally }),
+    timed,
+    { reorder },
+  );
+  await frame();
+  const said = made.box.querySelector(".chart-said")!.textContent;
+  expect(said.startsWith("3 rows · 2 not dates · ")).toBe(true);
+  expect(said.endsWith(" · read day first")).toBe(true);
+  expect(said).not.toContain("read only");
+  const buttons = [...made.box.querySelectorAll<HTMLButtonElement>(".chart-find-dates")];
+  buttons.at(-1)!.click();
+  expect(reorder).toHaveBeenCalledExactlyOnceWith(timed.id, "day");
 });
 
 test("the drawing is an image named by the head until a tally completes, then by what the chart says it shows, which a partial never changes", async () => {

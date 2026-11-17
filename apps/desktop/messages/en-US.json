@@ -494,6 +494,8 @@
   "chart_form_reads": "{value}: {month} {day}",
   "chart_order_day": "day first",
   "chart_order_month": "month first",
+  "chart_read_only": "{count} read only {order}",
+  "chart_read_order": "read {order}",
   "kind_unix_s": "Unix seconds",
   "kind_unix_ms": "Unix milliseconds",
   "chart_form_x": "x",

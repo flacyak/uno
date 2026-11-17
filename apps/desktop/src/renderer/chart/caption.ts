@@ -19,6 +19,7 @@ import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { said, say } from "@renderer/said";
 import { CHECK_TIMEOUT_MS } from "@renderer/timing";
+import type { Order, UnixUnit } from "@date";
 import type { Drawing, Drawn, Kind, PlotRoom } from "./kind.ts";
 
 /** What parts the caption's words. */
@@ -89,6 +90,32 @@ export function notNumbers(latest: Tally | undefined): string {
 export function notDates(latest: Tally | undefined): string {
   const left = latest?.t === "time" ? latest.dates.unparsed : 0;
   return left > 0 ? m.chart_not_dates({ count: left }) : "";
+}
+
+/** The words for each order a date written year last reads in. */
+const ORDER_WORDS: Readonly<Record<Order, () => string>> = {
+  day: m.chart_order_day,
+  month: m.chart_order_month,
+};
+
+/**
+ * otherOrder gives the order an over-time chart read in `reading` could read
+ * its date cells in where `latest` found some that read only so, with what
+ * the caption says of them where they are not all it could not read, and its
+ * button's words, or else nothing.
+ */
+export function otherOrder(
+  latest: Tally | undefined,
+  reading: Order | UnixUnit | undefined,
+): { order: Order; said: string; button: string } | undefined {
+  if (latest?.t !== "time" || latest.dates.other === 0) return undefined;
+  if (reading !== "day" && reading !== "month") return undefined;
+  const { other, unparsed } = latest.dates;
+  const order = reading === "day" ? "month" : "day";
+  const words = ORDER_WORDS[order]();
+  // Where every date not read reads the other way, the count of them says it.
+  const said = other === unparsed ? "" : m.chart_read_only({ count: num(other), order: words });
+  return { order, said, button: m.chart_read_order({ order: words }) };
 }
 
 /**

@@ -144,6 +144,7 @@ const repoint = vi.fn();
 /** What the layer calls to find the cells a window's tally could not read as numbers. */
 const notNumbers = vi.fn();
 const notDates = vi.fn();
+const reorder = vi.fn();
 
 /** What the layer calls to open the chart form on a window's chart. */
 const edit = vi.fn();
@@ -180,6 +181,7 @@ const asks = {
   repoint,
   notNumbers,
   notDates,
+  reorder,
   edit,
   refresh,
   remove,

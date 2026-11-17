@@ -17,6 +17,7 @@
 
 import "./chart.css";
 
+import type { Order } from "@date";
 import type { Chart, ChartColumn, ChartPlace } from "@document";
 import { m } from "@paraglide/messages";
 import type { Charts, Heard } from "@renderer/charts";
@@ -40,6 +41,7 @@ export type Asks = Pick<
   | "repoint"
   | "notNumbers"
   | "notDates"
+  | "reorder"
   | "edit"
   | "refresh"
   | "remove"
@@ -242,6 +244,11 @@ export class ChartLayer implements Stage {
   /** notDates shows `source`, and finds the cells of `dated` its chart could not read as dates. */
   notDates(source: string, dated: Dated): void {
     this.asks.notDates(source, dated);
+  }
+
+  /** reorder reads chart `id`'s dates in `order` from now on. */
+  reorder(id: string, order: Order): void {
+    this.asks.reorder(id, order);
   }
 
   /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */

@@ -10,6 +10,7 @@
  */
 
 import { BY_HAND, isWorkspace } from "@document";
+import type { Order } from "@date";
 import type { Chart, ChartColumn } from "@document";
 import { Engine, messagePort } from "@engine";
 import type { MessagePortLike, Offer, Reply, Request, SourceRef } from "@engine";
@@ -655,6 +656,21 @@ export class Shell {
   }
 
   /**
+   * reorder reads over-time chart `id`'s dates in `order`, as its caption offers
+   * where cells read only so: a change to save, and a fold of its source again.
+   */
+  private async reorder(id: string, order: Order): Promise<void> {
+    const w = this.workspace;
+    const plot = w?.charts.all.find((c) => c.id === id)?.plot;
+    if (w === undefined || plot?.t !== "time" || !("order" in plot)) return;
+    try {
+      await this.drawn(w.charts.change(id, { plot: { ...plot, order } }));
+    } catch (err) {
+      if (this.workspace === w) this.say(message(err), true);
+    }
+  }
+
+  /**
    * told waits on what the chart form sent through `w`, and says a refusal on
    * the status line once the form that sent it has closed, as its note is gone.
    */
@@ -1011,6 +1027,7 @@ export class Shell {
           repoint: (source) => this.withTab(source, (tab) => this.repoint(tab)),
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
+          reorder: (id, order) => void this.reorder(id, order),
           notDates: (source, dated) =>
             this.withTab(source, (tab) => {
               this.select(tab);

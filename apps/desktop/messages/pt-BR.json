@@ -510,6 +510,8 @@
   "chart_form_reads": "{value}: {day} {month}",
   "chart_order_day": "dia primeiro",
   "chart_order_month": "mês primeiro",
+  "chart_read_only": "{count} só se leem {order}",
+  "chart_read_order": "ler {order}",
   "kind_unix_s": "segundos Unix",
   "kind_unix_ms": "milissegundos Unix",
   "chart_form_x": "x",
