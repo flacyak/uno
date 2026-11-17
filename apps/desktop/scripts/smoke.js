@@ -386,6 +386,33 @@ await writeFile(
   }),
 );
 
+// A workspace of rows over the second export's Ad_Date read month first. It
+// writes 551 of its dates day first past the 12th, which month first cannot
+// read, the first in its second row.
+const misread = join(scratch, "sent", "misread.uno");
+const monthFirst = { t: "time", at: { col: 9, header: "Ad_Date" }, per: "auto", order: "month" };
+await writeFile(
+  misread,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [adsSource],
+    active: adsSource.id,
+    log: [],
+    charts: [
+      {
+        id: "c1",
+        source: adsSource.id,
+        plot: monthFirst,
+        title: "",
+        refresh: 0,
+        place: { ...chartSize, x: 1, y: 1 },
+      },
+    ],
+    extra: new Map(),
+    at: misread,
+  }),
+);
+
 // A workspace of three charts over what a chart cannot read: a source in a
 // bucket no connection covers, one whose file is not there, and a column the
 // second export has not. The first two sources have no rows behind them.
@@ -570,6 +597,7 @@ const { code, out } = await drive("smoke", {
     UNO_SMOKE_PIES: pies,
     UNO_SMOKE_TIMED: timed,
     UNO_SMOKE_PLACED: placed,
+    UNO_SMOKE_MISREAD: misread,
     UNO_SMOKE_STATES: states,
     UNO_SMOKE_BLANKS: blanks,
     UNO_SMOKE_SCHEDULED: scheduled,

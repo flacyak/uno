@@ -106,6 +106,13 @@ const TIMED_SAID = [
 const PLACED = process.env["UNO_SMOKE_PLACED"] ?? "";
 const PLACED_YEARS = 7_976;
 const PLACED_ROWS = 4;
+
+/** The one it wrote of the second export's Ad_Date read month first, and its dates that read so not. */
+const MISREAD = process.env["UNO_SMOKE_MISREAD"] ?? "";
+const MISREAD_ROWS = 2600;
+const MISREAD_DATES = 551;
+/** Where the first of them is, as the status line says it. */
+const MISREAD_FIRST = "Ad_Date · row 2";
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
 
 /**
@@ -1268,6 +1275,21 @@ export const CHART_TIME: Check[] = [
       const said = document.querySelector(".chart-said").textContent;
       const words = "${m.rows_count({ count: PLACED_ROWS })} · ${m.chart_time_crowded({ per: m.chart_per_year() })}";
       return said === words ? "" : "the caption says " + said;
+    `,
+  },
+  {
+    name: "an over-time chart's caption counts the dates it could not read with its order, a button that finds the first",
+    send: ["menu:open-path", MISREAD],
+    shot: "chart-time-misread",
+    script: `
+      const find = () => document.querySelector(".chart .chart-find-dates");
+      const words = "${m.chart_not_dates({ count: MISREAD_DATES })}";
+      if (!(await arrives(() => find()?.textContent === words))) return "the caption says " + document.querySelector(".chart-said")?.textContent;
+      const said = document.querySelector(".chart-said").textContent;
+      if (!said.startsWith("${m.rows_count({ count: MISREAD_ROWS })} · " + words)) return "the caption says " + said;
+      find().click();
+      const cell = () => text("#status-cell");
+      return (await until(() => cell() === "${MISREAD_FIRST}")) ? "" : "the grid stands on " + cell();
     `,
   },
 ];

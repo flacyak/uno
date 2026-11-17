@@ -47,6 +47,7 @@ import {
   coverage,
   drawable,
   every,
+  notDates,
   notNumbers,
   reading,
   trouble,
@@ -295,6 +296,13 @@ export class ChartWindow {
   private readonly find = button("chart-find", "", () =>
     this.stage.notNumbers(this.chart.source, this.kind().numbered),
   );
+  /** The caption's count of the date cells its chart could not read, which finds them. */
+  private readonly findDates = button("chart-find-dates", "", () => {
+    const { dated } = this.kind();
+    if (dated !== undefined) this.stage.notDates(this.chart.source, dated);
+  });
+  /** What stands between the caption's words and that count. */
+  private readonly dotDates = el("span", "chart-said-dot");
   /** The head's button that reads the chart's source again. */
   private readonly again = button("chart-head-button chart-refresh", "", () => this.refresh());
   /** The head's button that puts the table in the plot's place, pressed in while it stands there. */
@@ -357,9 +365,10 @@ export class ChartWindow {
     grip.innerHTML = GRIP;
     grip.setAttribute("aria-hidden", "true");
     grip.addEventListener("pointerdown", (e) => this.take(e, grip, stretched));
-    // The button shows once a tally counts cells that were not numbers.
+    // The buttons show once a tally counts cells that were not numbers, or not dates.
     this.find.hidden = true;
-    this.said.append(this.before, this.dot, this.find, this.after);
+    this.findDates.hidden = true;
+    this.said.append(this.before, this.dotDates, this.findDates, this.dot, this.find, this.after);
     this.checking.append(this.schedule, this.afterSchedule);
     caption.append(this.said, this.checking, grip);
 
@@ -479,7 +488,7 @@ export class ChartWindow {
       this.stage.batch(this.chart.id, per, offset);
     }
     const after = drawn === undefined ? [] : drawn.drawing.notes();
-    this.say([coverage(latest), blank(latest)], notNumbers(latest), after);
+    this.say([coverage(latest), blank(latest)], notDates(latest), notNumbers(latest), after);
     const why = cannotRead(heard);
     this.again.disabled = why !== undefined;
     this.again.title = why ?? "";
@@ -609,24 +618,35 @@ export class ChartWindow {
   }
 
   /**
-   * say writes the caption: the words `before` the button, `count`, the cells
-   * that were not numbers, as the button, and the words `after` it, those that
-   * say something, with · between them, and the whole in its title, as a
-   * narrow window cuts them. The button is the one element whichever words
-   * stand around it, so a repaint never takes the keys from it; a count of
-   * none hides it, and gives the keys it held to the window.
+   * say writes the caption: the words `before` the buttons, `dates`, the date
+   * cells its chart could not read, and `count`, the cells that were not
+   * numbers, as buttons, and the words `after` them, those that say
+   * something, with · between them, and the whole in its title, as a narrow
+   * window cuts them. Each button is one element whichever words stand around
+   * it, so a repaint never takes the keys from it; a count of none hides it,
+   * and gives the keys it held to the window.
    */
-  private say(before: readonly string[], count: string, after: readonly string[]): void {
+  private say(
+    before: readonly string[],
+    dates: string,
+    count: string,
+    after: readonly string[],
+  ): void {
     const lead = before.filter((part) => part !== "").join(SEP);
     const trail = after.filter((part) => part !== "").join(SEP);
-    if (count === "" && document.activeElement === this.find) {
-      this.box.focus({ preventScroll: true });
+    for (const [found, words] of [
+      [this.findDates, dates],
+      [this.find, count],
+    ] as const) {
+      if (words === "" && document.activeElement === found) this.box.focus({ preventScroll: true });
+      found.hidden = words === "";
+      found.textContent = words;
     }
-    this.find.hidden = count === "";
-    this.find.textContent = count;
     this.before.textContent = lead;
-    this.dot.textContent = lead !== "" && count !== "" ? SEP : "";
-    this.after.textContent = trail !== "" && (lead !== "" || count !== "") ? SEP + trail : trail;
+    this.dotDates.textContent = lead !== "" && dates !== "" ? SEP : "";
+    this.dot.textContent = (lead !== "" || dates !== "") && count !== "" ? SEP : "";
+    const any = lead !== "" || dates !== "" || count !== "";
+    this.after.textContent = trail !== "" && any ? SEP + trail : trail;
     this.said.title = this.said.textContent;
   }
 

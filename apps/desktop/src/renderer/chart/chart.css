@@ -930,6 +930,7 @@
 
 .chart-said-dot,
 .chart-find,
+.chart-find-dates,
 .chart-every {
   flex: none;
 }
@@ -971,6 +972,7 @@
  * does. The schedule is a button the same way, which opens the chart form on
  * it. */
 .chart-find,
+.chart-find-dates,
 .chart-every {
   position: relative;
   z-index: 1;
@@ -985,6 +987,7 @@
 }
 
 .chart-find:hover,
+.chart-find-dates:hover,
 .chart-every:hover {
   color: var(--ink);
   background: var(--surface);
@@ -992,6 +995,7 @@
 }
 
 .chart-find:focus-visible,
+.chart-find-dates:focus-visible,
 .chart-every:focus-visible {
   outline: none;
   border-color: var(--accent);

@@ -590,6 +590,17 @@
       }
     }
   ],
+  "chart_not_dates": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} não é data",
+        "plural=many": "{n} não são datas",
+        "plural=other": "{n} não são datas"
+      }
+    }
+  ],
   "chart_summary": "{title} em {name}, {rows}.",
   "chart_summary_more": "e mais {count}.",
   "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",

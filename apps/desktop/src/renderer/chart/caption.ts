@@ -85,6 +85,12 @@ export function notNumbers(latest: Tally | undefined): string {
   return left > 0 ? m.chart_not_numbers({ count: left }) : "";
 }
 
+/** notDates gives what the caption says of the date cells a tally could not read, or nothing. */
+export function notDates(latest: Tally | undefined): string {
+  const left = latest?.t === "time" ? latest.dates.unparsed : 0;
+  return left > 0 ? m.chart_not_dates({ count: left }) : "";
+}
+
 /**
  * reading gives how far a chart has read its source, from 0 to 1, while it
  * reads: nothing of it before the first tally, or of a source being read

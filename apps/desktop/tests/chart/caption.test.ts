@@ -9,7 +9,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
-import type { GroupsTally, SampleTally, Tally } from "@engine";
+import type { GroupsTally, SampleTally, Tally, TimeTally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
 import {
@@ -18,6 +18,7 @@ import {
   checked,
   coverage,
   every,
+  notDates,
   notNumbers,
   trouble,
 } from "@renderer/chart/caption";
@@ -128,6 +129,36 @@ test("the caption counts the cells a tally left out as blank, in the language ch
   }
   expect(blank(undefined)).toBe("");
   expect(blank(UNREAD)).toBe("");
+});
+
+/** What each language says of one date cell a chart could not read, and of LEFT_OUT. */
+const NOT_DATES: ReadonlyArray<[Locale, string, string]> = [
+  ["en-US", "1 not a date", "1,200 not dates"],
+  ["en-GB", "1 not a date", "1,200 not dates"],
+  ["es", "1 no es fecha", "1200 no son fechas"],
+  ["pt-BR", "1 não é data", "1.200 não são datas"],
+  ["pt-PT", "1 não é data", "1200 não são datas"],
+];
+
+/** An over-time chart's tally that could not read `unparsed` of its date cells. */
+const undated = (unparsed: number): TimeTally => ({
+  t: "time",
+  plot: { t: "time", at: { col: 0, header: "date" }, per: "auto", order: "month" },
+  coverage: { rows: LEFT_OUT, total: LEFT_OUT, complete: true },
+  levels: [],
+  undated: { rows: unparsed, sum: 0 },
+  dates: { blank: 0, unparsed, other: 0 },
+  skipped: { blank: 0, unparsed: 0 },
+});
+
+test("the caption counts the date cells an over-time chart could not read, one or more, in the language chosen", () => {
+  for (const [locale, one, more] of NOT_DATES) {
+    void setLocale(locale, { reload: false });
+    expect(notDates(undated(1)), locale).toBe(one);
+    expect(notDates(undated(LEFT_OUT)), locale).toBe(more);
+  }
+  expect(notDates(undated(0))).toBe("");
+  expect(notDates(leftOut(0, LEFT_OUT))).toBe("");
 });
 
 /** What each language says of one cell that was not a number, and of LEFT_OUT. */

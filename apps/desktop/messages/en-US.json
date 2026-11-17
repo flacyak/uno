@@ -571,6 +571,16 @@
       }
     }
   ],
+  "chart_not_dates": [
+    {
+      "declarations": ["input count", "local plural = count: plural", "local n = count: number"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "{n} not a date",
+        "plural=other": "{n} not dates"
+      }
+    }
+  ],
   "chart_summary": "{title} in {name}, {rows}.",
   "chart_summary_more": "and {count} more.",
   "chart_summary_points": "{points}, {x} from {xLeast} to {xMost} and {y} from {yLeast} to {yMost}.",
