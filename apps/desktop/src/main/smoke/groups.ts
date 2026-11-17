@@ -22,6 +22,49 @@ export interface Group {
   needs?: readonly string[];
 }
 
+/** The group that waits on the clock for a scheduled chart's minute. */
+export const SCHEDULE = "chart-schedule";
+
+/**
+ * Every group, in order. Each check picks up the window where the one before
+ * left it, and a group that starts afresh opens a workspace of its own. The
+ * checks themselves are in index.ts, under these names.
+ */
+export const GROUPS: readonly Group[] = [
+  { name: "open", starts: true },
+  { name: "default-input" },
+  { name: "vim-style" },
+  { name: "sources" },
+  { name: "panel" },
+  { name: "status" },
+  { name: "connections" },
+  { name: "settings" },
+  { name: "meets" },
+  { name: "refresh" },
+  { name: "multi" },
+  { name: "sidebar" },
+  { name: "chart-form" },
+  { name: "again" },
+  { name: "charts", starts: true },
+  { name: "chart-keys" },
+  { name: "chart-aside" },
+  { name: "chart-moves" },
+  { name: "chart-wheel" },
+  { name: "chart-tip" },
+  { name: "chart-signed", starts: true },
+  { name: "chart-scatter", starts: true },
+  { name: "chart-table" },
+  { name: "chart-along", starts: true },
+  { name: "chart-pie", starts: true },
+  { name: "chart-blank", starts: true },
+  { name: "chart-states", starts: true },
+  { name: "chart-edits" },
+  // It reopens the workspace sources saved, with the object as refresh left
+  // it in the stand-in, over the charts chart-edits left.
+  { name: "chart-refresh", needs: ["refresh"] },
+  { name: "chart-schedule", starts: true },
+];
+
 /**
  * selected gives the groups a run drives, in order: every group when `only`
  * is unset or empty, otherwise each group it names and the groups that one

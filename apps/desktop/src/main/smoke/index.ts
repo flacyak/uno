@@ -32,8 +32,7 @@ import {
   CHART_STATES,
 } from "./charts.ts";
 import type { Check } from "./check.ts";
-import { ONLY_VARIABLE, selected } from "./groups.ts";
-import type { Group } from "./groups.ts";
+import { GROUPS, ONLY_VARIABLE, selected } from "./groups.ts";
 import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
@@ -68,45 +67,39 @@ import { VIM_STYLE } from "./vim-style.ts";
 const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
 
-/**
- * Every group, in order. Each check picks up the window where the one before
- * left it, and a group that starts afresh opens a workspace of its own. See
- * groups.ts for what UNO_SMOKE_ONLY picks from these.
- */
-const GROUPS: (Group & { checks: Check[] })[] = [
-  { name: "open", checks: OPEN, starts: true },
-  { name: "default-input", checks: DEFAULT_INPUT },
-  { name: "vim-style", checks: VIM_STYLE },
-  { name: "sources", checks: SOURCES },
-  { name: "panel", checks: PANEL },
-  { name: "status", checks: STATUS },
-  { name: "connections", checks: CONNECTIONS },
-  { name: "settings", checks: SETTINGS },
-  { name: "meets", checks: MEETS },
-  { name: "refresh", checks: REFRESH },
-  { name: "multi", checks: MULTI },
-  { name: "sidebar", checks: SIDEBAR },
-  { name: "chart-form", checks: CHART_FORM },
-  { name: "again", checks: AGAIN },
-  { name: "charts", checks: CHARTS, starts: true },
-  { name: "chart-keys", checks: CHART_KEYS },
-  { name: "chart-aside", checks: CHART_ASIDE },
-  { name: "chart-moves", checks: CHART_MOVES },
-  { name: "chart-wheel", checks: CHART_WHEEL },
-  { name: "chart-tip", checks: CHART_TIP },
-  { name: "chart-signed", checks: CHART_SIGNED, starts: true },
-  { name: "chart-scatter", checks: CHART_SCATTER, starts: true },
-  { name: "chart-table", checks: CHART_TABLE },
-  { name: "chart-along", checks: CHART_ALONG, starts: true },
-  { name: "chart-pie", checks: CHART_PIE, starts: true },
-  { name: "chart-blank", checks: CHART_BLANK, starts: true },
-  { name: "chart-states", checks: CHART_STATES, starts: true },
-  { name: "chart-edits", checks: CHART_EDITS },
-  // It reopens the workspace sources saved, with the object as refresh left
-  // it in the stand-in, over the charts chart-edits left.
-  { name: "chart-refresh", checks: CHART_REFRESH, needs: ["refresh"] },
-  { name: "chart-schedule", checks: CHART_SCHEDULE, starts: true },
-];
+/** Each group's checks, under its name in groups.ts. */
+const CHECKS: Record<string, Check[]> = {
+  open: OPEN,
+  "default-input": DEFAULT_INPUT,
+  "vim-style": VIM_STYLE,
+  sources: SOURCES,
+  panel: PANEL,
+  status: STATUS,
+  connections: CONNECTIONS,
+  settings: SETTINGS,
+  meets: MEETS,
+  refresh: REFRESH,
+  multi: MULTI,
+  sidebar: SIDEBAR,
+  "chart-form": CHART_FORM,
+  again: AGAIN,
+  charts: CHARTS,
+  "chart-keys": CHART_KEYS,
+  "chart-aside": CHART_ASIDE,
+  "chart-moves": CHART_MOVES,
+  "chart-wheel": CHART_WHEEL,
+  "chart-tip": CHART_TIP,
+  "chart-signed": CHART_SIGNED,
+  "chart-scatter": CHART_SCATTER,
+  "chart-table": CHART_TABLE,
+  "chart-along": CHART_ALONG,
+  "chart-pie": CHART_PIE,
+  "chart-blank": CHART_BLANK,
+  "chart-states": CHART_STATES,
+  "chart-edits": CHART_EDITS,
+  "chart-refresh": CHART_REFRESH,
+  "chart-schedule": CHART_SCHEDULE,
+};
 
 /**
  * What a check written as a string can call. The check's body runs in a block
@@ -370,7 +363,11 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   const { width: fullWidth, height } = win.getBounds();
 
   const timed: CheckTiming[] = [];
-  const groups = selected(GROUPS, process.env[ONLY_VARIABLE]);
+  const groups = selected(GROUPS, process.env[ONLY_VARIABLE]).map(({ name }) => {
+    const checks = CHECKS[name];
+    if (checks === undefined) throw new Error(`the smoke group ${name} has no checks`);
+    return { name, checks };
+  });
   console.log(`smoke: ${groups.length} of ${GROUPS.length} groups`);
   for (const { name: group, checks } of groups)
     for (const check of checks) {

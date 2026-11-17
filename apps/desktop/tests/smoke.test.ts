@@ -163,7 +163,7 @@ test("smoke opens the app directory, not the main bundle, and on fixtures that e
   // __dirname in the bundle point at out/main and the preload resolve beside
   // it.
   expect(src).toMatch(
-    /args:\s*\[pkg,\s*`--user-data-dir=\$\{data\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
+    /args:\s*\[pkg,\s*`--user-data-dir=\$\{dataDir\}`,\s*DRIVEN_LANGUAGE_SWITCH,\s*fixture\]/,
   );
   expect(read("launch.js")).toMatch(/spawn\(electron,\s*args/);
   for (const fixture of ["sales-q3.csv", "google-ads-sales.csv"]) {
@@ -188,8 +188,10 @@ test("a hung app is killed by pid, on a deadline", () => {
   const src = read("launch.js");
   expect(src).toMatch(/setTimeout/);
   expect(src).toMatch(/process\.kill\(child\.pid, "SIGKILL"\)/);
-  for (const name of ["smoke.js", "preview.js"])
-    expect(read(name), name).toMatch(/deadlineMs:\s*\d/);
+  expect(read("preview.js")).toMatch(/deadlineMs:\s*\d/);
+  // The smoke drives two unos, each given its deadline where it is started.
+  expect(read("smoke.js")).toMatch(/deadlineMs,/);
+  expect(read("smoke.js").match(/run\([^)]*, 60_000 \+/g)).toHaveLength(2);
 });
 
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {
