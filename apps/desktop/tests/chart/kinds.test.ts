@@ -16,6 +16,7 @@ import { bars } from "@renderer/chart/kinds/bars";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
 import { scatter } from "@renderer/chart/kinds/scatter";
+import { time } from "@renderer/chart/kinds/time";
 import { belowZero, past, pie as drawPie } from "@renderer/chart/pie";
 import { sampled, scatter as drawScatter } from "@renderer/chart/scatter";
 import { spanned, valued } from "@renderer/chart/summary";
@@ -166,5 +167,5 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter });
+  expect(KINDS).toStrictEqual({ bars, pie, scatter, time });
 });

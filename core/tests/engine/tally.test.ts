@@ -115,6 +115,27 @@ const UNITS_REVENUE: Chart = {
   plot: { t: 'scatter', x: column(UNITS), y: column(REVENUE) },
 };
 
+/** The fixture's dates: rows per month, and revenue per week, read day first. */
+const DATES = 0;
+const PER_MONTH: Chart = {
+  ...REGION_ROWS,
+  id: 'c4',
+  plot: { t: 'time', at: column(DATES), per: 'month', order: 'day' },
+};
+const REVENUE_WEEKLY: Chart = {
+  ...REGION_ROWS,
+  id: 'c5',
+  plot: {
+    t: 'time',
+    at: column(DATES),
+    sum: column(REVENUE),
+    per: 'week',
+    order: 'day',
+  },
+};
+/** A date in the fixture's span that no row of it holds. */
+const LATER = '2026-12-25';
+
 /** pure folds the first `rows` of `sheet` for `plot`, as its complete tally. */
 function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   const cell = (row: number, at: { col: number }) => sheet.display(row, at.col);
@@ -453,6 +474,49 @@ test("a scatter's folder keeps the key a save names it by, saves nothing an edit
   expect(folder.tally(plot, WHOLE)).toStrictEqual(pure(plot, sheet));
 });
 
+test('an over-time chart folded a block at a time reads as the pure fold of its dates, and a change of size alone keeps its fold', () => {
+  const tallies = folded([PER_MONTH, REVENUE_WEEKLY]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [PER_MONTH.id, pure(PER_MONTH.plot)],
+    [REVENUE_WEEKLY.id, pure(REVENUE_WEEKLY.plot)],
+  ]);
+  const daily: Chart = {
+    ...PER_MONTH,
+    plot: { t: 'time', at: column(DATES), per: 'day', order: 'day' },
+  };
+  tallies.attach(daily, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [daily.id, pure(daily.plot)],
+  ]);
+  const plot = {
+    t: 'time',
+    at: column(DATES),
+    per: 'day',
+    order: 'month',
+  } as const;
+  tallies.attach({ ...PER_MONTH, plot }, HEADERS);
+  expect(tallies.from()).toBe(0);
+});
+
+test('an edit to a date moves an over-time chart by its one row, and a save keeps the fold, which reads back with no pass', async () => {
+  const tallies = folded([REVENUE_WEEKLY]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, DATES, LATER);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[REVENUE_WEEKLY.id, pure(REVENUE_WEEKLY.plot, sheet)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(REVENUE_WEEKLY, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
 test("a chart's column is found where it was, or by its header where the file moved it, and one the file has not names itself", () => {
   const tallies = new Tallies();
   expect(tallies.attach(REGION_ROWS, HEADERS)).toBeUndefined();
@@ -647,7 +711,7 @@ test('a scatter whose block cannot be read again is the one told its source coul
 test('each chart of a .uno hears its fold of every row, as the pure fold reads it', async () => {
   const { engine, done } = connect(TINY);
   try {
-    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE, PER_MONTH];
     const heard = new Heard(await opened(engine, charts));
     const lasts = charts.map((chart) => heard.of(chart.id));
     for (const [i, chart] of charts.entries()) {
