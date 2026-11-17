@@ -10,12 +10,36 @@ import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
+/** The sizes an over-time chart draws per. */
+type Per = Exclude<TimePlot["per"], "auto">;
+
+/** What each size is called in a made title, in the app's language. */
+export const PER_WORDS: Readonly<Record<Per, () => string>> = {
+  hour: m.chart_per_hour,
+  day: m.chart_per_day,
+  week: m.chart_per_week,
+  month: m.chart_per_month,
+  quarter: m.chart_per_quarter,
+  year: m.chart_per_year,
+};
+
+/** title gives the title an over-time plot makes, per its size or over its span. */
+function title({ at, sum, per }: TimePlot): string {
+  const dates = named(at);
+  if (per === "auto") {
+    return sum === undefined
+      ? m.chart_title_time_rows_over({ at: dates })
+      : m.chart_title_time_sum_over({ at: dates, sum: named(sum) });
+  }
+  const size = PER_WORDS[per]();
+  return sum === undefined
+    ? m.chart_title_time_rows({ at: dates, per: size })
+    : m.chart_title_time_sum({ at: dates, per: size, sum: named(sum) });
+}
+
 /** time is what a window does with an over-time chart's plot. */
 export const time: ChartKind<TimePlot> = (plot) => ({
-  title: () =>
-    plot.sum === undefined
-      ? m.chart_title_rows({ by: named(plot.at) })
-      : m.chart_title_sum({ by: named(plot.at), sum: named(plot.sum) }),
+  title: () => title(plot),
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.at],
   drawing: () => undrawn,

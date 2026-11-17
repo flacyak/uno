@@ -28,6 +28,7 @@ const REGION = { col: 1, header: "region" };
 const UNITS = { col: 4, header: "units" };
 const REVENUE = { col: 5, header: "revenue" };
 const BLANK = { col: 2, header: "" };
+const DATE = { col: 0, header: "order_date" };
 
 /** The plots whose made title starts with a message, not a header. */
 const WORDED: Plot[] = [
@@ -35,6 +36,8 @@ const WORDED: Plot[] = [
   { t: "bars", by: REGION, sum: REVENUE },
   { t: "pie", by: REGION },
   { t: "pie", by: REGION, sum: REVENUE },
+  { t: "time", at: DATE, per: "month", order: "day" },
+  { t: "time", at: DATE, sum: REVENUE, per: "auto", unit: "s" },
 ];
 
 /** A text whose first letter is lower case, past any marks a pseudo-locale puts before it. */
@@ -111,6 +114,26 @@ test.each<[string, string, Plot]>([
   ["revenue against units", "revenue frente a units", { t: "scatter", x: UNITS, y: REVENUE }],
   ["rows per column 3", "filas por columna 3", { t: "bars", by: BLANK }],
   ["column 3 against units", "columna 3 frente a units", { t: "scatter", x: UNITS, y: BLANK }],
+  [
+    "rows per month of order_date",
+    "filas por mes de order_date",
+    { t: "time", at: DATE, per: "month", order: "day" },
+  ],
+  [
+    "sum of revenue per quarter of order_date",
+    "suma de revenue por trimestre de order_date",
+    { t: "time", at: DATE, sum: REVENUE, per: "quarter", order: "month" },
+  ],
+  [
+    "rows over order_date",
+    "filas a lo largo de order_date",
+    { t: "time", at: DATE, per: "auto", unit: "ms" },
+  ],
+  [
+    "sum of revenue over order_date",
+    "suma de revenue a lo largo de order_date",
+    { t: "time", at: DATE, sum: REVENUE, per: "auto", order: "day" },
+  ],
 ])("a plot makes the title %s in the app's language, from its columns", (en, es, plot) => {
   expect(madeTitle(plot)).toBe(en);
   void setLocale("es", { reload: false });
