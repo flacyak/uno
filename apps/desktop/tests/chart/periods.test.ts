@@ -9,7 +9,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { EPOCH_YEAR, daysFromCivil } from "@date";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
-import { label, larger } from "@renderer/chart/periods";
+import { fullName, label, larger } from "@renderer/chart/periods";
 import { sundayOf } from "@tally";
 import type { Per } from "@tally";
 
@@ -127,4 +127,33 @@ test("a period before 1970, and one in year 1, are labelled from their civil dat
 
 test("a label holds no narrow space, which no mono font draws a character wide", () => {
   expect(label("hour", KEYS.hour, false)).not.toMatch(/\u202f/u);
+});
+
+test("the tooltip names each size's period in full, in the app's language", async () => {
+  const NAMES: Record<"en-US" | "es", Record<Per, string>> = {
+    "en-US": {
+      hour: "March 4, 2024, 2:00 PM to 3:00 PM",
+      day: "Monday, March 4, 2024",
+      week: "week of March 3, 2024",
+      month: "March 2024",
+      quarter: "Q1 2024",
+      year: "2024",
+    },
+    es: {
+      hour: "4 de marzo de 2024, de 14:00 a 15:00",
+      day: "lunes, 4 de marzo de 2024",
+      week: "semana del 3 de marzo de 2024",
+      month: "marzo de 2024",
+      quarter: "T1 2024",
+      year: "2024",
+    },
+  };
+  for (const [locale, names] of Object.entries(NAMES) as Array<
+    ["en-US" | "es", Record<Per, string>]
+  >) {
+    await setLocale(locale, { reload: false });
+    for (const [per, name] of Object.entries(names) as Array<[Per, string]>) {
+      expect([per, spaced(fullName(per, KEYS[per]))]).toStrictEqual([per, name]);
+    }
+  }
 });

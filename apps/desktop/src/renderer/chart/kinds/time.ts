@@ -9,7 +9,7 @@ import { m } from "@paraglide/messages";
 import { columns, fitted } from "../columns.ts";
 import type { Fitted } from "../columns.ts";
 import type { ChartKind } from "../kind.ts";
-import { NONE } from "../tooltip.ts";
+import { periodTargets } from "../tooltip.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -66,7 +66,7 @@ export const time: ChartKind<TimePlot> = (plot) => ({
     return {
       ...undrawn,
       draw: () => columns(drawn, summed, room),
-      targets: () => NONE,
+      targets: (box) => periodTargets(drawn.level, summed, box),
       notes: () => [narrowed(plot, drawn)],
       wanted: () => (rows.length < span ? [{ per, offset: rows.length }] : []),
     };

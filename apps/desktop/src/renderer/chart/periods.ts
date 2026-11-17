@@ -98,3 +98,25 @@ export function label(per: Per, key: number, carried: boolean): string {
   // ICU's narrow space before PM is no mono character: a no-break one is a ch.
   return format(`${per} ${carried}`, options).format(dated(per, key)).replace(NARROW, NO_BREAK);
 }
+
+/** What a period's full name writes, for each size but the quarter's, which is a message. */
+const NAMES: Readonly<Record<"day" | "month" | "year", Intl.DateTimeFormatOptions>> = {
+  day: { dateStyle: "full" },
+  month: { year: "numeric", month: "long" },
+  year: YEARS,
+};
+const LONG: Intl.DateTimeFormatOptions = { dateStyle: "long" };
+
+/**
+ * fullName gives a period's full name, as the tooltip says it: "Monday, 4 March
+ * 2024", "week of 3 March 2024", "4 March 2024, 14:00 to 15:00", "Q1 2024".
+ */
+export function fullName(per: Per, key: number): string {
+  const write = (name: string, options: Intl.DateTimeFormatOptions, at: number): string =>
+    format(name, options).format(dated(per, at)).replace(NARROW, NO_BREAK);
+  if (per === "quarter") return label(per, key, true);
+  if (per === "week") return m.chart_period_week({ day: write("long", LONG, key) });
+  if (per !== "hour") return write(`${per} name`, NAMES[per], key);
+  const hour = (at: number): string => write("hour false", FORMATS.hour[0], at);
+  return m.chart_period_hour({ day: write("long", LONG, key), from: hour(key), to: hour(key + 1) });
+}

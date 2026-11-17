@@ -21,6 +21,8 @@ import { columnLabel, unnamed } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { EDGE } from "@renderer/shell/menu";
 import { el } from "@renderer/shell/util";
+import type { TimeLevel } from "@tally";
+import { fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
 import type { Room } from "./place.ts";
 
@@ -227,6 +229,28 @@ export function pointTargets(plot: Scatter, sample: Sample, box: HTMLElement): T
     return near;
   };
   return { all, under };
+}
+
+/**
+ * periodTargets gives the targets of `box`, as columns drew `level`: each
+ * period's slot, zeros included, in time order, worth its rows, or its sum
+ * and its rows where `summed`, named in full. The box stands by its column.
+ */
+export function periodTargets(level: TimeLevel, summed: boolean, box: HTMLElement): Targets {
+  const slots = [...box.querySelectorAll(".chart-period")].filter(
+    (slot) => slot.firstChild !== null,
+  );
+  const all = slots.map((slot, i) => {
+    const said = (): Reading[] => {
+      const name = el("span", "", fullName(level.per, level.from + i));
+      const rows = { value: num(level.rows[i]!), label: el("span", "", m.chart_table_rows()) };
+      return summed
+        ? [{ value: num(level.sum[i]!), label: name }, rows]
+        : [{ ...rows, label: name }];
+    };
+    return { mark: slot, at: slot.firstElementChild!, front: false, key: ACCENT, said };
+  });
+  return { all, under: among(all, ".chart-period") };
 }
 
 /** A point in the page, or in the window's own px. */

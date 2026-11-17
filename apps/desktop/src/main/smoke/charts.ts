@@ -80,6 +80,16 @@ const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
  */
 const TIMED = process.env["UNO_SMOKE_TIMED"] ?? "";
 const TIMED_PERIODS = [DATED_DAYS, DATED_WEEKS];
+/** A press of End, with the keys on the plot a click gave them. */
+const END_KEY: readonly Input[] = [
+  { type: "keyDown", keyCode: "End" },
+  { type: "keyUp", keyCode: "End" },
+];
+/** The day window's third period, and the names of its first, third and last. */
+const TIMED_DAY_3 = ".chart .chart-period:nth-child(4)";
+const TIMED_FIRST = "Wednesday, July 1, 2026";
+const TIMED_THIRD = "Friday, July 3, 2026";
+const TIMED_LAST = "Tuesday, September 29, 2026";
 /** What their captions say: the second draws weeks for want of room for days. */
 const TIMED_SAID = [
   m.rows_count({ count: ROWS }),
@@ -1192,6 +1202,33 @@ export const CHART_TIME: Check[] = [
       if (worn !== computed("var(--accent)")) return "a column wears " + worn;
       const said = windows().map((win) => win.querySelector(".chart-said").textContent);
       return said.join(" | ") === ${JSON.stringify(TIMED_SAID.join(" | "))} ? "" : "the captions say " + said.join(" | ");
+    `,
+  },
+  {
+    name: "the pointer on a period of an over-time chart names it in full with its rows, and its column darkens over a wash of its slot",
+    click: { selector: TIMED_DAY_3 },
+    shot: "chart-time-tip",
+    script: `
+      ${CHROME}
+      const win = document.querySelector(".chart");
+      const slot = win.querySelectorAll(".chart-period")[2];
+      const said = () => win.querySelector(".chart-tip-words").textContent;
+      if (!(await until(() => slot.classList.contains("cursor")))) return "the third day wears no cursor";
+      if (!said().endsWith(" ${TIMED_THIRD}")) return "the box says " + said();
+      const column = style(slot.querySelector(".chart-column")).backgroundColor;
+      if (column !== computed("color-mix(in srgb, var(--accent) 80%, var(--ink))")) return "the column is " + column;
+      return style(slot).backgroundColor === computed("var(--accent-b)") ? "" : "the slot is " + style(slot).backgroundColor;
+    `,
+  },
+  {
+    name: "End and Home step an over-time chart's cursor to its last period and its first",
+    input: { events: END_KEY, through: true },
+    script: `
+      const win = document.querySelector(".chart");
+      const said = () => win.querySelector(".chart-tip-words").textContent;
+      if (!(await until(() => said().endsWith(" ${TIMED_LAST}")))) return "after End the box says " + said();
+      win.querySelector(".chart-plot").dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+      return (await until(() => said().endsWith(" ${TIMED_FIRST}"))) ? "" : "after Home the box says " + said();
     `,
   },
   {

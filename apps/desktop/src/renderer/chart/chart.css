@@ -673,15 +673,25 @@
 }
 
 /* The mark the cursor is on, from tooltip.ts. A bar moves a fifth of the way
- * from the accent to the ink, over a wash of the accent across its row, a
- * slice the same from its own colour, and a point the same in full, ringed in
- * the page's ground, as tooltip.ts brings it in front of the points after it. */
+ * from the accent to the ink, over a wash of the accent across its row, as a
+ * column does over its period's slot, a slice the same from its own colour,
+ * and a point the same in full, ringed in the page's ground, as tooltip.ts
+ * brings it in front of the points after it. */
 .chart-bar-row.cursor {
   border-radius: 4px;
   background: var(--accent-b);
 }
 
 .chart-bar-row.cursor .chart-bar {
+  background: color-mix(in srgb, var(--accent) 80%, var(--ink));
+}
+
+.chart-period.cursor {
+  border-radius: 4px;
+  background: var(--accent-b);
+}
+
+.chart-period.cursor .chart-column {
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
@@ -772,7 +782,8 @@
     visibility: visible;
   }
 
-  .chart-bar-row.cursor .chart-bar {
+  .chart-bar-row.cursor .chart-bar,
+  .chart-period.cursor .chart-column {
     background: Highlight;
   }
 

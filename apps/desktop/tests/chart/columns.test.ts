@@ -13,6 +13,8 @@ import type { TimeLevel } from "@tally";
 import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { Fitted } from "@renderer/chart/columns";
 import { BARS_INSET } from "@renderer/chart/rows";
+import { periodTargets } from "@renderer/chart/tooltip";
+import type { Targets } from "@renderer/chart/tooltip";
 import { TICK_GAP } from "@renderer/chart/scatter";
 import { ROOM } from "../charted.ts";
 
@@ -144,4 +146,18 @@ test("the periods are labelled under their columns, each centred on its column's
     "0.875",
   ]);
   expect(ticks[0]!.style.getPropertyValue("--wide")).toBe("11ch");
+});
+
+test("the keys and the pointer step through every period, a zero too, each named in full with its rows, or its sum and rows", () => {
+  const counted = periodTargets(DAYS, false, columns(drawn(DAYS), false, ROOM));
+  const said = (targets: Targets, i: number): string[] =>
+    targets.all[i]!.said().map(({ value, label }) => `${value} ${label.textContent}`);
+  expect(counted.all).toHaveLength(DAYS.span);
+  expect(said(counted, 2)).toStrictEqual(["0 Tuesday, March 5, 2024"]);
+  const box = columns(drawn(DAYS), true, ROOM);
+  const summed = periodTargets(DAYS, true, box);
+  expect(said(summed, 1)).toStrictEqual(["-50 Monday, March 4, 2024", "4 rows"]);
+  const slot = box.querySelectorAll(".chart-period")[3]!;
+  expect(summed.under(slot, 0, 0)).toBe(3);
+  expect(summed.all[3]!.at).toBe(slot.querySelector(".chart-column"));
 });
