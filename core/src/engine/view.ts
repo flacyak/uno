@@ -57,6 +57,7 @@ import type {
 } from './protocol.ts';
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
+import type { Per, TimeLevel } from '@tally';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
 import { decodeBlocks, encodeBlocks } from './saved.ts';
@@ -879,6 +880,11 @@ export class View {
     this.tallies.detach(id);
     this.held?.delete(heldTally(id));
     this.tally();
+  }
+
+  /** batch is the chart with `id`'s batch at `per` from `offset`, if any. */
+  batch(id: string, per: Per, offset: number): TimeLevel | undefined {
+    return this.tallies.batch(id, per, offset);
   }
 
   /**

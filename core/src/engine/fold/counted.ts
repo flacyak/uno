@@ -18,7 +18,10 @@ export interface Counting {
 }
 
 /** What a counted folder is that depends on its fold's kind. */
-export type Kind = Pick<Folder, 'key' | 'again' | 'restored' | 'tally'>;
+export type Kind = Pick<
+  Folder,
+  'key' | 'again' | 'restored' | 'tally' | 'batch'
+>;
 
 /**
  * counted is the folder of `fold`, over rows by `by`, summing `sum` where it

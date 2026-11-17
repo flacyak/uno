@@ -37,7 +37,7 @@ import { NO_ROW, Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { blobProvider, multiProvider } from '@store';
 import { diskProvider } from '@store/node';
-import { GroupsFold, SampleFold, TimeFold } from '@tally';
+import { GroupsFold, LEVEL_BATCH, SampleFold, TimeFold } from '@tally';
 import {
   CHANNEL,
   COLS,
@@ -717,6 +717,26 @@ test('each chart of a .uno hears its fold of every row, as the pure fold reads i
     for (const [i, chart] of charts.entries()) {
       expect(await lasts[i]).toStrictEqual(pure(chart.plot));
     }
+  } finally {
+    done();
+  }
+});
+
+test("an over-time chart's later batches come by size and offset, as its fold holds them, and a chart with none or no chart answers so", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const charts = [REGION_ROWS, PER_MONTH];
+    const heard = new Heard(await opened(engine, charts));
+    await Promise.all(charts.map((chart) => heard.of(chart.id)));
+    const fold = new TimeFold('day');
+    for (let r = 0; r < ROWS; r++) fold.add(sales.display(r, DATES));
+    const later = await engine.batch(PER_MONTH.id, 'hour', LEVEL_BATCH);
+    expect(later).toStrictEqual(fold.batch('hour', LEVEL_BATCH));
+    expect(later?.offset).toBe(LEVEL_BATCH);
+    const past = later!.span;
+    expect(await engine.batch(PER_MONTH.id, 'hour', past)).toBeUndefined();
+    expect(await engine.batch(REGION_ROWS.id, 'day', 0)).toBeUndefined();
+    await expect(engine.batch('c9', 'day', 0)).rejects.toThrow('c9');
   } finally {
     done();
   }

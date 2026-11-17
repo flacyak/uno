@@ -17,7 +17,7 @@ import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
-import type { Groups, Sample, Times } from '@tally';
+import type { Groups, Per, Sample, TimeLevel, Times } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -417,6 +417,8 @@ export type Request =
   | { t: 'chart'; id: number; chart: Chart }
   /** Remove a chart from the workspace, named by its id. */
   | { t: 'unchart'; id: number; chart: string }
+  /** A later batch of an over-time chart's periods at `per`, from `offset`. */
+  | { t: 'batch'; id: number; chart: string; per: Per; offset: number }
   /** Write the workspace as a .uno. Refused if carried sources total more than limit bytes. */
   | { t: 'save'; id: number; place: Place; limit: number }
   | { t: 'close' };
@@ -459,6 +461,8 @@ export type Reply =
     }
   | { t: 'charted'; id: number }
   | { t: 'uncharted'; id: number }
+  /** None where the chart holds no such batch now. */
+  | { t: 'batched'; id: number; batch?: TimeLevel }
   | { t: 'saved'; id: number; bytes: Uint8Array }
   /** Unnumbered, a failure of an index or a pass behind a source. */
   | { t: 'error'; id?: number; source?: string; said: Said };

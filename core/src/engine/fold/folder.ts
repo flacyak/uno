@@ -5,6 +5,7 @@
 
 import type { ChartColumn, Plot } from '@document';
 import type { Mark } from '@num';
+import type { Per, TimeLevel } from '@tally';
 import type { Coverage, Tally } from '../protocol.ts';
 
 /**
@@ -47,6 +48,8 @@ export interface Folder {
   saved(): object | undefined;
   /** tally is what it holds, as the chart of `plot` hears it. */
   tally(plot: Plot, coverage: Coverage): Tally;
+  /** batch is a later batch of its periods at `per` from `offset`, if any. */
+  batch?(per: Per, offset: number): TimeLevel | undefined;
   /** mend folds again, alone, each block an edit left it inexact over. */
   mend(read: (block: number) => Promise<Block>): Promise<void>;
 }

@@ -33,6 +33,7 @@ import type { Said } from '@said';
 import type { Connection } from '@library';
 import type { Entry, Listing, SingleRef } from '@store';
 import type { Tried } from '@store/s3';
+import type { Per, TimeLevel } from '@tally';
 
 interface Waiter<T> {
   resolve(value: T): void;
@@ -187,6 +188,25 @@ export class Engine {
   /** unchart removes a chart from the workspace, named by its id. */
   async unchart(chart: string): Promise<void> {
     await this.ask('uncharted', (id) => ({ t: 'unchart', id, chart }));
+  }
+
+  /**
+   * batch is the batch of chart `chart`'s periods at `per` from `offset`, as
+   * its fold holds them now, or undefined where it holds none there.
+   */
+  async batch(
+    chart: string,
+    per: Per,
+    offset: number,
+  ): Promise<TimeLevel | undefined> {
+    const ask = (id: number) => ({
+      t: 'batch' as const,
+      id,
+      chart,
+      per,
+      offset,
+    });
+    return (await this.ask('batched', ask)).batch;
   }
 
   /** save returns the workspace as a .uno. Refused if carried sources total

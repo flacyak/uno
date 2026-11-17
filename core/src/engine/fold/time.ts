@@ -40,6 +40,7 @@ function timed(
         ? timed(at, sum, reading, marks, back)
         : undefined;
     },
+    batch: (per, offset) => fold.batch(per, offset),
     // A chart that changed only its size keeps the fold, read at its size now.
     tally: (plot, coverage) => ({
       t: 'time',

@@ -12,6 +12,7 @@ import type { Chart, Plot } from '@document';
 import type { Mark } from '@num';
 import type { Said } from '@said';
 import { isCount, isRecord } from '@tally';
+import type { Per, TimeLevel } from '@tally';
 import { FOLDERS, folderOf } from './fold/index.ts';
 import type { Block, Folder, Folders } from './fold/index.ts';
 import type { Tally } from './protocol.ts';
@@ -185,6 +186,11 @@ export class Tallies {
       saved[id] = { key: t.folder.key, rows, ahead, fold };
     }
     return saved;
+  }
+
+  /** batch is the chart with `id`'s batch at `per` from `offset`, if any. */
+  batch(id: string, per: Per, offset: number): TimeLevel | undefined {
+    return this.charts.get(id)?.folder.batch?.(per, offset);
   }
 
   /** How many charts are attached. */
