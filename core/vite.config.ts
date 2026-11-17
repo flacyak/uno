@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite-plus';
 
+import { SlowestFirst } from './tests/sequencer.ts';
 import { timingsReporter } from './tests/timings.ts';
 
 /**
@@ -47,6 +48,9 @@ export default defineConfig({
     reporters: ['default', timingsReporter()],
     testTimeout: TEST_BUDGET_MS,
     hookTimeout: TEST_BUDGET_MS,
+    // Starts the slowest file first across both projects, so the suite ends
+    // when that file does.
+    sequence: { sequencer: SlowestFirst },
     // Two projects, both run by `vp test`. The lab's research, the efficiency
     // budgets and the performance timings are 36 of core's 133 files and 241
     // of its 334 test seconds, one file 65 s on its own, and they measure the
