@@ -5,6 +5,7 @@
 import type { Folders } from './folder.ts';
 import { groupsFolder } from './groups.ts';
 import { sampleFolder } from './sample.ts';
+import { timeFolder } from './time.ts';
 
 export { folderOf, markOf, placeOf } from './folder.ts';
 export type { Block, Folder, Folders, MakeFolder } from './folder.ts';
@@ -14,4 +15,5 @@ export const FOLDERS: Folders = {
   bars: groupsFolder,
   pie: groupsFolder,
   scatter: sampleFolder,
+  time: timeFolder,
 };

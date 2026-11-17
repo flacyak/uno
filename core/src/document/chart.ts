@@ -59,7 +59,8 @@ export type Plot =
   /** Each value's share of the rows, or of the sum of `sum`. */
   | { t: 'pie'; by: ChartColumn; sum?: ChartColumn }
   /** One point per row, x against y, both number columns. */
-  | { t: 'scatter'; x: ChartColumn; y: ChartColumn };
+  | { t: 'scatter'; x: ChartColumn; y: ChartColumn }
+  | TimePlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

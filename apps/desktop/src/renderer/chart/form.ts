@@ -238,6 +238,8 @@ export class ChartForm {
   private opensOn(plot: Plot): void {
     this.kind.value = plot.t;
     if (plot.t === "scatter") this.offer(this.at(plot.x), [undefined, plot.x, plot.y]);
+    // The form makes no over-time chart yet, so it opens one as bars over its dates.
+    else if (plot.t === "time") this.offer(this.at(plot.at), [plot.sum]);
     else this.offer(this.at(plot.by), [plot.sum]);
   }
 

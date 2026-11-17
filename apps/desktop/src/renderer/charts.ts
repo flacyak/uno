@@ -57,7 +57,8 @@ export interface Heard extends SourceState {
 
 /** The columns a plot reads, in the order its kind names them. */
 function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
-  return plot.t === "scatter" ? [plot.x, plot.y] : [plot.by, plot.sum];
+  if (plot.t === "scatter") return [plot.x, plot.y];
+  return plot.t === "time" ? [plot.at, plot.sum] : [plot.by, plot.sum];
 }
 
 /** Returns whether two plots draw one kind from the same columns. */

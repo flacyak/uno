@@ -37,7 +37,7 @@ import { NO_ROW, Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { blobProvider, multiProvider } from '@store';
 import { diskProvider } from '@store/node';
-import { GroupsFold, SampleFold } from '@tally';
+import { GroupsFold, SampleFold, TimeFold } from '@tally';
 import {
   CHANNEL,
   COLS,
@@ -125,6 +125,15 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
     return { t: 'sample', plot, coverage, ...fold.snapshot() };
+  }
+  if (plot.t === 'time') {
+    const reading = 'order' in plot ? plot.order : plot.unit;
+    const { at, sum } = plot;
+    const fold = new TimeFold(reading, sum === undefined ? undefined : 'point');
+    for (let r = 0; r < rows; r++) {
+      fold.add(cell(r, at), sum === undefined ? '' : cell(r, sum));
+    }
+    return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
   }
   const { by, sum } = plot;
   const fold =
