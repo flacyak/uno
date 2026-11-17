@@ -3,6 +3,9 @@
  * columns. view/charts.json keeps its record and a `chart` request carries it.
  */
 
+import type { Order, UnixUnit } from '@date';
+import type { Per } from '@tally';
+
 /**
  * The most charts a workspace keeps, carried ones included. Sixteen windows
  * of a new chart's size, four by four, fill most of a full HD screen.
@@ -36,6 +39,18 @@ export interface ChartColumn {
   col: number;
   header: string;
 }
+
+/**
+ * An over-time chart: rows, or the sum of `sum`, per period of `at`, at the
+ * size `per` or the finest that fits. Its dates read with the column's
+ * `order`, or as Unix time in a `unit`, as the chart was made.
+ */
+export type TimePlot = {
+  t: 'time';
+  at: ChartColumn;
+  sum?: ChartColumn;
+  per: Per | 'auto';
+} & ({ order: Order } | { unit: UnixUnit });
 
 /** What a chart draws. This is all the engine needs to tally it. */
 export type Plot =

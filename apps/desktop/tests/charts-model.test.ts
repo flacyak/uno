@@ -11,7 +11,8 @@ import { connect, multiProviders } from "@core-tests/engine/harness";
 import { PART_FIXTURES, PART_NAMES, PART_ROWS } from "@core-tests/testdata/sales-q3-parts";
 import { readContainer } from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
-import type { GroupsTally, SampleTally, SourceRef } from "@engine";
+import type { SourceRef } from "@engine";
+import type { Drawn } from "@renderer/chart/kind";
 import { REGION, ROWS, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
@@ -54,7 +55,7 @@ function uno(bytes: Uint8Array): SourceRef {
 }
 
 /** Waits for a complete tally of the chart BARS over `rows` rows, and returns it. */
-async function completeOf(w: Workspace, rows = ROWS): Promise<GroupsTally | SampleTally> {
+async function completeOf(w: Workspace, rows = ROWS): Promise<Drawn> {
   await expect.poll(() => w.charts.heard(BARS.id)?.complete?.coverage.rows, TALLY_WAIT).toBe(rows);
   return w.charts.heard(BARS.id)!.complete!;
 }

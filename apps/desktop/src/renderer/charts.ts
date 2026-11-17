@@ -11,7 +11,8 @@
 import { isPlace } from "@document";
 import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { Refusal } from "@engine";
-import type { Added, CarriedPlace, Engine, GroupsTally, Place, SampleTally, Tally } from "@engine";
+import type { Drawn } from "./chart/kind.ts";
+import type { Added, CarriedPlace, Engine, Place, Tally } from "@engine";
 
 import type { State } from "./sources.ts";
 
@@ -22,7 +23,7 @@ export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
 interface Tallied {
   source: string;
   latest: Tally;
-  complete: GroupsTally | SampleTally | undefined;
+  complete: Drawn | undefined;
   /** Whether the source is being read again, with no tally of it heard yet. */
   rereading?: boolean;
 }
@@ -49,7 +50,7 @@ export interface Heard extends SourceState {
   /** The latest tally of what the chart shows, once one has come. */
   latest: Tally | undefined;
   /** The last complete one, which stays until the next one completes. */
-  complete: GroupsTally | SampleTally | undefined;
+  complete: Drawn | undefined;
   /** Whether the source is being read again, with no tally of it heard yet. */
   rereading?: boolean;
 }

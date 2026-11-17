@@ -14,15 +14,19 @@ import {
   rfc3339,
   sha256Hex,
 } from '@go';
+import type { Order, UnixUnit } from '@date';
 import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
+import { PER } from '@tally';
+import type { Per } from '@tally';
 import type {
   CarriedChart,
   Chart,
   ChartColumn,
   ChartPlace,
   Plot,
+  TimePlot,
 } from './chart.ts';
 import {
   CHARTS_AT_MOST,
@@ -1094,6 +1098,21 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   scatter: ['t', 'x', 'y'],
 };
 
+/** The sizes an over-time chart may draw per, and how its dates may read. */
+const PERS: readonly string[] = [...PER, 'auto'];
+const PER_SIZE: Expects<Per | 'auto'> = {
+  is: (v): v is Per | 'auto' => typeof v === 'string' && PERS.includes(v),
+  not: `is not one of ${PERS.join(', ')}`,
+};
+const ORDER: Expects<Order> = {
+  is: (v): v is Order => v === 'day' || v === 'month',
+  not: 'is not day or month',
+};
+const UNIT: Expects<UnixUnit> = {
+  is: (v): v is UnixUnit => v === 's' || v === 'ms',
+  not: 'is not s or ms',
+};
+
 function isPlotKind(t: string): t is Plot['t'] {
   return Object.hasOwn(PLOT_KEYS, t);
 }
@@ -1107,10 +1126,7 @@ function isPlotKind(t: string): t is Plot['t'] {
  */
 export function parsePlot(where: string, value: unknown): Plot {
   const p = asRecord(value);
-  const column = (key: string): ChartColumn => ({
-    col: required(asRecord(p[key]), 'col', COL, `${where}: ${key}`),
-    header: required(asRecord(p[key]), 'header', TEXT, `${where}: ${key}`),
-  });
+  const column = (key: string) => columnOf(where, p, key);
   const t = required(p, 't', TEXT, where);
   if (!isPlotKind(t))
     throw new Error(`${where}: this build cannot draw ${JSON.stringify(t)}`);
@@ -1122,6 +1138,39 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'scatter') return { t, x: column('x'), y: column('y') };
   if (p['sum'] === undefined) return { t, by: column('by') };
   return { t, by: column('by'), sum: column('sum') };
+}
+
+/** columnOf reads the column `p` names at `key`. */
+function columnOf(
+  where: string,
+  p: Record<string, unknown>,
+  key: string,
+): ChartColumn {
+  return {
+    col: required(asRecord(p[key]), 'col', COL, `${where}: ${key}`),
+    header: required(asRecord(p[key]), 'header', TEXT, `${where}: ${key}`),
+  };
+}
+
+/**
+ * parseOverTime reads an over-time chart's plot: its date column `at`, a
+ * `sum` it may name, its size `per`, and how its dates read, in a column's
+ * `order` or as Unix time in a `unit`, one of the two.
+ */
+export function parseOverTime(where: string, value: unknown): TimePlot {
+  const p = asRecord(value);
+  const per = required(p, 'per', PER_SIZE, where);
+  const at = columnOf(where, p, 'at');
+  const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  const order = optional(p, 'order', ORDER, where);
+  const unit = optional(p, 'unit', UNIT, where);
+  if (order !== undefined && unit === undefined)
+    return { t: 'time', at, ...sum, per, order };
+  if (unit !== undefined && order === undefined)
+    return { t: 'time', at, ...sum, per, unit };
+  throw new Error(
+    `${where}: order or unit, one of the two, says how dates read`,
+  );
 }
 
 /** parsePlace reads where a chart's window sits. */

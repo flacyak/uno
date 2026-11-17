@@ -51,6 +51,7 @@ export type {
   Request,
   Sample,
   SampleTally,
+  TimeTally,
   SignIns,
   Skipped,
   SourceRef,

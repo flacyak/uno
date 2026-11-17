@@ -17,7 +17,7 @@ import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
-import type { Groups, Sample } from '@tally';
+import type { Groups, Sample, Times } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -293,6 +293,13 @@ export interface SampleTally extends Sample {
   coverage: Coverage;
 }
 
+/** An over-time chart's tally: its periods at each size, from its own to years. */
+export interface TimeTally extends Times {
+  t: 'time';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
  * arrays, or why the source could not be read. Each names the plot it reads,
@@ -302,6 +309,7 @@ export interface SampleTally extends Sample {
 export type Tally =
   | GroupsTally
   | SampleTally
+  | TimeTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**
