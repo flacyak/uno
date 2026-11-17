@@ -42,7 +42,7 @@
 # --display. Inside a bounded run the script runs its command as it is.
 #
 # The limits come from the environment, with defaults sized for a desktop:
-#   UNO_BOUNDED_SLOTS    runs at once on the machine (2)
+#   UNO_BOUNDED_SLOTS    runs at once on the machine (1)
 #   UNO_BOUNDED_CPUS     logical CPUs all runs share (half the machine's)
 #   UNO_BOUNDED_MEMORY   memory all runs share, as systemd takes it (half)
 #   UNO_BOUNDED_TASKS    processes and threads all runs share (4096)
@@ -53,7 +53,7 @@ set -euo pipefail
 readonly STATE="${XDG_CACHE_HOME:-${HOME}/.cache}/uno-bounded"
 readonly SLICE="uno-bounded.slice"
 readonly MARKER="UNO_BOUNDED_RUN"
-readonly SLOTS="${UNO_BOUNDED_SLOTS:-2}"
+readonly SLOTS="${UNO_BOUNDED_SLOTS:-1}"
 readonly TASKS="${UNO_BOUNDED_TASKS:-4096}"
 readonly DEFAULT_TIMEOUT_SECONDS="${UNO_BOUNDED_TIMEOUT:-1800}"
 # How often a waiting run looks for a free slot, and the guard for its run.
