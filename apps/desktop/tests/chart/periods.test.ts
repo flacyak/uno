@@ -9,7 +9,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { EPOCH_YEAR, daysFromCivil } from "@date";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
-import { label } from "@renderer/chart/periods";
+import { label, larger } from "@renderer/chart/periods";
 import { sundayOf } from "@tally";
 import type { Per } from "@tally";
 
@@ -90,7 +90,7 @@ const LABELS: Record<Locale, Record<Per, [string, string]>> = {
 };
 
 /** spaced gives `said` with the narrow no-break space ICU writes before PM as a space. */
-const spaced = (said: string): string => said.replace(/ /gu, " ");
+const spaced = (said: string): string => said.replace(/\u00a0/gu, " ");
 
 test("each size labels its period in the app's language, alone and carrying the larger period it starts", async () => {
   for (const [locale, sizes] of Object.entries(LABELS) as Array<
@@ -112,8 +112,19 @@ test("each size labels its period in the app's language, alone and carrying the 
   }
 });
 
+test("a label carries the day of an hour, the year of every size from day to quarter, and a year its own", () => {
+  expect(larger("hour", KEYS.hour)).toBe(DAY);
+  for (const per of ["day", "week", "month", "quarter"] as const)
+    expect(larger(per, KEYS[per])).toBe(YEAR);
+  expect(larger("year", KEYS.year)).toBe(KEYS.year);
+});
+
 test("a period before 1970, and one in year 1, are labelled from their civil date", () => {
   expect(label("month", -1, true)).toBe("Dec 1969");
   expect(label("year", 1 - EPOCH_YEAR, false)).toBe("1");
   expect(label("day", daysFromCivil(1, 1, 1), true)).toBe("Jan 1, 1");
+});
+
+test("a label holds no narrow space, which no mono font draws a character wide", () => {
+  expect(label("hour", KEYS.hour, false)).not.toMatch(/\u202f/u);
 });

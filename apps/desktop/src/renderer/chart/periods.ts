@@ -5,7 +5,7 @@
  * each in UTC, so the viewer's zone never moves it, and a quarter is a message.
  */
 
-import { daysFromCivil, EPOCH_YEAR } from "@date";
+import { civilFromDays, daysFromCivil, EPOCH_YEAR } from "@date";
 import { m } from "@paraglide/messages";
 import { getLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
@@ -17,9 +17,11 @@ const YEAR_MONTHS = 12;
 const QUARTER_MONTHS = 3;
 const YEAR_QUARTERS = 4;
 const HOUR_MS = 3_600_000;
+const NARROW = /\u202f/gu;
+const NO_BREAK = "\u00a0";
 
 /** mod is `n` modulo `of`, from 0 up, for keys before 1970 too. */
-const mod = (n: number, of: number): number => ((n % of) + of) % of;
+export const mod = (n: number, of: number): number => ((n % of) + of) % of;
 
 /** monthStart is the hour from 1970 the month `month` months from January 1970 starts. */
 function monthStart(month: number): number {
@@ -36,6 +38,13 @@ const STARTS: Readonly<Record<Per, (key: number) => number>> = {
   quarter: (quarter) => monthStart(quarter * QUARTER_MONTHS),
   year: (year) => monthStart(year * YEAR_MONTHS),
 };
+
+/** larger gives the period a label carries: an hour's day key, a year's own key, else the year. */
+export function larger(per: Per, key: number): number {
+  const day = Math.floor(STARTS[per](key) / DAY_HOURS);
+  if (per === "hour") return day;
+  return per === "year" ? key : civilFromDays(day).year;
+}
 
 const YEARS: Intl.DateTimeFormatOptions = { year: "numeric" };
 
@@ -86,5 +95,6 @@ export function label(per: Per, key: number, carried: boolean): string {
     return m.chart_quarter({ n, year });
   }
   const options = FORMATS[per][carried ? 1 : 0];
-  return format(`${per} ${carried}`, options).format(dated(per, key));
+  // ICU's narrow space before PM is no mono character: a no-break one is a ch.
+  return format(`${per} ${carried}`, options).format(dated(per, key)).replace(NARROW, NO_BREAK);
 }
