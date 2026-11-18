@@ -31,3 +31,14 @@ vp run preview    # film docs/preview.gif: the browse story
                   # `vp run preview sidebar` films docs/sidebar.gif
                   # `vp run preview chart` films docs/chart.gif
 ```
+
+When several of these run at once on one machine, from several worktrees or agents, put each behind `scripts/bounded.sh`:
+
+```bash
+scripts/bounded.sh -- vp run test     # waits its turn, on half the CPUs, and leaves nothing running
+scripts/bounded.sh status             # what is running, and where
+scripts/bounded.sh reap --orphans     # stop what dead or unbounded runs left
+```
+
+Every copy of the script shares one queue, so a run from an older branch's copy still waits its turn.
+The top of the script says what it limits and how to change the limits.
