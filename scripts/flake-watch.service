@@ -1,0 +1,10 @@
+# Runs scripts/flake-watch.sh on the checkout this unit was linked from. Link
+# both units from the checkout, then enable the timer; see flake-watch.sh.
+[Unit]
+Description=uno flake watch: the smoke ten times and the suite three times
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Documents/opensource/uno
+ExecStart=%h/Documents/opensource/uno/scripts/flake-watch.sh
+Nice=10
