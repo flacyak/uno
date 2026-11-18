@@ -525,26 +525,32 @@ if (failed !== undefined) {
 
 // The saved .uno, read with the same reader the engine opens a workspace
 // with. Only here can the file on disk be checked.
+// What the run left is read back for the groups that ran. A run of some
+// groups (UNO_SMOKE_ONLY, see src/main/smoke/groups.ts) leaves only theirs.
+const checks = JSON.parse(await readFile(join(scratch, "checks.json"), "utf8"));
+const ran = new Set(checks.map((check) => check.group));
+const trouble = [];
 const written = (await readdir(scratch)).filter((name) => name.endsWith(".uno"));
 const saved = written[0];
-if (saved === undefined) {
+if (saved === undefined && ran.has("sources")) {
   console.error(`smoke: FAILED (no .uno was written under ${scratch})`);
   console.error("smoke: the run has to save the workspace before it quits -- see src/main/smoke/");
   process.exit(1);
 }
 
-const at = join(scratch, saved);
-const doc = readContainer(saved, await readFile(at), at);
-const pointers = doc.manifest.sources.map((s) => ({
-  name: s.name,
-  path: s.path,
-  version: s.version,
-  connection: s.connection,
-}));
+const pointers = [];
+if (saved !== undefined) {
+  const at = join(scratch, saved);
+  const doc = readContainer(saved, await readFile(at), at);
+  for (const s of doc.manifest.sources) {
+    pointers.push({ name: s.name, path: s.path, version: s.version, connection: s.connection });
+  }
+}
 
-const trouble = [];
 const remote = pointers.find((s) => s.path === object);
-if (remote === undefined) {
+if (saved === undefined) {
+  // Nothing to read back: the group that saves did not run.
+} else if (remote === undefined) {
   trouble.push(
     `the object was saved as ${JSON.stringify(pointers.map((s) => s.path))}, not ${object}`,
   );
@@ -561,7 +567,9 @@ if (remote === undefined) {
 }
 // The local fixture is saved by its absolute path.
 const local = pointers.find((s) => s.name === "sales-q3.csv");
-if (local === undefined) trouble.push(`${saved} holds no sales-q3.csv`);
+if (saved === undefined) {
+  // As above.
+} else if (local === undefined) trouble.push(`${saved} holds no sales-q3.csv`);
 else if (local.path !== fixture) {
   trouble.push(`sales-q3.csv points at ${JSON.stringify(local.path)}, not the absolute ${fixture}`);
 }
@@ -569,50 +577,53 @@ else if (local.path !== fixture) {
 // The connection the checks saved, read back from the disk: in the run's own
 // folder, parses as a connection, and signs in by profile.
 const kept = join(data, "connections", "acme-exports.unof");
-try {
-  const c = parseConnection("acme-exports.unof", await readFile(kept, "utf8"));
-  if (c.bucket !== BUCKET) trouble.push(`${kept} connects to ${c.bucket}, not ${BUCKET}`);
-  // Saved from the connect form: signed in as the chosen profile, with the
-  // region the test detected.
-  if (c.auth.mode !== "profile" || c.auth.profile !== "finance") {
-    trouble.push(`${kept} signs in as ${JSON.stringify(c.auth)}, not the finance profile`);
+if (ran.has("connections"))
+  try {
+    const c = parseConnection("acme-exports.unof", await readFile(kept, "utf8"));
+    if (c.bucket !== BUCKET) trouble.push(`${kept} connects to ${c.bucket}, not ${BUCKET}`);
+    // Saved from the connect form: signed in as the chosen profile, with the
+    // region the test detected.
+    if (c.auth.mode !== "profile" || c.auth.profile !== "finance") {
+      trouble.push(`${kept} signs in as ${JSON.stringify(c.auth)}, not the finance profile`);
+    }
+    if (c.region !== HOME_REGION)
+      trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
+    // Connected for the reopened workspace, so it covers the object's folder,
+    // as the form filled it in.
+    if (c.prefix !== "2025/") trouble.push(`${kept} covers ${JSON.stringify(c.prefix)}, not 2025/`);
+    // The second connection, to the whole bucket, has its own file, as does the
+    // public bucket. The refused bucket left none.
+    const folder = (await readdir(join(data, "connections"))).toSorted();
+    const want = ["acme-exports-2.unof", "acme-exports.unof", `${OPEN_BUCKET}.unof`];
+    if (JSON.stringify(folder) !== JSON.stringify(want)) {
+      trouble.push(`the connections folder holds ${JSON.stringify(folder)}`);
+    }
+    const second = parseConnection(
+      "acme-exports-2.unof",
+      await readFile(join(data, "connections", "acme-exports-2.unof"), "utf8"),
+    );
+    if (second.prefix !== "")
+      trouble.push(`acme-exports-2.unof covers ${second.prefix}, not the whole bucket`);
+  } catch (err) {
+    trouble.push(`the saved connection did not read back: ${err.message}`);
   }
-  if (c.region !== HOME_REGION)
-    trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
-  // Connected for the reopened workspace, so it covers the object's folder,
-  // as the form filled it in.
-  if (c.prefix !== "2025/") trouble.push(`${kept} covers ${JSON.stringify(c.prefix)}, not 2025/`);
-  // The second connection, to the whole bucket, has its own file, as does the
-  // public bucket. The refused bucket left none.
-  const folder = (await readdir(join(data, "connections"))).toSorted();
-  const want = ["acme-exports-2.unof", "acme-exports.unof", `${OPEN_BUCKET}.unof`];
-  if (JSON.stringify(folder) !== JSON.stringify(want)) {
-    trouble.push(`the connections folder holds ${JSON.stringify(folder)}`);
-  }
-  const second = parseConnection(
-    "acme-exports-2.unof",
-    await readFile(join(data, "connections", "acme-exports-2.unof"), "utf8"),
-  );
-  if (second.prefix !== "")
-    trouble.push(`acme-exports-2.unof covers ${second.prefix}, not the whole bucket`);
-} catch (err) {
-  trouble.push(`the saved connection did not read back: ${err.message}`);
-}
 
 // The charted workspace, which the last checks saved with Ctrl+S after moving
 // its first window. That window ends on the room's right edge at the least
 // height, a nudge wide of the least width and a nudge up from the foot. The
 // second never moved.
-const chartsBack = readContainer("charted.uno", await readFile(charted), charted).charts;
-const [firstBack, lastBack] = chartsBack.map((chart) => chart.place);
-const standsAt = (place, want) => Object.keys(want).every((side) => place[side] === want[side]);
-const nudgedUp = firstBack.y > 0 && firstBack.y < 1;
-const stepped = { x: 1, width: leastSize.width + nudge, height: leastSize.height };
-if (!nudgedUp || !standsAt(firstBack, stepped)) {
-  trouble.push(`the moved window was saved at ${JSON.stringify(firstBack)}`);
-}
-if (!standsAt(lastBack, { ...chartSize, x: 1, y: 1 })) {
-  trouble.push(`the window left alone was saved at ${JSON.stringify(lastBack)}`);
+if (ran.has("chart-moves")) {
+  const chartsBack = readContainer("charted.uno", await readFile(charted), charted).charts;
+  const [firstBack, lastBack] = chartsBack.map((chart) => chart.place);
+  const standsAt = (place, want) => Object.keys(want).every((side) => place[side] === want[side]);
+  const nudgedUp = firstBack.y > 0 && firstBack.y < 1;
+  const stepped = { x: 1, width: leastSize.width + nudge, height: leastSize.height };
+  if (!nudgedUp || !standsAt(firstBack, stepped)) {
+    trouble.push(`the moved window was saved at ${JSON.stringify(firstBack)}`);
+  }
+  if (!standsAt(lastBack, { ...chartSize, x: 1, y: 1 })) {
+    trouble.push(`the window left alone was saved at ${JSON.stringify(lastBack)}`);
+  }
 }
 
 if (trouble.length > 0) {
@@ -620,6 +631,8 @@ if (trouble.length > 0) {
   process.exit(1);
 }
 
-console.log(`smoke: ${saved} points at ${pointers.map((s) => s.path).join(", ")}`);
-console.log(`smoke: ${kept} reads back as a connection to ${BUCKET}`);
+if (saved !== undefined) {
+  console.log(`smoke: ${saved} points at ${pointers.map((s) => s.path).join(", ")}`);
+}
+if (ran.has("connections")) console.log(`smoke: ${kept} reads back as a connection to ${BUCKET}`);
 console.log("smoke: ok");

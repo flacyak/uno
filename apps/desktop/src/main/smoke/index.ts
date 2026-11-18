@@ -32,6 +32,8 @@ import {
   CHART_STATES,
 } from "./charts.ts";
 import type { Check } from "./check.ts";
+import { ONLY_VARIABLE, selected } from "./groups.ts";
+import type { Group } from "./groups.ts";
 import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
@@ -67,40 +69,43 @@ const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
 
 /**
- * Every check, in order. Each picks up the window where the one before left
- * it.
+ * Every group, in order. Each check picks up the window where the one before
+ * left it, and a group that starts afresh opens a workspace of its own. See
+ * groups.ts for what UNO_SMOKE_ONLY picks from these.
  */
-const CHECKS: Check[] = [
-  ...OPEN,
-  ...DEFAULT_INPUT,
-  ...VIM_STYLE,
-  ...SOURCES,
-  ...PANEL,
-  ...STATUS,
-  ...CONNECTIONS,
-  ...SETTINGS,
-  ...MEETS,
-  ...REFRESH,
-  ...MULTI,
-  ...SIDEBAR,
-  ...CHART_FORM,
-  ...AGAIN,
-  ...CHARTS,
-  ...CHART_KEYS,
-  ...CHART_ASIDE,
-  ...CHART_MOVES,
-  ...CHART_WHEEL,
-  ...CHART_TIP,
-  ...CHART_SIGNED,
-  ...CHART_SCATTER,
-  ...CHART_TABLE,
-  ...CHART_ALONG,
-  ...CHART_PIE,
-  ...CHART_BLANK,
-  ...CHART_STATES,
-  ...CHART_EDITS,
-  ...CHART_REFRESH,
-  ...CHART_SCHEDULE,
+const GROUPS: (Group & { checks: Check[] })[] = [
+  { name: "open", checks: OPEN, starts: true },
+  { name: "default-input", checks: DEFAULT_INPUT },
+  { name: "vim-style", checks: VIM_STYLE },
+  { name: "sources", checks: SOURCES },
+  { name: "panel", checks: PANEL },
+  { name: "status", checks: STATUS },
+  { name: "connections", checks: CONNECTIONS },
+  { name: "settings", checks: SETTINGS },
+  { name: "meets", checks: MEETS },
+  { name: "refresh", checks: REFRESH },
+  { name: "multi", checks: MULTI },
+  { name: "sidebar", checks: SIDEBAR },
+  { name: "chart-form", checks: CHART_FORM },
+  { name: "again", checks: AGAIN },
+  { name: "charts", checks: CHARTS, starts: true },
+  { name: "chart-keys", checks: CHART_KEYS },
+  { name: "chart-aside", checks: CHART_ASIDE },
+  { name: "chart-moves", checks: CHART_MOVES },
+  { name: "chart-wheel", checks: CHART_WHEEL },
+  { name: "chart-tip", checks: CHART_TIP },
+  { name: "chart-signed", checks: CHART_SIGNED, starts: true },
+  { name: "chart-scatter", checks: CHART_SCATTER, starts: true },
+  { name: "chart-table", checks: CHART_TABLE },
+  { name: "chart-along", checks: CHART_ALONG, starts: true },
+  { name: "chart-pie", checks: CHART_PIE, starts: true },
+  { name: "chart-blank", checks: CHART_BLANK, starts: true },
+  { name: "chart-states", checks: CHART_STATES, starts: true },
+  { name: "chart-edits", checks: CHART_EDITS },
+  // It reopens the workspace sources saved, with the object as refresh left
+  // it in the stand-in, over the charts chart-edits left.
+  { name: "chart-refresh", checks: CHART_REFRESH, needs: ["refresh"] },
+  { name: "chart-schedule", checks: CHART_SCHEDULE, starts: true },
 ];
 
 /**
@@ -365,51 +370,54 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   const { width: fullWidth, height } = win.getBounds();
 
   const timed: CheckTiming[] = [];
-  for (const check of CHECKS) {
-    const started = performance.now();
-    let ok = true;
-    try {
-      if (check.ask !== undefined) await ask("smoke", check.ask);
-      if (check.send !== undefined) win.webContents.send(...check.send);
-      if (check.pick !== undefined) pick(check.pick);
-      if (check.window !== undefined) {
-        const { zoom = FULL_ZOOM, width = fullWidth } = check.window;
-        reshape(win, zoom, width, height);
-      }
-      if (check.input !== undefined) {
-        const { events } = check.input;
-        const send = (): void => {
-          for (const event of events) win.webContents.sendInputEvent(event);
-        };
-        if (check.input.through) through(win, send);
-        else send();
-      }
-      if (check.hover !== undefined) await hover(win, check.hover);
-      if (check.click !== undefined) await click(win, check.click);
-      if (check.drag !== undefined) await drag(win, check.drag);
-      if (check.touch !== undefined) await touch(win, check.touch);
-      if (check.wheel !== undefined) await wheel(win, check.wheel);
-      const failure =
-        check.run !== undefined
-          ? await check.run(page)
-          : ((await win.webContents.executeJavaScript(
-              `(async () => { ${PRELUDE} { ${check.script} } })()`,
-            )) as string);
+  const groups = selected(GROUPS, process.env[ONLY_VARIABLE]);
+  console.log(`smoke: ${groups.length} of ${GROUPS.length} groups`);
+  for (const { name: group, checks } of groups)
+    for (const check of checks) {
+      const started = performance.now();
+      let ok = true;
+      try {
+        if (check.ask !== undefined) await ask("smoke", check.ask);
+        if (check.send !== undefined) win.webContents.send(...check.send);
+        if (check.pick !== undefined) pick(check.pick);
+        if (check.window !== undefined) {
+          const { zoom = FULL_ZOOM, width = fullWidth } = check.window;
+          reshape(win, zoom, width, height);
+        }
+        if (check.input !== undefined) {
+          const { events } = check.input;
+          const send = (): void => {
+            for (const event of events) win.webContents.sendInputEvent(event);
+          };
+          if (check.input.through) through(win, send);
+          else send();
+        }
+        if (check.hover !== undefined) await hover(win, check.hover);
+        if (check.click !== undefined) await click(win, check.click);
+        if (check.drag !== undefined) await drag(win, check.drag);
+        if (check.touch !== undefined) await touch(win, check.touch);
+        if (check.wheel !== undefined) await wheel(win, check.wheel);
+        const failure =
+          check.run !== undefined
+            ? await check.run(page)
+            : ((await win.webContents.executeJavaScript(
+                `(async () => { ${PRELUDE} { ${check.script} } })()`,
+              )) as string);
 
-      if (failure === "") {
-        console.log(`  ok   ${check.name}`);
-        if (check.shot !== undefined) await shoot(win, check.shot);
-      } else {
-        console.error(`  FAIL ${check.name}: ${failure}`);
+        if (failure === "") {
+          console.log(`  ok   ${check.name}`);
+          if (check.shot !== undefined) await shoot(win, check.shot);
+        } else {
+          console.error(`  FAIL ${check.name}: ${failure}`);
+          ok = false;
+        }
+      } catch (err) {
+        console.error(`  FAIL ${check.name}: ${(err as Error).message}`);
         ok = false;
       }
-    } catch (err) {
-      console.error(`  FAIL ${check.name}: ${(err as Error).message}`);
-      ok = false;
+      if (!ok) failed++;
+      timed.push({ group, name: check.name, ms: Math.round(performance.now() - started), ok });
     }
-    if (!ok) failed++;
-    timed.push({ name: check.name, ms: Math.round(performance.now() - started), ok });
-  }
 
   // A picture of the whole window, for checking the layout, and what every
   // check took.

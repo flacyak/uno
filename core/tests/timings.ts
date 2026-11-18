@@ -35,8 +35,9 @@ export interface FileTiming {
   tests: number;
 }
 
-/** One smoke check as it ran: how long it took, and whether it passed. */
+/** One smoke check as it ran: its group, how long it took, and whether it passed. */
 export interface CheckTiming {
+  group: string;
   name: string;
   ms: number;
   ok: boolean;
