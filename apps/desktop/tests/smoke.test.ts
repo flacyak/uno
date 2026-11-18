@@ -8,9 +8,10 @@
  * The run itself is `vp run smoke`, on a desktop session.
  */
 
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, vi } from "vite-plus/test";
 
 import { displayMissing, drive, electronEnv, verdict } from "@scripts/launch";
@@ -230,6 +231,31 @@ test("a hung check is killed at its deadline, and named", async () => {
   expect(code).toBeNull();
   expect(errors).toHaveLength(1);
   expect(errors[0]).toMatch(/^smoke: timed out after \S+s in check "hangs", /);
+});
+
+test("a stop kills the app of every drive under way, as smoke.js runs two", () => {
+  // Each app prints its pid; then the script driving both stops itself.
+  const app = `console.log("pid " + process.pid); setInterval(() => {}, ${STEP_MS});`;
+  const script = `
+    const { drive } = await import(${JSON.stringify(pathToFileURL(join(SCRIPTS, "launch.js")).href)});
+    const run = { electron: process.execPath, args: ["-e", ${JSON.stringify(app)}], env: process.env, answer: () => true, deadlineMs: ${DEADLINE_MS} };
+    void drive("smoke", run);
+    void drive("smoke", run);
+    setTimeout(() => process.kill(process.pid, "SIGTERM"), ${STEP_MS});
+  `;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    encoding: "utf8",
+  });
+  const pids = [...run.stdout.matchAll(/^pid (\d+)$/gm)].map((m) => Number(m[1]));
+  expect(pids).toHaveLength(2);
+  const alive = (pid: number): boolean => {
+    try {
+      return process.kill(pid, 0);
+    } catch {
+      return false;
+    }
+  };
+  expect(pids.filter(alive)).toEqual([]);
 });
 
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {

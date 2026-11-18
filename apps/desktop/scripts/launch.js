@@ -138,7 +138,8 @@ export async function drive(who, { electron, args, env, answer, deadlineMs, onTi
   const stop = (signal) => {
     console.error(`${who}: stopped by ${signal} ${where()}`);
     child.kill("SIGKILL");
-    process.exit(SIGNALLED + constants.signals[signal]);
+    // On the next turn, so every drive under way kills its own app first.
+    setImmediate(() => process.exit(SIGNALLED + constants.signals[signal]));
   };
   for (const signal of STOPS) process.once(signal, stop);
 
