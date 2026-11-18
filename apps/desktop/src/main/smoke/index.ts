@@ -11,6 +11,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { BrowserWindow } from "electron";
 
+import type { CheckTiming } from "@core-tests/timings";
 import { ask } from "@main/ask";
 import { pick, through, throughAsync } from "@main/driven";
 import { AGAIN } from "./again.ts";
@@ -31,6 +32,7 @@ import {
   CHART_STATES,
 } from "./charts.ts";
 import type { Check } from "./check.ts";
+import { GROUPS, ONLY_VARIABLE, selected } from "./groups.ts";
 import { CONNECTIONS } from "./connections.ts";
 import { DEFAULT_INPUT } from "./default.ts";
 import { electronPage } from "./electron-page.ts";
@@ -65,42 +67,39 @@ import { VIM_STYLE } from "./vim-style.ts";
 const FIRST_ROWS_MS = 20_000;
 const POLL_MS = 50;
 
-/**
- * Every check, in order. Each picks up the window where the one before left
- * it.
- */
-const CHECKS: Check[] = [
-  ...OPEN,
-  ...DEFAULT_INPUT,
-  ...VIM_STYLE,
-  ...SOURCES,
-  ...PANEL,
-  ...STATUS,
-  ...CONNECTIONS,
-  ...SETTINGS,
-  ...MEETS,
-  ...REFRESH,
-  ...MULTI,
-  ...SIDEBAR,
-  ...CHART_FORM,
-  ...AGAIN,
-  ...CHARTS,
-  ...CHART_KEYS,
-  ...CHART_ASIDE,
-  ...CHART_MOVES,
-  ...CHART_WHEEL,
-  ...CHART_TIP,
-  ...CHART_SIGNED,
-  ...CHART_SCATTER,
-  ...CHART_TABLE,
-  ...CHART_ALONG,
-  ...CHART_PIE,
-  ...CHART_BLANK,
-  ...CHART_STATES,
-  ...CHART_EDITS,
-  ...CHART_REFRESH,
-  ...CHART_SCHEDULE,
-];
+/** Each group's checks, under its name in groups.ts. */
+const CHECKS: Record<string, Check[]> = {
+  open: OPEN,
+  "default-input": DEFAULT_INPUT,
+  "vim-style": VIM_STYLE,
+  sources: SOURCES,
+  panel: PANEL,
+  status: STATUS,
+  connections: CONNECTIONS,
+  settings: SETTINGS,
+  meets: MEETS,
+  refresh: REFRESH,
+  multi: MULTI,
+  sidebar: SIDEBAR,
+  "chart-form": CHART_FORM,
+  again: AGAIN,
+  charts: CHARTS,
+  "chart-keys": CHART_KEYS,
+  "chart-aside": CHART_ASIDE,
+  "chart-moves": CHART_MOVES,
+  "chart-wheel": CHART_WHEEL,
+  "chart-tip": CHART_TIP,
+  "chart-signed": CHART_SIGNED,
+  "chart-scatter": CHART_SCATTER,
+  "chart-table": CHART_TABLE,
+  "chart-along": CHART_ALONG,
+  "chart-pie": CHART_PIE,
+  "chart-blank": CHART_BLANK,
+  "chart-states": CHART_STATES,
+  "chart-edits": CHART_EDITS,
+  "chart-refresh": CHART_REFRESH,
+  "chart-schedule": CHART_SCHEDULE,
+};
 
 /**
  * What a check written as a string can call. The check's body runs in a block
@@ -204,6 +203,16 @@ const FULL_ZOOM = 1;
 
 /** A window size limit of none. */
 const NO_LIMIT = 0;
+
+/**
+ * record writes every check's timing into the run's folder as checks.json,
+ * for scripts/timings.ts at the repository root to read.
+ */
+async function record(timed: CheckTiming[]): Promise<void> {
+  const dir = process.env["UNO_SMOKE"];
+  if (dir === undefined || dir === "") return;
+  await writeFile(join(dir, "checks.json"), JSON.stringify(timed));
+}
 
 /**
  * shoot writes a picture of the window into the run's folder as <name>.png,
@@ -353,50 +362,64 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
 
   const { width: fullWidth, height } = win.getBounds();
 
-  for (const check of CHECKS) {
-    try {
-      if (check.ask !== undefined) await ask("smoke", check.ask);
-      if (check.send !== undefined) win.webContents.send(...check.send);
-      if (check.pick !== undefined) pick(check.pick);
-      if (check.window !== undefined) {
-        const { zoom = FULL_ZOOM, width = fullWidth } = check.window;
-        reshape(win, zoom, width, height);
-      }
-      if (check.input !== undefined) {
-        const { events } = check.input;
-        const send = (): void => {
-          for (const event of events) win.webContents.sendInputEvent(event);
-        };
-        if (check.input.through) through(win, send);
-        else send();
-      }
-      if (check.hover !== undefined) await hover(win, check.hover);
-      if (check.click !== undefined) await click(win, check.click);
-      if (check.drag !== undefined) await drag(win, check.drag);
-      if (check.touch !== undefined) await touch(win, check.touch);
-      if (check.wheel !== undefined) await wheel(win, check.wheel);
-      const failure =
-        check.run !== undefined
-          ? await check.run(page)
-          : ((await win.webContents.executeJavaScript(
-              `(async () => { ${PRELUDE} { ${check.script} } })()`,
-            )) as string);
+  const timed: CheckTiming[] = [];
+  const groups = selected(GROUPS, process.env[ONLY_VARIABLE]).map(({ name }) => {
+    const checks = CHECKS[name];
+    if (checks === undefined) throw new Error(`the smoke group ${name} has no checks`);
+    return { name, checks };
+  });
+  console.log(`smoke: ${groups.length} of ${GROUPS.length} groups`);
+  for (const { name: group, checks } of groups)
+    for (const check of checks) {
+      const started = performance.now();
+      let ok = true;
+      try {
+        if (check.ask !== undefined) await ask("smoke", check.ask);
+        if (check.send !== undefined) win.webContents.send(...check.send);
+        if (check.pick !== undefined) pick(check.pick);
+        if (check.window !== undefined) {
+          const { zoom = FULL_ZOOM, width = fullWidth } = check.window;
+          reshape(win, zoom, width, height);
+        }
+        if (check.input !== undefined) {
+          const { events } = check.input;
+          const send = (): void => {
+            for (const event of events) win.webContents.sendInputEvent(event);
+          };
+          if (check.input.through) through(win, send);
+          else send();
+        }
+        if (check.hover !== undefined) await hover(win, check.hover);
+        if (check.click !== undefined) await click(win, check.click);
+        if (check.drag !== undefined) await drag(win, check.drag);
+        if (check.touch !== undefined) await touch(win, check.touch);
+        if (check.wheel !== undefined) await wheel(win, check.wheel);
+        const failure =
+          check.run !== undefined
+            ? await check.run(page)
+            : ((await win.webContents.executeJavaScript(
+                `(async () => { ${PRELUDE} { ${check.script} } })()`,
+              )) as string);
 
-      if (failure === "") {
-        console.log(`  ok   ${check.name}`);
-        if (check.shot !== undefined) await shoot(win, check.shot);
-      } else {
-        console.error(`  FAIL ${check.name}: ${failure}`);
-        failed++;
+        if (failure === "") {
+          console.log(`  ok   ${check.name}`);
+          if (check.shot !== undefined) await shoot(win, check.shot);
+        } else {
+          console.error(`  FAIL ${check.name}: ${failure}`);
+          ok = false;
+        }
+      } catch (err) {
+        console.error(`  FAIL ${check.name}: ${(err as Error).message}`);
+        ok = false;
       }
-    } catch (err) {
-      console.error(`  FAIL ${check.name}: ${(err as Error).message}`);
-      failed++;
+      if (!ok) failed++;
+      timed.push({ group, name: check.name, ms: Math.round(performance.now() - started), ok });
     }
-  }
 
-  // A picture of the whole window, for checking the layout.
+  // A picture of the whole window, for checking the layout, and what every
+  // check took.
   await shoot(win, "window");
+  await record(timed);
 
   if (failed === 0) console.log("smoke: all checks passed");
   else console.error(`smoke: ${failed} check(s) failed`);

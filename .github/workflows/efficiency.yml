@@ -1,7 +1,7 @@
 name: efficiency
 
-# What a change costs in requests and bytes, measured on every pull request
-# and on every push to main.
+# What a change costs in requests and bytes, measured on every pull request,
+# whatever branch it targets, and on every push to main.
 #
 # core/tests/efficiency counts what a person waits on: requests sent,
 # bytes asked for, directory entries read. The counts are exact, the same on
@@ -21,7 +21,6 @@ name: efficiency
 
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 

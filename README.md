@@ -32,6 +32,19 @@ vp run preview    # film docs/preview.gif: the browse story
                   # `vp run preview chart` films docs/chart.gif
 ```
 
+Three tiers of the tests, sized to what a change can break, each one command:
+
+```bash
+scripts/gate.sh 0 [base]   # every edit: check and the related tests, in the packages that changed
+scripts/gate.sh 1 [base]   # once per PR: check, related tests, build, the smoke groups the diff touches
+scripts/gate.sh 2          # the stack's top and before handing back: check, the whole suite, the whole smoke
+```
+
+`base` is the branch below the change, `origin/main` by default.
+Run a gate as a command of its own, never chained after another.
+The smoke's groups and what each file touches are in `apps/desktop/smoke-groups.json`; `vp run smoke -- --affected <base>` picks them, and `UNO_SMOKE_ONLY=charts,chart-pie vp run smoke` names them.
+`core/scripts/timings.ts` runs the full gate and writes where its time went.
+
 When several of these run at once on one machine, from several worktrees or agents, put each behind `scripts/bounded.sh`:
 
 ```bash
