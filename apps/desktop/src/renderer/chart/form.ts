@@ -159,6 +159,8 @@ export class ChartForm {
   private readonly by = select("by");
   /** The number column bars or a pie sum, or "" for none, which counts the rows. */
   private readonly sum = select("sum");
+  /** The column whose values split each bar into a stack, or "" for none, a bar per value. */
+  private readonly split = select("split");
   /** The number column across a scatter, the selected one where it holds numbers. */
   private readonly x = select("x");
   /** The number column up a scatter, one other than X. */
@@ -179,6 +181,7 @@ export class ChartForm {
   private readonly grouped = [
     field(m.chart_form_by(), this.by),
     field(m.chart_form_sum(), this.sum),
+    field(m.chart_form_split(), this.split),
   ];
   private readonly paired = [field(m.chart_form_x(), this.x), field(m.chart_form_y(), this.y)];
   private readonly title = el("input");
@@ -226,11 +229,21 @@ export class ChartForm {
     this.kind.append(...KINDS.map(([t, words]) => option(words(), t)));
     this.kind.addEventListener("change", () => this.ask());
     this.at.addEventListener("change", () => this.dated());
+    this.by.addEventListener("change", () => this.ask());
     this.per.append(...PERS.map(([per, words]) => option(words(), per)));
 
     if (opening.t === "insert") this.offer(opening.col);
     else this.opensOn(opening.chart.plot);
-    for (const column of [this.at, this.order, this.per, this.by, this.sum, this.x, this.y]) {
+    for (const column of [
+      this.at,
+      this.order,
+      this.per,
+      this.by,
+      this.sum,
+      this.split,
+      this.x,
+      this.y,
+    ]) {
       column.addEventListener("change", () => this.name());
     }
 
@@ -273,7 +286,7 @@ export class ChartForm {
   private choose(): void {
     const chosen = (select: HTMLSelectElement): ChartColumn | undefined =>
       select.value === "" ? undefined : this.column(select.value);
-    const [by, ...kept] = [this.by, this.sum, this.x, this.y, this.at].map(chosen);
+    const [by, ...kept] = [this.by, this.sum, this.x, this.y, this.at, this.split].map(chosen);
     this.source = this.sources[Number(this.from.value)] ?? this.source;
     if (this.opening.t === "insert") {
       this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
@@ -284,12 +297,14 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // The form makes no stacked chart yet, so it opens one as bars of its values.
+    // A stacked chart is bars split by a column.
     this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time") {
       this.per.value = plot.per;
       this.offer(this.placeAt(plot.at), [plot.sum, undefined, undefined, plot.at]);
+    } else if (plot.t === "stack") {
+      this.offer(this.placeAt(plot.by), [plot.sum, undefined, undefined, undefined, plot.split]);
     } else this.offer(this.placeAt(plot.by), [plot.sum]);
   }
 
@@ -328,10 +343,12 @@ export class ChartForm {
     );
     this.by.replaceChildren();
     this.sum.replaceChildren(option(m.chart_form_sum_none(), ""));
+    this.split.replaceChildren(option(m.chart_form_split_none(), ""));
     this.x.replaceChildren();
     this.y.replaceChildren();
     for (const [i, c] of columns.entries()) {
       this.by.append(fromFile(c.header, i));
+      this.split.append(fromFile(c.header, i));
       // Cells that do not read as numbers are left out of a sum or a scatter and counted.
       if (c.kind !== "num" && !c.flagged) continue;
       numbers.push(i);
@@ -350,6 +367,7 @@ export class ChartForm {
     const yAt = y ?? numbers.find((i) => i !== xAt) ?? xAt;
     this.by.value = String(clamp(by, columns.length - 1));
     this.sum.value = String(sum ?? "");
+    this.split.value = String(this.placed(kept[4]) ?? "");
     this.x.value = String(xAt ?? "");
     this.y.value = String(yAt ?? "");
 
@@ -374,6 +392,10 @@ export class ChartForm {
     this.timed[1]!.hidden ||= order === undefined || unit !== undefined;
     this.grouped[0]!.hidden = t === "scatter" || t === "time";
     this.grouped[1]!.hidden = t === "scatter";
+    this.grouped[2]!.hidden = t !== "bars";
+    // A value splits by another column, never by its own.
+    for (const made of this.split.options) made.disabled = made.value === this.by.value;
+    if (this.split.value === this.by.value) this.split.value = "";
     for (const line of this.paired) line.hidden = t !== "scatter";
     this.name();
   }
@@ -387,7 +409,11 @@ export class ChartForm {
     if (this.kind.value === "time") return this.overTime();
     const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
-    return this.sum.value === "" ? { t, by } : { t, by, sum: this.column(this.sum.value) };
+    const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
+    if (t === "bars" && this.split.value !== "") {
+      return { t: "stack", by, split: this.column(this.split.value), ...sum };
+    }
+    return { t, by, ...sum };
   }
 
   /**

@@ -12,6 +12,7 @@
 
 import { m } from "@paraglide/messages";
 import { offered } from "@renderer/language";
+import { EDGE } from "@renderer/shell/form";
 import { DEFAULT_THEME } from "@renderer/theme";
 import { pressing } from "./chart-moves.ts";
 import { DOUBLE_ZOOM, NARROW_WIDTH } from "./charts.ts";
@@ -226,9 +227,12 @@ export const CHART_FORM: Check[] = [
       ${KEYED}
       const sheet = document.querySelector(".grid-scroll").getBoundingClientRect();
       if (head.left < sheet.left || head.right > sheet.right) return "the header stands at " + head.left + " to " + head.right;
-      // The zoomed page leaves the form too little room to stand at the header's left.
+      // The zoomed page leaves the form too little room to stand at the header's left,
+      // and too little under the header for all its fields, so it hangs as low as
+      // keeps it EDGE inside the page.
       const over = box.left < head.right && head.left < box.right;
-      return over && Math.round(box.top) === under[1] ? "" : "the form stands at " + box.left + "," + box.top + ", away from " + under;
+      const lifted = Math.round(box.bottom) === innerHeight - ${EDGE} && box.top < under[1];
+      return over && (Math.round(box.top) === under[1] || lifted) ? "" : "the form stands at " + box.left + "," + box.top + " to " + box.bottom + ", away from " + under;
     `,
   },
   {

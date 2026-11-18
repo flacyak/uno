@@ -12,7 +12,7 @@ import type { MenuPlace } from "./menu.ts";
 import { button, clickAway, el, hang, walk } from "./util.ts";
 
 /** The minimum gap between a form and the window's edge, in pixels. */
-const EDGE = 8;
+export const EDGE = 8;
 
 /** Every pop-up form's worded labels. Each form's label column is as wide as
  * the longest of them in the language spoken, so the forms' controls line up. */
@@ -25,6 +25,7 @@ export const LABELS: ReadonlyArray<() => string> = [
   m.chart_form_per,
   m.chart_form_by,
   m.chart_form_sum,
+  m.chart_form_split,
   m.chart_form_x,
   m.chart_form_y,
   m.chart_form_title_field,

@@ -508,6 +508,8 @@
   "chart_form_by": "por",
   "chart_form_sum": "suma de",
   "chart_form_sum_none": "ninguna, contar filas",
+  "chart_form_split": "dividir por",
+  "chart_form_split_none": "ninguna, una barra por valor",
   "chart_form_at": "fechas",
   "chart_form_per": "por",
   "chart_per_auto": "automático",

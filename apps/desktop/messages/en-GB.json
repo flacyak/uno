@@ -492,6 +492,8 @@
   "chart_form_by": "by",
   "chart_form_sum": "sum of",
   "chart_form_sum_none": "none, count rows",
+  "chart_form_split": "split by",
+  "chart_form_split_none": "none, a bar per value",
   "chart_form_at": "dates",
   "chart_form_per": "per",
   "chart_per_auto": "automatic",
