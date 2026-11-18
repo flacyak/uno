@@ -22,6 +22,7 @@
   "apps/desktop/src/main/smoke/chart-form.ts": ["chart-form"],
   "apps/desktop/src/main/smoke/chart-keys.ts": ["chart-keys"],
   "apps/desktop/src/main/smoke/chart-moves.ts": ["chart-moves"],
+  "apps/desktop/src/main/smoke/chart-stack.ts": ["chart-stack"],
   "apps/desktop/src/main/smoke/chart-tip.ts": ["chart-tip"],
   "apps/desktop/src/main/smoke/chart-wheel.ts": ["chart-wheel", "chart-table"],
   "apps/desktop/src/main/smoke/charts.ts": [
@@ -62,6 +63,7 @@
     "chart-along",
     "chart-pie",
     "chart-time",
+    "chart-stack",
     "chart-blank",
     "chart-states",
     "chart-edits",
@@ -82,6 +84,7 @@
     "chart-along",
     "chart-pie",
     "chart-time",
+    "chart-stack",
     "chart-blank",
     "chart-states",
     "chart-edits",

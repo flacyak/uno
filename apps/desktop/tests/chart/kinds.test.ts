@@ -9,7 +9,7 @@
 import { afterEach, expect, test } from "vite-plus/test";
 
 import type { Plot } from "@document";
-import type { Group, GroupsTally, SampleTally, TimeTally } from "@engine";
+import type { Group, GroupsTally, SampleTally, StackTally, TimeTally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { bars as drawBars } from "@renderer/chart/bars";
 import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
@@ -22,6 +22,7 @@ import { stack } from "@renderer/chart/kinds/stack";
 import { time } from "@renderer/chart/kinds/time";
 import { belowZero, past, pie as drawPie } from "@renderer/chart/pie";
 import { BARS_INSET } from "@renderer/chart/rows";
+import { stack as drawStack } from "@renderer/chart/stack";
 import { TICK_GAP, sampled, scatter as drawScatter } from "@renderer/chart/scatter";
 import { spanned, valued } from "@renderer/chart/summary";
 import type { Told } from "@renderer/chart/summary";
@@ -176,6 +177,52 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 
 test("each plot kind has its module", () => {
   expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack });
+});
+
+/** Rows per region by channel, two regions in two channels and Other. */
+const STACKED: Extract<Plot, { t: "stack" }> = {
+  t: "stack",
+  by: { col: 1, header: "region" },
+  split: { col: 3, header: "channel" },
+};
+const STACKS: StackTally = {
+  t: "stack",
+  plot: STACKED,
+  coverage: { rows: 9, total: 9, complete: true },
+  series: ["web", "direct"],
+  values: [
+    {
+      value: "North",
+      cells: [
+        { rows: 3, sum: 0 },
+        { rows: 2, sum: 0 },
+      ],
+      other: { rows: 1, sum: 0 },
+      total: { rows: 6, sum: 0 },
+    },
+    {
+      value: "South",
+      cells: [
+        { rows: 0, sum: 0 },
+        { rows: 3, sum: 0 },
+      ],
+      other: { rows: 0, sum: 0 },
+      total: { rows: 3, sum: 0 },
+    },
+  ],
+  others: { values: 0, rows: 0, sum: 0 },
+  below: { values: 0, rows: 0, sum: 0 },
+  rest: { rows: 0, sum: 0 },
+  unsplit: 0,
+  skipped: { blank: 0, unparsed: 0 },
+};
+
+test("a stacked chart's kind draws its tally as stack.ts draws it, and none of another kind", () => {
+  const drawing = stack(STACKED).drawing(STACKS, ROOM)!;
+  expect(drawing.draw(HEIGHT).outerHTML).toBe(drawStack(STACKED, STACKS, HEIGHT).outerHTML);
+  expect(drawing.empty).toBe(false);
+  expect(stack(STACKED).drawing({ ...STACKS, values: [] }, ROOM)?.empty).toBe(true);
+  expect(stack(STACKED).drawing(GROUPS, ROOM)).toBeUndefined();
 });
 
 /** Rows per day of the sales export's dates, sent from days to years. */

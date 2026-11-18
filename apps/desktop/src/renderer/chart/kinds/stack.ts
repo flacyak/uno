@@ -1,12 +1,15 @@
 /**
  * @fileoverview A stacked bar chart's kind: a bar per value, of its rows or of
- * the sum of another column, split by the value of a third. Its record lands
- * before its drawing, so its window says it is not drawn yet.
+ * the sum of another column, split into a segment per value of a third. Its
+ * table, summary and tooltip land after its drawing, so they say it is not
+ * drawn yet.
  */
 
 import type { StackPlot } from "@document";
 import { m } from "@paraglide/messages";
+import { fitTips } from "../bars.ts";
 import type { ChartKind } from "../kind.ts";
+import { stack as drawStack } from "../stack.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -20,5 +23,13 @@ export const stack: ChartKind<StackPlot> = (plot) => ({
   },
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.by, plot.split],
-  drawing: () => undrawn,
+  drawing: (tally) =>
+    tally.t !== "stack"
+      ? undefined
+      : {
+          ...undrawn,
+          empty: tally.values.length === 0,
+          draw: (height) => drawStack(plot, tally, height),
+          fit: fitTips,
+        },
 });

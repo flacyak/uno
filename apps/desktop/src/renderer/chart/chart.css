@@ -424,6 +424,29 @@
   left: auto;
 }
 
+/* A stack's segment, from stack.ts, wears its slot's `--key`. It starts
+ * `--from` of the span past zero and runs `--part` of it. Each after the first
+ * gives --segment-gap of its length to a clear border, so what lies under the
+ * row shows between two segments, and the last is round at the data's end, as
+ * a bar is. */
+.chart-segment {
+  position: absolute;
+  inset-block: 0;
+  left: calc(var(--at) + var(--from) * var(--span));
+  box-sizing: border-box;
+  width: calc(var(--part) * var(--span));
+  border: 0 solid transparent;
+  background: var(--key) padding-box;
+}
+
+.chart-segment.after {
+  border-left-width: var(--segment-gap);
+}
+
+.chart-segment.end {
+  border-radius: 0 4px 4px 0;
+}
+
 /* The characters window.ts measures a tick's character by, written as a tick
  * is, out of sight and out of the window's flow. */
 .chart-gauged {
@@ -777,6 +800,11 @@
   .chart-point,
   .chart-slice {
     fill: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .chart-segment {
+    background: CanvasText padding-box;
     forced-color-adjust: none;
   }
 

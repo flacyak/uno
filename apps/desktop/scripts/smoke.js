@@ -357,6 +357,61 @@ await writeFile(
   }),
 );
 
+// A workspace of two stacked charts of a small export of four regions' sales
+// in eight channels, each channel's rows fewer than the one before it and
+// each region's more than the one before it: rows per region by channel in a
+// new window's size at the sheet's foot, whose six largest channels take a
+// colour each and the last two Other, and the sum of revenue per region by
+// channel in a window of the least width at its top.
+const stackedFile = join(scratch, "sent", "stacked.csv");
+const stackedHeader = "region,channel,revenue";
+const stackedRegions = ["North", "South", "East", "West"];
+const stackedChannels = ["web", "direct", "partner", "mail", "phone", "shop", "fair", "kiosk"];
+const stackedRows = stackedRegions.flatMap((region, r) =>
+  stackedChannels.flatMap((channel, c) =>
+    Array.from(
+      { length: stackedChannels.length - c + r },
+      () => `${region},${channel},${(c + 1) * 100}`,
+    ),
+  ),
+);
+await writeFile(stackedFile, `${[stackedHeader, ...stackedRows].join("\n")}\n`);
+const stacked = join(scratch, "sent", "stacked.uno");
+const stackedSource = {
+  id: "stacked",
+  name: "stacked.csv",
+  path: stackedFile,
+  rows: stackedRows.length,
+  cols: stackedHeader.split(",").length,
+  state: { active: { row: 0, col: 0 } },
+};
+const perRegion = {
+  t: "stack",
+  by: { col: 0, header: "region" },
+  split: { col: 1, header: "channel" },
+};
+const stackedChart = { source: stackedSource.id, title: "", refresh: 0 };
+await writeFile(
+  stacked,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [stackedSource],
+    active: stackedSource.id,
+    log: [],
+    charts: [
+      { ...stackedChart, id: "c1", plot: perRegion, place: { ...chartSize, x: 0, y: 1 } },
+      {
+        ...stackedChart,
+        id: "c2",
+        plot: { ...perRegion, sum: { col: 2, header: "revenue" } },
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: stacked,
+  }),
+);
+
 // A workspace of rows over the dates of a file whose last is a placeholder,
 // 9999-12-31, in a new window's size. Its 7,976 years are past the batch a
 // tally sends, so the window asks for the rest. It stands at the sheet's
@@ -650,6 +705,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_ALONG: along,
       UNO_SMOKE_PIES: pies,
       UNO_SMOKE_TIMED: timed,
+      UNO_SMOKE_STACKED: stacked,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,
       UNO_SMOKE_STATES: states,
