@@ -17,7 +17,7 @@ import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
-import type { Groups, Per, Sample, TimeLevel, Times } from '@tally';
+import type { Groups, Per, Sample, Split, TimeLevel, Times } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -306,6 +306,13 @@ export interface TimeTally extends Times {
   coverage: Coverage;
 }
 
+/** A stacked bar chart's tally: rows, or a sum, per value and per series. */
+export interface StackTally extends Split {
+  t: 'stack';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
  * arrays, or why the source could not be read. Each names the plot it reads,
@@ -316,6 +323,7 @@ export type Tally =
   | GroupsTally
   | SampleTally
   | TimeTally
+  | StackTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**

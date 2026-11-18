@@ -26,6 +26,7 @@ import type {
   ChartColumn,
   ChartPlace,
   Plot,
+  StackPlot,
   TimePlot,
 } from './chart.ts';
 import {
@@ -1174,6 +1175,21 @@ export function parseOverTime(where: string, value: unknown): TimePlot {
   throw new Error(
     `${where}: order or unit, one of the two, says how dates read`,
   );
+}
+
+/**
+ * parseStacked reads a stacked bar chart's plot: the `by` column whose
+ * values it shows, the `split` column whose values split each bar, and a
+ * `sum` it may name. It refuses a split of a value by itself.
+ */
+export function parseStacked(where: string, value: unknown): StackPlot {
+  const p = asRecord(value);
+  const by = columnOf(where, p, 'by');
+  const split = columnOf(where, p, 'split');
+  if (split.col === by.col)
+    throw new Error(`${where}: split names the column by names`);
+  if (p['sum'] === undefined) return { t: 'stack', by, split };
+  return { t: 'stack', by, split, sum: columnOf(where, p, 'sum') };
 }
 
 /** parsePlace reads where a chart's window sits. */
