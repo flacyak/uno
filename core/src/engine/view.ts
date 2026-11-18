@@ -6,6 +6,7 @@
  * the Schema and a new generation number. Every stored row stays as read.
  */
 
+import { readDate } from '@date';
 import type { Chart, HeldFile, HeldPart, HeldParts } from '@document';
 import type { SavedSource } from '@document';
 import { trimSpace } from '@go';
@@ -57,6 +58,7 @@ import type {
 } from './protocol.ts';
 import { FILE_SHOWS, Refusal, saidOf } from '@said';
 import type { Said } from '@said';
+import type { Per, TimeLevel } from '@tally';
 import { Pages, RowIndex } from './rows.ts';
 import type { Tuning } from './rows.ts';
 import { decodeBlocks, encodeBlocks } from './saved.ts';
@@ -881,6 +883,11 @@ export class View {
     this.tally();
   }
 
+  /** batch is the chart with `id`'s batch at `per` from `offset`, if any. */
+  batch(id: string, per: Per, offset: number): TimeLevel | undefined {
+    return this.tallies.batch(id, per, offset);
+  }
+
   /**
    * adopt takes over the folds of the charts of `was`, the view this one's
    * index was seeded from: every block of `was` but its last, which this
@@ -1239,7 +1246,10 @@ export class View {
    * An "unparsed" match tests a date column with isDate and a numeric or
    * flagged column with isNumber. A "not-number" match tests any column with
    * parse, as a chart's fold reads its cells. Both read numbers with the
-   * column's decimal mark. A blank cell is skipped.
+   * column's decimal mark. A "not-date" match reads a cell as an over-time
+   * chart's fold does, with readDate and the chart's reading, so a cell
+   * either order would read is found where the chart's order does not. A
+   * blank cell is skipped.
    */
   private async matcher(
     req: FindRequest,
@@ -1247,6 +1257,10 @@ export class View {
     if (req.match.t === 'text') {
       const text = req.match.text;
       return text === '' ? undefined : (shown) => shown.includes(text);
+    }
+    if (req.match.t === 'not-date') {
+      const { reading } = req.match;
+      return (shown) => shown !== '' && readDate(shown, reading) === undefined;
     }
     const column = (await this.columns())[req.col];
     if (column === undefined) return undefined;

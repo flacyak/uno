@@ -30,6 +30,7 @@
     "chart-scatter",
     "chart-along",
     "chart-pie",
+    "chart-time",
     "chart-blank",
     "chart-states"
   ],
@@ -60,6 +61,7 @@
     "chart-table",
     "chart-along",
     "chart-pie",
+    "chart-time",
     "chart-blank",
     "chart-states",
     "chart-edits",
@@ -79,6 +81,7 @@
     "chart-table",
     "chart-along",
     "chart-pie",
+    "chart-time",
     "chart-blank",
     "chart-states",
     "chart-edits",

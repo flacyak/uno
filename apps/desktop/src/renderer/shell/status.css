@@ -127,9 +127,11 @@
   min-width: 0;
 }
 
+/* It clips only across, for its ellipsis, so an underscore in a column's
+ * name, which stands below the font's descent, shows at any zoom. */
 .win-status #status-cell .col {
   min-width: 0;
-  overflow: hidden;
+  overflow: clip visible;
   text-overflow: ellipsis;
 }
 

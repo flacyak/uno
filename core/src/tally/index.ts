@@ -15,4 +15,22 @@ export { SCATTER_POINTS_AT_MOST, SampleFold } from './sample.ts';
 export type { Marks, SavedSample } from './sample.ts';
 export type { Point, Sample } from './sample.ts';
 export { TALLY_VERSION, isCount, isRecord } from './saved.ts';
+export {
+  HELD,
+  HELD_AT_MOST,
+  LEVEL_BATCH,
+  PER,
+  TimeFold,
+  sundayOf,
+} from './time.ts';
+export type {
+  Held,
+  Per,
+  Period,
+  Periods,
+  SavedTime,
+  TimeLevel,
+  Times,
+  Undated,
+} from './time.ts';
 export type { Skipped } from './skipped.ts';

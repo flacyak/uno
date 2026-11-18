@@ -9,15 +9,18 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, Plot } from "@document";
-import type { GroupsTally } from "@engine";
+import type { GroupsTally, TimeTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, locales, setLocale } from "@paraglide/runtime";
-import { summary } from "@renderer/chart/summary";
+import type { ChartKind, PlotRoom } from "@renderer/chart/kind";
+import { bars } from "@renderer/chart/kinds/bars";
+import { KINDS } from "@renderer/chart/kinds/index";
+import { undrawn } from "@renderer/chart/kinds/undrawn";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import { NO_CORNER } from "@renderer/chart/place";
 import type { Stage } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
-import { BARS, SHORT_ROWS, holding } from "./charted.ts";
+import { BARS, ROOM, SHORT_ROWS, holding, summaryFor } from "./charted.ts";
 import { frame } from "./smoke/dom-page.ts";
 
 /** The columns the made titles below name. */
@@ -25,6 +28,7 @@ const REGION = { col: 1, header: "region" };
 const UNITS = { col: 4, header: "units" };
 const REVENUE = { col: 5, header: "revenue" };
 const BLANK = { col: 2, header: "" };
+const DATE = { col: 0, header: "order_date" };
 
 /** The plots whose made title starts with a message, not a header. */
 const WORDED: Plot[] = [
@@ -32,6 +36,8 @@ const WORDED: Plot[] = [
   { t: "bars", by: REGION, sum: REVENUE },
   { t: "pie", by: REGION },
   { t: "pie", by: REGION, sum: REVENUE },
+  { t: "time", at: DATE, per: "month", order: "day" },
+  { t: "time", at: DATE, sum: REVENUE, per: "auto", unit: "s" },
 ];
 
 /** A text whose first letter is lower case, past any marks a pseudo-locale puts before it. */
@@ -59,8 +65,11 @@ const NO_LAYER: Stage = {
   checks: () => undefined,
   repoint: () => undefined,
   notNumbers: () => undefined,
+  notDates: () => undefined,
+  reorder: () => undefined,
   edit: () => undefined,
   refresh: () => undefined,
+  batch: () => undefined,
   remove: () => undefined,
   say: () => undefined,
 };
@@ -108,6 +117,26 @@ test.each<[string, string, Plot]>([
   ["revenue against units", "revenue frente a units", { t: "scatter", x: UNITS, y: REVENUE }],
   ["rows per column 3", "filas por columna 3", { t: "bars", by: BLANK }],
   ["column 3 against units", "columna 3 frente a units", { t: "scatter", x: UNITS, y: BLANK }],
+  [
+    "rows per month of order_date",
+    "filas por mes de order_date",
+    { t: "time", at: DATE, per: "month", order: "day" },
+  ],
+  [
+    "sum of revenue per quarter of order_date",
+    "suma de revenue por trimestre de order_date",
+    { t: "time", at: DATE, sum: REVENUE, per: "quarter", order: "month" },
+  ],
+  [
+    "rows over order_date",
+    "filas a lo largo de order_date",
+    { t: "time", at: DATE, per: "auto", unit: "ms" },
+  ],
+  [
+    "sum of revenue over order_date",
+    "suma de revenue a lo largo de order_date",
+    { t: "time", at: DATE, sum: REVENUE, per: "auto", order: "day" },
+  ],
 ])("a plot makes the title %s in the app's language, from its columns", (en, es, plot) => {
   expect(madeTitle(plot)).toBe(en);
   void setLocale("es", { reload: false });
@@ -203,6 +232,7 @@ test("the head, the track and the caption are drawn, with a grip that says nothi
     "chart-plot",
     "chart-tip",
     "chart-summary",
+    "chart-gauged",
     "chart-coverage",
     "chart-caption",
     "chart-edge chart-edge-right",
@@ -270,9 +300,14 @@ const heardOf = (latest: GroupsTally, complete: GroupsTally | undefined): Heard 
   complete,
 });
 
-/** A window of `chart`, whose chart hears what `heard` says by each draw, over a stage of `more`. */
-function hearing(heard: () => Heard, chart = BARS, more: Partial<Stage> = {}): ChartWindow {
-  const made = new ChartWindow(chart, { ...NO_LAYER, heard, ...more });
+/** A window of `chart`, whose chart hears what `heard` says by each draw, over a stage of `more`, drawn as `kinds` draw. */
+function hearing(
+  heard: () => Heard,
+  chart = BARS,
+  more: Partial<Stage> = {},
+  kinds = KINDS,
+): ChartWindow {
+  const made = new ChartWindow(chart, { ...NO_LAYER, heard, ...more }, kinds);
   made.show(chart, undefined);
   document.body.append(made.box);
   return made;
@@ -294,6 +329,100 @@ const rowHeads = (box: HTMLElement): Array<string | null> =>
 const image = (box: HTMLElement): HTMLElement => box.querySelector<HTMLElement>('[role="img"]')!;
 const told = (box: HTMLElement): string => box.querySelector(".chart-summary")?.textContent ?? "";
 
+test("a kind this build reads and does not draw yet opens a window that says so, in the plot and in its table", async () => {
+  const drawnLater: ChartKind<Extract<Plot, { t: "bars" }>> = (plot) => ({
+    ...bars(plot),
+    drawing: () => undrawn,
+  });
+  const made = hearing(
+    () => heardOf(tallyOf(["North"], true), undefined),
+    BARS,
+    {},
+    {
+      ...KINDS,
+      bars: drawnLater,
+    },
+  );
+  await frame();
+  const plot = made.box.querySelector(".chart-plot")!;
+  expect(plot.textContent).toBe("this chart is not drawn yet");
+  expect(title(made.box).textContent).toBe("rows per region");
+  press(made.box, "t");
+  await frame();
+  expect(plot.textContent).toBe("this chart is not drawn yet");
+});
+
+test("a window's kind reads its tally for the plot's width and a tick's character, as the window measures them", async () => {
+  const rooms: PlotRoom[] = [];
+  const measured: ChartKind<Extract<Plot, { t: "bars" }>> = (plot) => ({
+    ...bars(plot),
+    drawing: (tally, room) => {
+      rooms.push(room);
+      return bars(plot).drawing(tally, room);
+    },
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
+    function (this: HTMLElement) {
+      return this.classList.contains("chart-plot") ? ROOM.width : 0;
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      const across = this.textContent.length * ROOM.ch;
+      return new DOMRect(0, 0, this.classList.contains("chart-gauged") ? across : 0, 0);
+    },
+  );
+  const read = tallyOf(["North"], true);
+  hearing(() => heardOf(read, read), BARS, {}, { ...KINDS, bars: measured });
+  await frame();
+  expect(rooms.length).toBeGreaterThan(0);
+  expect(rooms.every((room) => room.width === ROOM.width && room.ch === ROOM.ch)).toBe(true);
+});
+
+test("a drawing that lacks periods its tally has not sent asks the stage for them, by its chart, size and offset", async () => {
+  const wanting: ChartKind<Extract<Plot, { t: "bars" }>> = (plot) => ({
+    ...bars(plot),
+    drawing: (tally, room) => ({
+      ...bars(plot).drawing(tally, room)!,
+      wanted: () => [{ per: "month", offset: 1_024 }],
+    }),
+  });
+  const batch = vi.fn();
+  const read = tallyOf(["North"], true);
+  hearing(() => heardOf(read, read), BARS, { batch }, { ...KINDS, bars: wanting });
+  await frame();
+  expect(batch).toHaveBeenCalledWith(BARS.id, "month", 1_024);
+});
+
+test("an over-time chart's caption offers the order its dates read only in, and its button asks the stage for it", async () => {
+  const at = { col: 0, header: "date" };
+  const plot: Plot = { t: "time", at, per: "auto", order: "month" };
+  const tally: TimeTally = {
+    t: "time",
+    plot,
+    coverage: { rows: 3, total: 3, complete: true },
+    levels: [{ per: "day", from: 0, span: 1, offset: 0, rows: [1], sum: [] }],
+    undated: { rows: 2, sum: 0 },
+    dates: { blank: 0, unparsed: 2, other: 2 },
+    skipped: { blank: 0, unparsed: 0 },
+  };
+  const reorder = vi.fn();
+  const timed = { ...BARS, plot };
+  const made = hearing(
+    () => ({ state: "fine", name: NAME, latest: tally, complete: tally }),
+    timed,
+    { reorder },
+  );
+  await frame();
+  const said = made.box.querySelector(".chart-said")!.textContent;
+  expect(said.startsWith("3 rows · 2 not dates · ")).toBe(true);
+  expect(said.endsWith(" · read day first")).toBe(true);
+  expect(said).not.toContain("read only");
+  const buttons = [...made.box.querySelectorAll<HTMLButtonElement>(".chart-find-dates")];
+  buttons.at(-1)!.click();
+  expect(reorder).toHaveBeenCalledExactlyOnceWith(timed.id, "day");
+});
+
 test("the drawing is an image named by the head until a tally completes, then by what the chart says it shows, which a partial never changes", async () => {
   const read = tallyOf(["North", "South"], true);
   let heard = heardOf(tallyOf(["North"], false), undefined);
@@ -306,7 +435,7 @@ test("the drawing is an image named by the head until a tally completes, then by
   heard = heardOf(read, read);
   made.redraw();
   await frame();
-  const { said, values, more } = summary(madeTitle(BARS.plot), NAME, BARS.plot, read);
+  const { said, values, more } = summaryFor(madeTitle(BARS.plot), NAME, BARS.plot, read);
   expect(pointedAt(image(made.box), "aria-labelledby")).toBe(
     made.box.querySelector(".chart-summary"),
   );
@@ -326,7 +455,7 @@ test("a relabel writes the summary in the language chosen since, out of sight", 
   void setLocale("es", { reload: false });
   made.relabel();
   await frame();
-  const { said } = summary(madeTitle(BARS.plot), NAME, BARS.plot, read);
+  const { said } = summaryFor(madeTitle(BARS.plot), NAME, BARS.plot, read);
   expect(said).toContain("filas por");
   expect(made.box.querySelector(".chart-summary-said")?.textContent).toBe(said);
   expect(made.box.querySelector<HTMLElement>(".chart-summary")?.hidden).toBe(true);

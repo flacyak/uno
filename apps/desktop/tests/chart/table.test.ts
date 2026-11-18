@@ -15,10 +15,9 @@ import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, GroupsTally, SampleTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { table } from "@renderer/chart/table";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { BARS, PIE, SCATTER, SHARES } from "../charted.ts";
+import { BARS, PIE, SCATTER, SHARES, drawingOf } from "../charted.ts";
 
 /** A sum of revenue per region. */
 const SUMS = { ...BARS.plot, sum: { col: 5, header: "revenue" } };
@@ -52,7 +51,7 @@ afterEach(() => void setLocale(baseLocale, { reload: false }));
 
 test("a table has a row per value sent, the largest first, its value heading the row and its rows in the app's language", () => {
   const tally = tallyOf(sent("North", 1204), sent("South", 812));
-  const box = table(BARS.plot, tally, called());
+  const box = drawingOf(BARS.plot, tally).table(called());
   expect(box.classList.contains("chart-scrolls")).toBe(true);
   expect(box.querySelector("table > caption")?.textContent).toBe("rows per region");
   expect(rows(box)).toStrictEqual([
@@ -69,7 +68,7 @@ test("a table has a row per value sent, the largest first, its value heading the
   expect(first!.firstElementChild?.getAttribute("scope")).toBe("row");
   expect(first!.querySelector("th .from-file")?.textContent).toBe("North");
   void setLocale("es", { reload: false });
-  expect(rows(table(BARS.plot, tally, called()))).toStrictEqual([
+  expect(rows(drawingOf(BARS.plot, tally).table(called()))).toStrictEqual([
     ["region", "filas"],
     ["North", "1204"],
     ["South", "812"],
@@ -77,7 +76,7 @@ test("a table has a row per value sent, the largest first, its value heading the
 });
 
 test("a sum's column is headed by the column summed, a blank value is called blank, and each number is in the digits' column", () => {
-  const box = table(SUMS, tallyOf(sent("", 3, 450.5), sent("North", 1, -20)), called());
+  const box = drawingOf(SUMS, tallyOf(sent("", 3, 450.5), sent("North", 1, -20))).table(called());
   expect(rows(box)).toStrictEqual([
     ["region", "revenue"],
     [m.chart_blank_value(), "450.5"],
@@ -94,7 +93,7 @@ test("the values a tally sent none of are one row after the sent ones, and a lin
   const unsent = { values: 5, rows: 20, sum: 100 };
   const past = { rows: 7, sum: 1 };
   const tally = { ...tallyOf(sent("North", 2)), others: unsent, below: unsent, rest: past };
-  const box = table(BARS.plot, tally, called());
+  const box = drawingOf(BARS.plot, tally).table(called());
   expect(rows(box)).toStrictEqual([
     ["region", "rows"],
     ["North", "2"],
@@ -102,16 +101,16 @@ test("the values a tally sent none of are one row after the sent ones, and a lin
     [m.chart_bars_past({ count: num(DISTINCT_AT_MOST) })],
   ]);
   expect(box.querySelector("tbody tr:last-child td")?.getAttribute("colspan")).toBe("2");
-  expect(rows(table(SUMS, tally, called())).at(2)).toStrictEqual([
+  expect(rows(drawingOf(SUMS, tally).table(called())).at(2)).toStrictEqual([
     m.chart_bars_more({ count: "10" }),
     "201",
   ]);
-  expect(rows(table(BARS.plot, tallyOf(sent("North", 2)), called()))).toHaveLength(2);
+  expect(rows(drawingOf(BARS.plot, tallyOf(sent("North", 2))).table(called()))).toHaveLength(2);
 });
 
 test("a pie's table gives each value's share of the pie's whole, and none to a value at or below zero", () => {
   const sums = tallyOf(sent("North", 2, 300), sent("South", 1, 100), sent("West", 1, -50));
-  expect(rows(table(SHARES.plot, sums, called()))).toStrictEqual([
+  expect(rows(drawingOf(SHARES.plot, sums).table(called()))).toStrictEqual([
     ["region", "revenue", "share"],
     ["North", "300", "75%"],
     ["South", "100", "25%"],
@@ -121,7 +120,7 @@ test("a pie's table gives each value's share of the pie's whole, and none to a v
   const unsent = { values: 5, rows: 20, sum: 0 };
   const seven = [20, 10, 10, 10, 10, 10, 10].map((n, i) => sent(`v${i + 1}`, n));
   const counts = { ...tallyOf(...seven), others: unsent };
-  const shares = rows(table(PIE.plot, counts, called())).map((cells) => cells.at(-1));
+  const shares = rows(drawingOf(PIE.plot, counts).table(called())).map((cells) => cells.at(-1));
   expect(shares).toStrictEqual(["share", "20%", "10%", "10%", "10%", "10%", "10%", "10%", "20%"]);
 });
 
@@ -137,10 +136,14 @@ test("the row of the values sent none of has the share Other draws of them, and 
     rest: { rows: 20, sum: -300 },
   };
   const more = m.chart_bars_more({ count: "15" });
-  expect(rows(table(SHARES.plot, netted, called())).at(-2)).toStrictEqual([more, "-280", "9.1%"]);
+  expect(rows(drawingOf(SHARES.plot, netted).table(called())).at(-2)).toStrictEqual([
+    more,
+    "-280",
+    "9.1%",
+  ]);
   const few = { ...tallyOf(...seven.slice(0, 3)), rest: { rows: 50, sum: 1000 } };
   const two = { ...few, others: { values: 2, rows: 2, sum: 50 } };
-  expect(rows(table(SHARES.plot, two, called())).at(-2)).toStrictEqual([
+  expect(rows(drawingOf(SHARES.plot, two).table(called())).at(-2)).toStrictEqual([
     m.chart_bars_more({ count: "2" }),
     "1,050",
     "",
@@ -159,7 +162,7 @@ test("a scatter's table has a row per point drawn, in the order sent, under its 
     most: { x: 999, y: 39960 },
     skipped: { blank: 0, unparsed: 0 },
   };
-  const box = table(SCATTER.plot, sample, called());
+  const box = drawingOf(SCATTER.plot, sample).table(called());
   expect(rows(box)).toStrictEqual([
     ["units", "revenue"],
     ["999", "39,960"],

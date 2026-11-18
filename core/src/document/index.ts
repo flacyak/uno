@@ -66,6 +66,7 @@ export type {
   ChartColumn,
   ChartPlace,
   Plot,
+  TimePlot,
 } from './chart.ts';
 export {
   formatFor,

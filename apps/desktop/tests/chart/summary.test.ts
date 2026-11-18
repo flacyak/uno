@@ -9,9 +9,9 @@ import { afterEach, expect, test } from "vite-plus/test";
 
 import type { Group, GroupsTally, SampleTally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { SUMMARY_VALUES, summary } from "@renderer/chart/summary";
+import { SUMMARY_VALUES, summaryOf } from "@renderer/chart/summary";
 import { madeTitle } from "@renderer/chart/window";
-import { BARS, PIE, SCATTER } from "../charted.ts";
+import { BARS, PIE, SCATTER, summaryFor } from "../charted.ts";
 
 /** The sales export's file, and its rows. */
 const NAME = "sales-q3.csv";
@@ -64,23 +64,39 @@ afterEach(() => void setLocale(baseLocale, { reload: false }));
 test("a summary says the title, the source and the rows, the largest values and how many more, in the language chosen", () => {
   const tally = tallyOf(REGIONS);
   expect(REGIONS.length).toBe(SUMMARY_VALUES + 1);
-  expect(summary(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
+  expect(summaryFor(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
     said: "rows per region in sales-q3.csv, 4,812 rows.",
     values: "North 2,000, South 1,500, West 1,000",
     more: "and 1 more.",
   });
   void setLocale("es", { reload: false });
-  expect(summary(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
+  expect(summaryFor(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
     said: "filas por region en sales-q3.csv, 4812 filas.",
     values: "North 2000, South 1500, West 1000",
     more: "y 1 más.",
   });
 });
 
+test("a kind's words make the summary: its span after the rows, the first values it names, and a count of the rest", () => {
+  const each = ["North 2,000", "South 1,500", "West 1,000", "East 312"];
+  expect(summaryOf("rows per region", NAME, ROWS, { span: "", each, more: 1 })).toStrictEqual({
+    said: "rows per region in sales-q3.csv, 4,812 rows.",
+    values: "North 2,000, South 1,500, West 1,000",
+    more: "and 1 more.",
+  });
+  const span = "4,808 points.";
+  expect(summaryOf("units", NAME, ROWS, { span, each: [], more: 0 })).toStrictEqual({
+    said: `units in sales-q3.csv, 4,812 rows. ${span}`,
+    values: "",
+    more: "",
+  });
+  expect(summaryOf("units", NAME, ROWS).said).toBe("units in sales-q3.csv, 4,812 rows.");
+});
+
 test("a sum names each value's sum, and the values a tally sent none of count among the rest", () => {
   const unsent = { values: 5, rows: 20, sum: 100 };
   const tally = { ...tallyOf(REGIONS), others: unsent, below: unsent };
-  expect(summary("Where the money is", NAME, SUMS, tally)).toStrictEqual({
+  expect(summaryFor("Where the money is", NAME, SUMS, tally)).toStrictEqual({
     said: "Where the money is in sales-q3.csv, 4,812 rows.",
     values: "North 7,200, South 5,000, West 2,400",
     more: "and 11 more.",
@@ -89,7 +105,7 @@ test("a sum names each value's sum, and the values a tally sent none of count am
 
 test("a summary of fewer values than it names counts no more, and calls a blank value blank", () => {
   const tally = tallyOf([sent("", 3, 0), sent("North", 1, 0)]);
-  expect(summary(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
+  expect(summaryFor(madeTitle(BARS.plot), NAME, BARS.plot, tally)).toStrictEqual({
     said: "rows per region in sales-q3.csv, 4,812 rows.",
     values: "(blank) 3, North 1",
     more: "",
@@ -99,25 +115,25 @@ test("a summary of fewer values than it names counts no more, and calls a blank 
 test("a pie's summary gives each slice's share, Other among them", () => {
   const seven = [80, 70, 60, 50, 40, 30, 20, 10].map((rows, i) => sent(`v${i + 1}`, rows, 0));
   const tally = tallyOf(seven);
-  expect(summary(madeTitle(PIE.plot), NAME, PIE.plot, tally)).toStrictEqual({
+  expect(summaryFor(madeTitle(PIE.plot), NAME, PIE.plot, tally)).toStrictEqual({
     said: "share of rows per region in sales-q3.csv, 4,812 rows.",
     values: "v1 22%, v2 19%, v3 17%",
     more: "and 4 more.",
   });
   const halved = tallyOf([sent("North", 2, 0), sent("South", 1, 0), sent("West", 1, 0)]);
-  expect(summary(madeTitle(PIE.plot), NAME, PIE.plot, halved).values).toBe(
+  expect(summaryFor(madeTitle(PIE.plot), NAME, PIE.plot, halved).values).toBe(
     "North 50%, South 25%, West 25%",
   );
 });
 
 test("a scatter's summary counts its points and spans both axes, with no values from the file apart", () => {
-  expect(summary(madeTitle(SCATTER.plot), NAME, SCATTER.plot, SAMPLE)).toStrictEqual({
+  expect(summaryFor(madeTitle(SCATTER.plot), NAME, SCATTER.plot, SAMPLE)).toStrictEqual({
     said: "revenue against units in sales-q3.csv, 4,812 rows. 4,808 points, units from 1 to 2,400 and revenue from 0 to 1,048,000.",
     values: "",
     more: "",
   });
   void setLocale("es", { reload: false });
-  expect(summary(madeTitle(SCATTER.plot), NAME, SCATTER.plot, SAMPLE).said).toBe(
+  expect(summaryFor(madeTitle(SCATTER.plot), NAME, SCATTER.plot, SAMPLE).said).toBe(
     "revenue frente a units en sales-q3.csv, 4812 filas. 4808 puntos, units de 1 a 2400 y revenue de 0 a 1.048.000.",
   );
 });

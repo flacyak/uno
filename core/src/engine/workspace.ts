@@ -62,6 +62,7 @@ import type {
 import { Refusal, saidOf } from '@said';
 import type { Said } from '@said';
 import type { Meeting, Unconnected } from '@store/s3';
+import type { Per, TimeLevel } from '@tally';
 import type { Tuning } from './rows.ts';
 import { CACHE_DROPPED, SOURCES, unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
@@ -170,6 +171,9 @@ class Absent {
   mode(_transform: boolean): void {}
   chart(_chart: Chart): void {}
   unchart(_id: string): void {}
+  batch(): TimeLevel | undefined {
+    return undefined;
+  }
   close(): Promise<void> {
     return Promise.resolve();
   }
@@ -448,6 +452,9 @@ export class Workspace {
       charts: [...this.charts.values()],
       carriedIds: this.carriedCharts.map((c) => c.id),
       carriedOver: this.carriedCharts.map((c) => c.source),
+      carriedPlaces: this.carriedCharts.flatMap(({ id, source, place }) =>
+        place === undefined ? [] : [{ id, source, place }],
+      ),
       chartsNote,
     };
   }
@@ -757,6 +764,16 @@ export class Workspace {
       this.charts.delete(id);
       this.need(chart.source).unchart(id);
     });
+  }
+
+  /**
+   * batch is the batch of the chart with `id` at `per` from `offset`, as its
+   * source's fold holds it now, or undefined where it holds none there.
+   */
+  batch(id: string, per: Per, offset: number): TimeLevel | undefined {
+    const chart = this.charts.get(id);
+    if (chart === undefined) throw new Refusal({ t: 'no-such-chart', id });
+    return this.need(chart.source).batch(id, per, offset);
   }
 
   /** refuseUnreadableCharts throws while the charts entry is one this build

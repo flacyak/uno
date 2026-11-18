@@ -14,12 +14,18 @@ import { newManifest, writeDocument } from '@document';
 import type { Chart, Plot } from '@document';
 import { TALLY_MS } from '@engine';
 import type {
+  Coverage,
   EditRequest,
   Engine,
   SourceHandle,
   SourceRef,
   Tally,
 } from '@engine';
+import { counted } from '@engine/fold/counted';
+import { groupsFolder } from '@engine/fold/groups';
+import { FOLDERS } from '@engine/fold/index';
+import type { Folder, Folders, MakeFolder } from '@engine/fold/index';
+import { sampleFolder } from '@engine/fold/sample';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -31,7 +37,7 @@ import { NO_ROW, Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { blobProvider, multiProvider } from '@store';
 import { diskProvider } from '@store/node';
-import { GroupsFold, SampleFold } from '@tally';
+import { GroupsFold, LEVEL_BATCH, SampleFold, TimeFold } from '@tally';
 import {
   CHANNEL,
   COLS,
@@ -109,6 +115,27 @@ const UNITS_REVENUE: Chart = {
   plot: { t: 'scatter', x: column(UNITS), y: column(REVENUE) },
 };
 
+/** The fixture's dates: rows per month, and revenue per week, read day first. */
+const DATES = 0;
+const PER_MONTH: Chart = {
+  ...REGION_ROWS,
+  id: 'c4',
+  plot: { t: 'time', at: column(DATES), per: 'month', order: 'day' },
+};
+const REVENUE_WEEKLY: Chart = {
+  ...REGION_ROWS,
+  id: 'c5',
+  plot: {
+    t: 'time',
+    at: column(DATES),
+    sum: column(REVENUE),
+    per: 'week',
+    order: 'day',
+  },
+};
+/** A date in the fixture's span that no row of it holds. */
+const LATER = '2026-12-25';
+
 /** pure folds the first `rows` of `sheet` for `plot`, as its complete tally. */
 function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   const cell = (row: number, at: { col: number }) => sheet.display(row, at.col);
@@ -120,6 +147,15 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
     return { t: 'sample', plot, coverage, ...fold.snapshot() };
   }
+  if (plot.t === 'time') {
+    const reading = 'order' in plot ? plot.order : plot.unit;
+    const { at, sum } = plot;
+    const fold = new TimeFold(reading, sum === undefined ? undefined : 'point');
+    for (let r = 0; r < rows; r++) {
+      fold.add(cell(r, at), sum === undefined ? '' : cell(r, sum));
+    }
+    return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
+  }
   const { by, sum } = plot;
   const fold =
     sum === undefined ? new GroupsFold() : new GroupsFold('sum', 'point');
@@ -129,9 +165,9 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   return { t: 'groups', plot, coverage, ...fold.snapshot() };
 }
 
-/** folded attaches `charts` and folds the first `rows` of the sheet, a TINY block at a time. */
-function folded(charts: Chart[], rows = ROWS): Tallies {
-  const tallies = new Tallies();
+/** folded attaches `charts` and folds the first `rows` of the sheet, a TINY block at a time, through `folders`. */
+function folded(charts: Chart[], rows = ROWS, folders = FOLDERS): Tallies {
+  const tallies = new Tallies(folders);
   for (const chart of charts) tallies.attach(chart, HEADERS);
   const shown = (col: number) => (row: number) => sales.display(row, col);
   for (let from = 0; from < rows; from += TINY.blockRows) {
@@ -139,6 +175,88 @@ function folded(charts: Chart[], rows = ROWS): Tallies {
     tallies.fold(from / TINY.blockRows, from, end, shown);
   }
   return tallies;
+}
+
+/**
+ * LengthsFolder counts rows by how long the cell of one column is, a fold no
+ * chart kind makes, so a test can tell that the tallies fold through the
+ * folder their table names and know nothing of its kind.
+ */
+class LengthsFolder implements Folder {
+  readonly key: string;
+  readonly cols: readonly number[];
+  readonly lengths: GroupsFold;
+
+  constructor(col: number, lengths = new GroupsFold()) {
+    this.cols = [col];
+    this.key = `lengths ${col}`;
+    this.lengths = lengths;
+  }
+
+  fold(_block: number, { from, end, shown }: Block): void {
+    const cell = shown(this.cols[0]!);
+    for (let row = from; row < end; row++)
+      this.lengths.add(`${cell(row).length}`);
+  }
+
+  unfold(_block: number, { from, end, shown }: Block): void {
+    const cell = shown(this.cols[0]!);
+    for (let row = from; row < end; row++)
+      this.lengths.remove(`${cell(row).length}`);
+  }
+
+  move(
+    _block: number,
+    _row: number,
+    before: readonly string[],
+    after: readonly string[],
+  ): void {
+    const col = this.cols[0]!;
+    this.lengths.remove(`${before[col]!.length}`);
+    this.lengths.add(`${after[col]!.length}`);
+  }
+
+  readsWith(): boolean {
+    return true;
+  }
+
+  again(): Folder {
+    return new LengthsFolder(this.cols[0]!);
+  }
+
+  restored(saved: unknown): Folder | undefined {
+    const back = GroupsFold.restored(saved);
+    return back && new LengthsFolder(this.cols[0]!, back);
+  }
+
+  saved(): object {
+    return this.lengths.saved();
+  }
+
+  tally(plot: Plot, coverage: Coverage): Tally {
+    return { t: 'groups', plot, coverage, ...this.lengths.snapshot() };
+  }
+
+  mend(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+/** A table whose bars count rows by the length of their By cell. */
+const lengthsBars: MakeFolder<Extract<Plot, { t: 'bars' }>> = ({ by }) =>
+  new LengthsFolder(by.col);
+const LENGTHS: Folders = { ...FOLDERS, bars: lengthsBars };
+
+/** lengthsOf is the lengths of `col`'s cells in the first `rows` of `sheet`, as a complete tally of `plot`. */
+function lengthsOf(
+  plot: Plot,
+  col: number,
+  sheet: Sheet = sales,
+  rows = ROWS,
+): Tally {
+  const lengths = new GroupsFold();
+  for (let r = 0; r < rows; r++) lengths.add(`${sheet.display(r, col).length}`);
+  return { t: 'groups', plot, coverage: WHOLE, ...lengths.snapshot() };
 }
 
 /** shownRow is what each column of `sheet` shows for `row`. */
@@ -250,6 +368,154 @@ function holding(path?: string) {
   };
   return { provider, arm, held, release, reads: () => reads };
 }
+
+test('a kind folds through the folder its table names, and moves by an edit and saves through it, with nothing of its kind in the tallies', async () => {
+  const tallies = folded([REGION_ROWS], ROWS, LENGTHS);
+  const plot = REGION_ROWS.plot;
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [REGION_ROWS.id, lengthsOf(plot, REGION)],
+  ]);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REGION, 'Antarctica and beyond');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const ids = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(ids, blocks(sheet));
+  const moved = lengthsOf(plot, REGION, sheet);
+  expect(tallies.read(ROWS, true)).toStrictEqual([[REGION_ROWS.id, moved]]);
+  const saved = tallies.saved();
+  expect(saved[REGION_ROWS.id]?.key).toBe(`lengths ${REGION}`);
+  const reopened = new Tallies(LENGTHS);
+  reopened.restore(JSON.parse(JSON.stringify(saved)), ROWS);
+  reopened.attach(REGION_ROWS, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual([[REGION_ROWS.id, moved]]);
+});
+
+test('a counted folder counts each row by its cell, sums the column it names with its mark, and moves an edited row', () => {
+  const fold = new GroupsFold('sum', 'comma');
+  const unread = () => undefined;
+  const folder = counted(REGION, REVENUE, fold, {
+    key: 'counted',
+    again: () => folder,
+    restored: unread,
+    tally: (plot, coverage) => ({
+      t: 'groups',
+      plot,
+      coverage,
+      ...fold.snapshot(),
+    }),
+  });
+  expect(folder.cols).toStrictEqual([REGION, REVENUE]);
+  const marks = HEADERS.map(() => 'point' as const);
+  expect(folder.readsWith(marks)).toBe(false);
+  expect(
+    folder.readsWith(marks.map((m, col) => (col === REVENUE ? 'comma' : m))),
+  ).toBe(true);
+  const cells = ['', 'North', '', '', '', '1,5'];
+  const shown = (col: number) => () => cells[col] ?? '';
+  folder.fold(0, { from: 0, end: 2, shown });
+  const after = cells.map((cell, col) => (col === REGION ? 'South' : cell));
+  folder.move(0, 1, cells, after);
+  expect(fold.snapshot().groups).toStrictEqual([
+    { value: 'North', rows: 1, sum: 1.5 },
+    { value: 'South', rows: 1, sum: 1.5 },
+  ]);
+  folder.unfold(0, { from: 0, end: 1, shown });
+  expect(fold.snapshot().groups).toStrictEqual([
+    { value: 'South', rows: 1, sum: 1.5 },
+  ]);
+});
+
+test("a bars or pie chart's folder keeps the key a save names it by, and takes a block back as it folded it", () => {
+  const plot = { t: 'pie', by: column(REGION), sum: column(REVENUE) } as const;
+  const marks = HEADERS.map(() => 'point' as const);
+  const folder = groupsFolder(plot, HEADERS, marks);
+  if (typeof folder === 'string') throw new Error(`no column ${folder}`);
+  expect(folder.key).toBe(`groups ${REGION} ${REVENUE}`);
+  expect(folder.cols).toStrictEqual([REGION, REVENUE]);
+  const shown = (col: number) => (row: number) => sales.display(row, col);
+  const last = Math.floor((ROWS - 1) / TINY.blockRows);
+  for (let block = 0; block <= last; block++) {
+    const from = block * TINY.blockRows;
+    folder.fold(block, {
+      from,
+      end: Math.min(from + TINY.blockRows, ROWS),
+      shown,
+    });
+  }
+  const kept = last * TINY.blockRows;
+  folder.unfold(last, { from: kept, end: ROWS, shown });
+  const coverage = { rows: kept, total: kept, complete: true };
+  expect(folder.tally(plot, coverage)).toStrictEqual(pure(plot, sales, kept));
+});
+
+test("a scatter's folder keeps the key a save names it by, saves nothing an edit left stale, and mends it from the block alone", async () => {
+  const plot = { t: 'scatter', x: column(UNITS), y: column(REVENUE) } as const;
+  const marks = HEADERS.map(() => 'point' as const);
+  const folder = sampleFolder(plot, HEADERS, marks);
+  if (typeof folder === 'string') throw new Error(`no column ${folder}`);
+  expect(folder.key).toBe(`sample ${UNITS} ${REVENUE}`);
+  const whole = blocks(sales);
+  for (let block = 0; block * TINY.blockRows < ROWS; block++) {
+    folder.fold(block, await whole(block));
+  }
+  const sheet = read(NAME, bytes);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  // The row is made the block's most, then taken back from it.
+  for (const revenue of [ABOVE_ALL, '1']) {
+    const before = shownRow(sheet, EDITED);
+    sheet.set(EDITED, REVENUE, revenue);
+    folder.move(block, EDITED, before, shownRow(sheet, EDITED));
+  }
+  expect(folder.saved()).toBeUndefined();
+  await folder.mend(blocks(sheet));
+  expect(folder.saved()).toBeDefined();
+  expect(folder.tally(plot, WHOLE)).toStrictEqual(pure(plot, sheet));
+});
+
+test('an over-time chart folded a block at a time reads as the pure fold of its dates, and a change of size alone keeps its fold', () => {
+  const tallies = folded([PER_MONTH, REVENUE_WEEKLY]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [PER_MONTH.id, pure(PER_MONTH.plot)],
+    [REVENUE_WEEKLY.id, pure(REVENUE_WEEKLY.plot)],
+  ]);
+  const daily: Chart = {
+    ...PER_MONTH,
+    plot: { t: 'time', at: column(DATES), per: 'day', order: 'day' },
+  };
+  tallies.attach(daily, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [daily.id, pure(daily.plot)],
+  ]);
+  const plot = {
+    t: 'time',
+    at: column(DATES),
+    per: 'day',
+    order: 'month',
+  } as const;
+  tallies.attach({ ...PER_MONTH, plot }, HEADERS);
+  expect(tallies.from()).toBe(0);
+});
+
+test('an edit to a date moves an over-time chart by its one row, and a save keeps the fold, which reads back with no pass', async () => {
+  const tallies = folded([REVENUE_WEEKLY]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, DATES, LATER);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[REVENUE_WEEKLY.id, pure(REVENUE_WEEKLY.plot, sheet)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(REVENUE_WEEKLY, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
 
 test("a chart's column is found where it was, or by its header where the file moved it, and one the file has not names itself", () => {
   const tallies = new Tallies();
@@ -445,12 +711,32 @@ test('a scatter whose block cannot be read again is the one told its source coul
 test('each chart of a .uno hears its fold of every row, as the pure fold reads it', async () => {
   const { engine, done } = connect(TINY);
   try {
-    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE];
+    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE, PER_MONTH];
     const heard = new Heard(await opened(engine, charts));
     const lasts = charts.map((chart) => heard.of(chart.id));
     for (const [i, chart] of charts.entries()) {
       expect(await lasts[i]).toStrictEqual(pure(chart.plot));
     }
+  } finally {
+    done();
+  }
+});
+
+test("an over-time chart's later batches come by size and offset, as its fold holds them, and a chart with none or no chart answers so", async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const charts = [REGION_ROWS, PER_MONTH];
+    const heard = new Heard(await opened(engine, charts));
+    await Promise.all(charts.map((chart) => heard.of(chart.id)));
+    const fold = new TimeFold('day');
+    for (let r = 0; r < ROWS; r++) fold.add(sales.display(r, DATES));
+    const later = await engine.batch(PER_MONTH.id, 'hour', LEVEL_BATCH);
+    expect(later).toStrictEqual(fold.batch('hour', LEVEL_BATCH));
+    expect(later?.offset).toBe(LEVEL_BATCH);
+    const past = later!.span;
+    expect(await engine.batch(PER_MONTH.id, 'hour', past)).toBeUndefined();
+    expect(await engine.batch(REGION_ROWS.id, 'day', 0)).toBeUndefined();
+    await expect(engine.batch('c9', 'day', 0)).rejects.toThrow('c9');
   } finally {
     done();
   }

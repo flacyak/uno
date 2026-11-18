@@ -10,13 +10,16 @@
  * file's text, set as text alone, and a number is in the app's language.
  */
 
-import type { Plot } from "@document";
+import type { Plot, TimePlot } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { Groups, GroupsTally, Sample, SampleTally } from "@engine";
+import type { Groups, Sample, TimeTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
+import type { TimeLevel } from "@tally";
+import { SEP, blank, notNumbers } from "./caption.ts";
+import { PER_WORDS, label } from "./periods.ts";
 import { PIE_SLICES_AT_MOST, slices, unsent, wholeOf } from "./pie.ts";
 
 /** What a tally measures of a value, or of the values it leaves out: their rows and their sum. */
@@ -66,8 +69,8 @@ function row(...cells: HTMLElement[]): HTMLTableRowElement {
  * at or below zero has none, and the values sent none of have Other's share
  * of them, or none where the pie draws no Other.
  */
-function grouped(
-  plot: Exclude<Plot, { t: "scatter" }>,
+export function grouped(
+  plot: Extract<Plot, { t: "bars" | "pie" }>,
   groups: Groups,
 ): [HTMLElement[], HTMLElement[]] {
   const { by, sum } = plot;
@@ -109,7 +112,7 @@ function grouped(
  * points gives a scatter's headers and rows: its x and y columns, and a row
  * per point drawn, in the order sent.
  */
-function points(
+export function points(
   plot: Extract<Plot, { t: "scatter" }>,
   sample: Sample,
 ): [HTMLElement[], HTMLElement[]] {
@@ -119,22 +122,53 @@ function points(
   return [heads, sample.x.map((x, i) => row(digits(x), digits(sample.y[i]!)))];
 }
 
-/** parts gives the headers and rows of `tally` as `plot` reads it, or none of a tally of another kind. */
-function parts(plot: Plot, tally: GroupsTally | SampleTally): [HTMLElement[], HTMLElement[]] {
-  if (plot.t === "scatter") return tally.t === "sample" ? points(plot, tally) : [[], []];
-  return tally.t === "groups" ? grouped(plot, tally) : [[], []];
+/** rowNamed gives a row's header of the app's words `text`. */
+function rowNamed(text: string): HTMLTableCellElement {
+  const th = el("th", "", text);
+  th.scope = "row";
+  return th;
 }
 
 /**
- * table gives `tally` as `plot` reads it, as a table under a caption of
- * `called`, what the head calls the chart, in the window's scroller.
+ * timed gives an over-time chart's headers and rows: the size it draws, rows,
+ * and the column it sums; a row per period of `level` sent, earliest first,
+ * empty ones too; one for the rows with no date, where there are any; and a
+ * line of the summed column's cells it could not add.
  */
-export function table(plot: Plot, tally: GroupsTally | SampleTally, called: Node): HTMLElement {
+export function timed(
+  { sum }: TimePlot,
+  tally: TimeTally,
+  level: TimeLevel,
+): [HTMLElement[], HTMLElement[]] {
+  const heads = [header(PER_WORDS[level.per](), false), header(m.chart_table_rows(), false, true)];
+  if (sum !== undefined) heads.push(header(columnLabel(sum.header, sum.col), true, true));
+  const cells = (rows: number, summed: number): HTMLElement[] =>
+    sum === undefined ? [digits(rows)] : [digits(rows), digits(summed)];
+  const rows = level.rows.map((n, i) =>
+    row(rowNamed(label(level.per, level.from + i, true)), ...cells(n, level.sum[i] ?? 0)),
+  );
+  const { undated } = tally;
+  if (undated.rows > 0)
+    rows.push(row(rowNamed(m.chart_table_undated()), ...cells(undated.rows, undated.sum)));
+  const left = [blank(tally), notNumbers(tally)].filter((part) => part !== "").join(SEP);
+  if (left !== "") {
+    const line = el("td", "chart-table-line", left);
+    line.colSpan = heads.length;
+    rows.push(row(line));
+  }
+  return [heads, rows];
+}
+
+/**
+ * tableOf gives a tally as its kind's `heads` and `rows`, as a table under a
+ * caption of `called`, what the head calls the chart, in the window's
+ * scroller.
+ */
+export function tableOf([heads, rows]: [HTMLElement[], HTMLElement[]], called: Node): HTMLElement {
   const box = el("div", "chart-table chart-scrolls themed-bar");
   const made = el("table");
   const caption = el("caption");
   caption.append(called);
-  const [heads, rows] = parts(plot, tally);
   const thead = el("thead");
   thead.append(row(...heads));
   const tbody = el("tbody");

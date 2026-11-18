@@ -25,6 +25,7 @@ export {
   messagePort,
 } from './protocol.ts';
 export type {
+  CarriedPlace,
   Changed,
   ColumnInfo,
   Coverage,
@@ -50,6 +51,7 @@ export type {
   Request,
   Sample,
   SampleTally,
+  TimeTally,
   SignIns,
   Skipped,
   SourceRef,

@@ -181,6 +181,88 @@ test('inferKind names the decimal mark from the sample', () => {
   }
 });
 
+// Excel's US CSV export writes a date-time as m/d/yyyy h:mm, with no
+// leading zero on the hour.
+test('inferKind names a US Excel export of date-times a date, month first', () => {
+  const s = new Sheet(
+    'export.csv',
+    ['ordered', 'shipped'],
+    [
+      ['3/4/2024 9:05', '3/4/2024 9:05:07'],
+      ['3/13/2024 14:20', '3/13/2024 14:20:59'],
+    ],
+  );
+  expect(s.columns.map((c) => [c.kind, c.order])).toEqual([
+    ['date', 'month'],
+    ['date', 'month'],
+  ]);
+});
+
+// A date column's order comes from its sample: a value that reads only day
+// first or only month first decides it.
+test('inferKind names the order of a date column from the sample', () => {
+  const s = new Sheet(
+    't.csv',
+    ['eu', 'us', 'undecided', 'iso', 'text'],
+    [
+      ['03/04/2024', '03/04/2024', '03/04/2024', '2024-03-04', '13/04/2024'],
+      ['13/04/2024', '04/13/2024', '04/03/2024', '2024-03-05', 'West'],
+    ],
+  );
+  const orders = s.columns.map((c) => c.order);
+  expect(orders).toEqual(['day', 'month', 'either', undefined, undefined]);
+  expect(s.columns.map((c) => 'order' in c)).toEqual([
+    true,
+    true,
+    true,
+    false,
+    false,
+  ]);
+});
+
+// A column of Unix seconds or milliseconds stays a number and names its unit.
+test('inferKind names the unit of a column of Unix time', () => {
+  const s = new Sheet(
+    't.csv',
+    ['seconds', 'millis', 'ids', 'serials'],
+    [
+      ['1700000000', '1700000000123', '1700000000', '45355'],
+      ['1700003600', '1700003600456', '42', '45356'],
+    ],
+  );
+  expect(s.columns.map((c) => c.kind)).toEqual(['num', 'num', 'num', 'num']);
+  expect(s.columns.map((c) => c.unit)).toEqual([
+    's',
+    'ms',
+    undefined,
+    undefined,
+  ]);
+  expect(s.columns.map((c) => 'unit' in c)).toEqual([true, true, false, false]);
+});
+
+// A phone written with '-' or '()' is text, so its column never reads as Unix
+// time. A bare ten-digit number does, as the owner accepted on 2026-11-13.
+test('inferKind names no unit for phones written with separators', () => {
+  const s = new Sheet(
+    't.csv',
+    ['dashed', 'bracketed', 'mixed', 'bare'],
+    [
+      ['212-555-1234', '(212) 555-1234', '212-555-1234', '2125551234'],
+      ['646-555-0199', '(646) 555-0199', '(646) 555-0199', '6465550199'],
+      ['718-555-0123', '(718) 555-0123', '7185550123', '7185550123'],
+      ['917-555-0144', '(917) 555-0144', '917.555.0144', '9175550144'],
+      ['347-555-0100', '(347) 555-0100', '+1 347 555 0100', '3475550100'],
+    ],
+  );
+  expect(s.columns.map((c) => c.kind)).toEqual(['text', 'text', 'text', 'num']);
+  expect(s.columns.map((c) => c.unit)).toEqual([
+    undefined,
+    undefined,
+    undefined,
+    's',
+  ]);
+});
+
 // Date detection accepts only the listed layouts.
 describe('isDate is the written layouts and not whatever Date can parse', () => {
   const dates = [
@@ -201,10 +283,34 @@ describe('isDate is the written layouts and not whatever Date can parse', () => 
     '6 Nov 1970',
     '06-Nov-1970',
     'July 1 2026',
+    // A date-time with no offset, and a year and month, as exports write them.
+    '2024-03-04 12:30:00',
+    '2024-03-04T12:30',
+    '2024-03-04 12:30:00.250',
+    '2024-03-04T12:30Z',
+    '2024/03/04 12:30',
+    '04/03/2024 12:30:00',
+    '2024-03',
+    // A US Excel export writes the hour in one digit.
+    '3/4/2024 9:05',
+    '3/4/2024 9:05:07',
+    // Year 0 is a leap year in the proleptic Gregorian calendar.
+    '0000-02-29',
   ];
   const notDates = [
     '2026',
-    '2026-07',
+    '2026-7',
+    '2026-13',
+    '2024/03',
+    '2024-03-04  12:30',
+    '2024-03-04 12',
+    '2024-03-04 001:30',
+    '2024-03-04 24:00',
+    '2024-03-04 12:30:00+0100',
+    '2024-03-04T12:30:00+99:99',
+    '2024-03-04 12:30.5',
+    'Mar 4, 2024 12:30',
+    '0001-02-29',
     'Nov 1970',
     'Novem 6, 1970',
     'Item 6, 1970',

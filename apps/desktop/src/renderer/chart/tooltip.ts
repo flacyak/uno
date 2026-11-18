@@ -14,13 +14,15 @@
  */
 
 import type { ChartColumn, Plot } from "@document";
-import type { Groups, GroupsTally, Sample, SampleTally } from "@engine";
+import type { Groups, Sample } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Press } from "@renderer/keys";
 import { columnLabel, unnamed } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { EDGE } from "@renderer/shell/menu";
 import { el } from "@renderer/shell/util";
+import type { TimeLevel } from "@tally";
+import { fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
 import type { Room } from "./place.ts";
 
@@ -230,14 +232,25 @@ export function pointTargets(plot: Scatter, sample: Sample, box: HTMLElement): T
 }
 
 /**
- * targets gives the marks of `drawn`, as `plot` reads `tally`, or none of a
- * drawing of another kind.
+ * periodTargets gives the targets of `box`, as columns drew `level`: each
+ * period's slot, zeros included, in time order, worth its rows, or its sum
+ * and its rows where `summed`, named in full. The box stands by its column.
  */
-export function targets(plot: Plot, tally: GroupsTally | SampleTally, drawn: HTMLElement): Targets {
-  if (plot.t === "bars" && tally.t === "groups") return barTargets(plot, tally, drawn);
-  if (plot.t === "pie" && tally.t === "groups") return sliceTargets(plot, tally, drawn);
-  if (plot.t === "scatter" && tally.t === "sample") return pointTargets(plot, tally, drawn);
-  return NONE;
+export function periodTargets(level: TimeLevel, summed: boolean, box: HTMLElement): Targets {
+  const slots = [...box.querySelectorAll(".chart-period")].filter(
+    (slot) => slot.firstChild !== null,
+  );
+  const all = slots.map((slot, i) => {
+    const said = (): Reading[] => {
+      const name = el("span", "", fullName(level.per, level.from + i));
+      const rows = { value: num(level.rows[i]!), label: el("span", "", m.chart_table_rows()) };
+      return summed
+        ? [{ value: num(level.sum[i]!), label: name }, rows]
+        : [{ ...rows, label: name }];
+    };
+    return { mark: slot, at: slot.firstElementChild!, front: false, key: ACCENT, said };
+  });
+  return { all, under: among(all, ".chart-period") };
 }
 
 /** A point in the page, or in the window's own px. */
