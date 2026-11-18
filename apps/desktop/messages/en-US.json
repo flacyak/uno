@@ -458,6 +458,8 @@
   "chart_edit": "Edit chart",
   "chart_title_rows": "rows per {by}",
   "chart_title_sum": "sum of {sum} per {by}",
+  "chart_title_stack_rows": "rows per {by} by {split}",
+  "chart_title_stack_sum": "sum of {sum} per {by} by {split}",
   "chart_title_time_rows": "rows per {per} of {at}",
   "chart_title_time_sum": "sum of {sum} per {per} of {at}",
   "chart_title_time_rows_over": "rows over {at}",

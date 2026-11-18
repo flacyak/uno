@@ -474,6 +474,8 @@
   "chart_edit": "Editar gráfico",
   "chart_title_rows": "linhas por {by}",
   "chart_title_sum": "soma de {sum} por {by}",
+  "chart_title_stack_rows": "linhas por {by} e por {split}",
+  "chart_title_stack_sum": "soma de {sum} por {by} e por {split}",
   "chart_title_time_rows": "linhas por {per} de {at}",
   "chart_title_time_sum": "soma de {sum} por {per} de {at}",
   "chart_title_time_rows_over": "linhas ao longo de {at}",

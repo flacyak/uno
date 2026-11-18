@@ -12,10 +12,12 @@ import { undrawn } from "./undrawn.ts";
 
 /** stack is what a window does with a stacked bar chart's plot. */
 export const stack: ChartKind<StackPlot> = (plot) => ({
-  title: () =>
-    plot.sum === undefined
-      ? m.chart_title_rows({ by: named(plot.by) })
-      : m.chart_title_sum({ by: named(plot.by), sum: named(plot.sum) }),
+  title: () => {
+    const [by, split] = [named(plot.by), named(plot.split)];
+    return plot.sum === undefined
+      ? m.chart_title_stack_rows({ by, split })
+      : m.chart_title_stack_sum({ by, split, sum: named(plot.sum) });
+  },
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.by, plot.split],
   drawing: () => undrawn,

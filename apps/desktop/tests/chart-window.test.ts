@@ -38,6 +38,8 @@ const WORDED: Plot[] = [
   { t: "pie", by: REGION, sum: REVENUE },
   { t: "time", at: DATE, per: "month", order: "day" },
   { t: "time", at: DATE, sum: REVENUE, per: "auto", unit: "s" },
+  { t: "stack", by: REGION, split: BLANK },
+  { t: "stack", by: REGION, split: UNITS, sum: REVENUE },
 ];
 
 /** A text whose first letter is lower case, past any marks a pseudo-locale puts before it. */
@@ -136,6 +138,16 @@ test.each<[string, string, Plot]>([
     "sum of revenue over order_date",
     "suma de revenue a lo largo de order_date",
     { t: "time", at: DATE, sum: REVENUE, per: "auto", order: "day" },
+  ],
+  [
+    "rows per region by column 3",
+    "filas por region y por columna 3",
+    { t: "stack", by: REGION, split: BLANK },
+  ],
+  [
+    "sum of revenue per region by units",
+    "suma de revenue por region y por units",
+    { t: "stack", by: REGION, split: UNITS, sum: REVENUE },
   ],
 ])("a plot makes the title %s in the app's language, from its columns", (en, es, plot) => {
   expect(madeTitle(plot)).toBe(en);
