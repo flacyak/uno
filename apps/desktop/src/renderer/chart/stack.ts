@@ -1,7 +1,8 @@
 /**
  * @fileoverview A stacked bar chart: a bar per value, the largest first, split
- * into a segment per series in the order of their slots, then Other, each
- * rightward from zero, with the value's total at the tip.
+ * into a segment per series in the order of their slots, then Other. A value's
+ * parts above zero stack rightward from zero and those below leftward, on one
+ * scale, with its net total at the tip past the side it ends on.
  *
  * The rows are bars.ts's, from rows.ts, so a stack lays out as bars do and
  * fitTips fits its values. Each segment wears its slot's chart colour, and a
@@ -50,34 +51,42 @@ export function stack(plot: StackPlot, tally: StackTally, height: number): HTMLE
       key: keyOf(i, series),
       size: measure(cell),
     }));
-    return {
-      label: v.value,
-      parts: parts.filter(({ size }) => size > 0),
-      tip: num(measure(v.total)),
-    };
+    const net = measure(v.total);
+    const above = parts.filter(({ size }) => size > 0);
+    const under = parts.filter(({ size }) => size < 0);
+    return { label: v.value, above, under, net, tip: num(net) };
   });
-  const reach = (parts: Part[]) => parts.reduce((all, { size }) => all + size, 0);
-  const span = Math.max(0, ...drawn.map(({ parts }) => reach(parts)));
+  const reach = (parts: Part[]) => parts.reduce((all, { size }) => all + Math.abs(size), 0);
+  const low = Math.max(0, ...drawn.map(({ under }) => reach(under)));
+  const span = Math.max(0, ...drawn.map(({ above }) => reach(above))) + low;
   const share = (size: number): string => `${span === 0 ? 0 : size / span}`;
 
   const box = barsBox("chart-stack");
   box.style.setProperty("--segment-gap", `${SEGMENT_GAP}px`);
-  box.style.setProperty("--zero", "0");
-  box.style.setProperty("--room-above", room(drawn));
-  box.style.setProperty("--room-below", "0px");
-  for (const { label, parts, tip } of drawn) {
+  box.style.setProperty("--zero", share(low));
+  box.style.setProperty("--room-above", room(drawn.filter(({ net }) => net >= 0)));
+  box.style.setProperty("--room-below", room(drawn.filter(({ net }) => net < 0)));
+  for (const { label, above, under, net, tip } of drawn) {
     const track = el("div", "chart-bar-track");
-    track.style.setProperty("--share", share(reach(parts)));
-    let from = 0;
-    for (const [i, { key, size }] of parts.entries()) {
-      const segment = el("div", "chart-segment");
-      segment.classList.toggle("after", i > 0);
-      segment.classList.toggle("end", i === parts.length - 1);
-      segment.style.setProperty("--key", key);
-      segment.style.setProperty("--from", share(from));
-      segment.style.setProperty("--part", share(size));
-      from += size;
-      track.append(segment);
+    // The net total stands past the side the value ends on.
+    track.classList.toggle("below", net < 0);
+    track.style.setProperty("--share", share(reach(net < 0 ? under : above)));
+    for (const [parts, side] of [
+      [above, "above"],
+      [under, "under"],
+    ] as const) {
+      let from = 0;
+      for (const [i, { key, size }] of parts.entries()) {
+        const segment = el("div", `chart-segment ${side}`);
+        // A part under zero gives the gap at zero where parts above meet it.
+        segment.classList.toggle("after", i > 0 || (side === "under" && above.length > 0));
+        segment.classList.toggle("end", i === parts.length - 1);
+        segment.style.setProperty("--key", key);
+        segment.style.setProperty("--from", share(from));
+        segment.style.setProperty("--part", share(Math.abs(size)));
+        from += Math.abs(size);
+        track.append(segment);
+      }
     }
     track.append(el("span", "chart-bar-tip", tip));
     box.append(row(label, track));

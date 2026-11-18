@@ -64,6 +64,16 @@ const segments = (box: HTMLElement) =>
       Number(property(s, "--part")),
     ]),
   );
+/** Each bar's segments, as their colour, side, start and length. */
+const sided = (box: HTMLElement) =>
+  all(box, ".chart-bar-track").map((track) =>
+    all(track, ".chart-segment").map((s) => [
+      property(s, "--key"),
+      s.classList.contains("above") ? "above" : "under",
+      Number(property(s, "--from")),
+      Number(property(s, "--part")),
+    ]),
+  );
 const tips = (box: HTMLElement) => all(box, ".chart-bar-tip").map((tip) => tip.textContent);
 
 const TALL = holding(3);
@@ -111,6 +121,40 @@ test("a sum per value and series draws each value's sum, and a part of nothing n
   ]);
   expect(tips(box)).toStrictEqual(["6"]);
   expect(box.style.getPropertyValue("--room-above")).toBe("calc(1ch + var(--tip-gap))");
+});
+
+test("a value's parts below zero stack leftward, and its net total stands at the tip of its side", () => {
+  const tally = tallyOf(
+    ["web", "returns", "direct"],
+    valued("North", [cell(2, 300), cell(1, -100), cell(1, 100)]),
+    valued("South", [cell(1, 50), cell(1, -250), cell(0)]),
+  );
+  const box = stack(SUMS, tally, TALL);
+  // 250 below zero and 400 above it share one scale of 650.
+  const span = 650;
+  expect(box.style.getPropertyValue("--zero")).toBe(`${250 / span}`);
+  expect(sided(box)).toStrictEqual([
+    [
+      ["var(--chart-1)", "above", 0, 300 / span],
+      ["var(--chart-3)", "above", 300 / span, 100 / span],
+      ["var(--chart-2)", "under", 0, 100 / span],
+    ],
+    [
+      ["var(--chart-1)", "above", 0, 50 / span],
+      ["var(--chart-2)", "under", 0, 250 / span],
+    ],
+  ]);
+  expect(tips(box)).toStrictEqual(["300", "-200"]);
+  // The first part under zero parts from the first above it by the gap.
+  const gapped = all(box, ".chart-segment.under").map((s) => s.classList.contains("after"));
+  expect(gapped).toStrictEqual([true, true]);
+  const tracks = all(box, ".chart-bar-track");
+  expect(tracks.map((t) => t.classList.contains("below"))).toStrictEqual([false, true]);
+  expect(tracks.map((t) => Number(property(t, "--share")))).toStrictEqual([400 / span, 250 / span]);
+  expect([
+    box.style.getPropertyValue("--room-above"),
+    box.style.getPropertyValue("--room-below"),
+  ]).toStrictEqual(["calc(3ch + var(--tip-gap))", "calc(4ch + var(--tip-gap))"]);
 });
 
 test("slot i wears the i-th chart colour, and past the series Other's ink", () => {

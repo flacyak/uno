@@ -3,11 +3,13 @@
  * runs in a segment per series from zero, in slot order and the slots' chart
  * colours, then Other in the caption's ink, each a gap of the window's ground
  * from the one before, as thick as a bar and ending where the next begins,
- * with the value's total past the last.
+ * with the value's total past the last. A part below zero stacks leftward
+ * from the same zero.
  *
  * They open the workspace smoke.js wrote of a small export of four regions'
  * sales in eight channels: rows per region by channel in a new window, and
- * the sum of revenue the same way in one of the least width.
+ * the sum of revenue the same way in one of the least width, whose fair paid
+ * back what it took, below zero.
  */
 
 import { TIP_GAP } from "@renderer/chart/bars";
@@ -51,22 +53,37 @@ export const CHART_STACK: Check[] = [
         for (const track of win.querySelectorAll(".chart-bar-track")) {
           const segments = [...track.querySelectorAll(".chart-segment")];
           if (segments.length !== ${STACKED_SEGMENTS}) return "a bar draws " + segments.length + " segments";
-          const worn = segments.map((segment) => style(segment).backgroundColor);
-          if (worn.join() !== keys.join()) return "a bar's segments wear " + worn.join(" | ");
+          const slot = (segment) => keys.indexOf(computed(segment.style.getPropertyValue("--key")));
+          const off = segments.find((segment) => style(segment).backgroundColor !== keys[slot(segment)]);
+          if (off !== undefined) return "a segment of " + off.style.getPropertyValue("--key") + " wears " + style(off).backgroundColor;
+          const slots = segments.map(slot).sort((a, b) => a - b);
+          if (slots.join() !== keys.map((_, i) => i).join()) return "a bar's segments wear the slots " + slots.join();
           const bar = rect(track);
-          for (const [i, segment] of segments.entries()) {
-            const at = rect(segment);
-            if (Math.abs(at.height - ${BAR_THICK}) > ${RECT_SLACK} || Math.abs(at.top - bar.top) > ${RECT_SLACK}) return "a segment stands " + at.top + " to " + at.bottom + " in a row " + bar.top + " to " + bar.bottom;
-            if (i === 0) continue;
-            const before = rect(segments[i - 1]);
-            if (Math.abs(at.left - before.right) > ${RECT_SLACK}) return "segment " + (i + 1) + " starts at " + at.left + ", the one before ends at " + before.right;
-            const gap = style(segment).borderLeftWidth;
-            if (gap !== "${SEGMENT_GAP}px") return "segment " + (i + 1) + " stands " + gap + " from the one before";
+          // Above zero each segment starts where the one before ends, and under it ends where the one before starts.
+          for (const [side, edge, gap] of [["above", "left", "borderLeftWidth"], ["under", "right", "borderRightWidth"]]) {
+            const parts = segments.filter((segment) => segment.classList.contains(side));
+            const order = parts.map(slot);
+            if (order.join() !== [...order].sort((a, b) => a - b).join()) return "the segments " + side + " zero run in the slots " + order.join();
+            for (const [i, segment] of parts.entries()) {
+              const at = rect(segment);
+              if (Math.abs(at.height - ${BAR_THICK}) > ${RECT_SLACK} || Math.abs(at.top - bar.top) > ${RECT_SLACK}) return "a segment stands " + at.top + " to " + at.bottom + " in a row " + bar.top + " to " + bar.bottom;
+              if (i === 0) continue;
+              const before = rect(parts[i - 1]);
+              const meets = edge === "left" ? at.left - before.right : before.left - at.right;
+              if (Math.abs(meets) > ${RECT_SLACK}) return "a segment " + side + " zero stands " + meets + " px from the one before";
+              if (style(segment)[gap] !== "${SEGMENT_GAP}px") return "a segment " + side + " zero stands " + style(segment)[gap] + " from the one before";
+            }
           }
           const tip = track.querySelector(".chart-bar-tip");
-          if (tip !== null && Math.abs(rect(tip).left - rect(segments.at(-1)).right - ${TIP_GAP}) > ${RECT_SLACK}) return "a total stands at " + rect(tip).left + " past a bar ending at " + rect(segments.at(-1)).right;
+          const last = segments.filter((segment) => segment.classList.contains("above")).at(-1);
+          if (tip !== null && Math.abs(rect(tip).left - rect(last).right - ${TIP_GAP}) > ${RECT_SLACK}) return "a total stands at " + rect(tip).left + " past a bar ending at " + rect(last).right;
         }
+        // The bars share one zero, where the parts under it end.
+        const zeros = [...win.querySelectorAll(".chart-segment.under")].map((segment) => rect(segment).right);
+        if (zeros.some((zero) => Math.abs(zero - zeros[0]) > ${RECT_SLACK})) return "the parts under zero end at " + zeros.join();
       }
+      const under = document.querySelectorAll(".chart-segment.under").length;
+      if (under !== ${STACKED_REGIONS.length}) return "the sums draw " + under + " parts under zero";
       return "";
     `,
   },

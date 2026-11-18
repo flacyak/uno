@@ -362,18 +362,21 @@ await writeFile(
 // each region's more than the one before it: rows per region by channel in a
 // new window's size at the sheet's foot, whose six largest channels take a
 // colour each and the last two Other, and the sum of revenue per region by
-// channel in a window of the least width at its top.
+// channel in a window of the least width at its top. The fair's revenue is
+// what it paid back, below zero, so each bar of sums has a part left of zero.
 const stackedFile = join(scratch, "sent", "stacked.csv");
 const stackedHeader = "region,channel,revenue";
 const stackedRegions = ["North", "South", "East", "West"];
 const stackedChannels = ["web", "direct", "partner", "mail", "phone", "shop", "fair", "kiosk"];
+const stackedReturns = "fair";
 const stackedRows = stackedRegions.flatMap((region, r) =>
-  stackedChannels.flatMap((channel, c) =>
-    Array.from(
+  stackedChannels.flatMap((channel, c) => {
+    const revenue = (channel === stackedReturns ? -1 : 1) * (c + 1) * 100;
+    return Array.from(
       { length: stackedChannels.length - c + r },
-      () => `${region},${channel},${(c + 1) * 100}`,
-    ),
-  ),
+      () => `${region},${channel},${revenue}`,
+    );
+  }),
 );
 await writeFile(stackedFile, `${[stackedHeader, ...stackedRows].join("\n")}\n`);
 const stacked = join(scratch, "sent", "stacked.uno");

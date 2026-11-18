@@ -424,11 +424,11 @@
   left: auto;
 }
 
-/* A stack's segment, from stack.ts, wears its slot's `--key`. It starts
- * `--from` of the span past zero and runs `--part` of it. Each after the first
- * gives --segment-gap of its length to a clear border, so what lies under the
- * row shows between two segments, and the last is round at the data's end, as
- * a bar is. */
+/* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it
+ * starts `--from` of the span past zero and runs `--part` of it rightward, and
+ * under zero the same leftward. Each after the first gives --segment-gap of
+ * its length to a clear border, so what lies under the row shows between two
+ * segments, and the last on each side is round at the data's end, as a bar. */
 .chart-segment {
   position: absolute;
   inset-block: 0;
@@ -439,12 +439,24 @@
   background: var(--key) padding-box;
 }
 
-.chart-segment.after {
+.chart-segment.under {
+  left: calc(var(--at) - (var(--from) + var(--part)) * var(--span));
+}
+
+.chart-segment.above.after {
   border-left-width: var(--segment-gap);
 }
 
-.chart-segment.end {
+.chart-segment.under.after {
+  border-right-width: var(--segment-gap);
+}
+
+.chart-segment.above.end {
   border-radius: 0 4px 4px 0;
+}
+
+.chart-segment.under.end {
+  border-radius: 4px 0 0 4px;
 }
 
 /* The characters window.ts measures a tick's character by, written as a tick
