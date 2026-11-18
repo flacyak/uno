@@ -373,6 +373,8 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
   console.log(`smoke: ${groups.length} of ${GROUPS.length} groups`);
   for (const { name: group, checks } of groups)
     for (const check of checks) {
+      // smoke.js times each check from this line, and names the one it stops in.
+      console.log(`smoke: check ${check.name}`);
       const started = performance.now();
       let ok = true;
       try {

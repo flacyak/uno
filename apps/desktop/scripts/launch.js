@@ -7,6 +7,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { constants } from "node:os";
 
 /**
  * The environment an Electron child is started with: `base` plus `extra`,
@@ -82,14 +83,29 @@ export function verdict(name, code, out, banner) {
   return undefined;
 }
 
+/** How many ms make a second. */
+const MS_PER_SECOND = 1000;
+
+/** The signals a run's own deadline outside it, or a person, stops it with. */
+const STOPS = ["SIGTERM", "SIGINT", "SIGHUP"];
+
+/** A process stopped by a signal exits with this plus the signal's number, as a shell reports it. */
+const SIGNALLED = 128;
+
 /**
  * drive starts the built app and runs it to the end.
  *
- * What the app prints is passed through. A line `<who>: ask <what>` is a
- * request to this script: `answer(what)` handles it and returns whether it
- * could, at once or once it is done, and the app is told `done` or `nothing
- * here does` on its stdin. At `deadlineMs` the app is killed by pid and
- * `onTimeout` is called.
+ * What the app prints is passed through, but for a line `<who>: check
+ * <name>`, which says the app has begun that check. A line `<who>: ask
+ * <what>` is a request to this script: `answer(what)` handles it and returns
+ * whether it could, at once or once it is done, and the app is told `done` or
+ * `nothing here does` on its stdin.
+ *
+ * Each check has `deadlineMs`, as does the start before the first. At the
+ * deadline the app is killed by pid and `onTimeout` is called. A signal that
+ * stops this script kills the app too. Either way, what is printed names the
+ * check and how long it ran: by the time the machine was awake, which the
+ * deadline counts, and by the clock, which also counts its sleep.
  *
  * @param {string} who  "smoke" or "preview": the prefix of every line the app prints
  * @param {{ electron: string, args: string[], env: NodeJS.ProcessEnv, answer: (what: string) => boolean | Promise<boolean>, deadlineMs: number, onTimeout?: () => void }} run
@@ -103,6 +119,30 @@ export async function drive(who, { electron, args, env, answer, deadlineMs, onTi
   });
   console.log(`${who}: electron pid ${child.pid}`);
 
+  let step = "the run";
+  let began = { awake: performance.now(), clock: Date.now() };
+  const seconds = (ms) => Math.round(ms / MS_PER_SECOND);
+  const where = () =>
+    `in ${step}, ${seconds(performance.now() - began.awake)}s into it awake and ${seconds(Date.now() - began.clock)}s by the clock`;
+
+  let deadline;
+  const arm = () => {
+    clearTimeout(deadline);
+    deadline = setTimeout(() => {
+      console.error(`${who}: timed out after ${deadlineMs / MS_PER_SECOND}s ${where()}`);
+      if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
+      onTimeout?.();
+    }, deadlineMs);
+  };
+  arm();
+  const stop = (signal) => {
+    console.error(`${who}: stopped by ${signal} ${where()}`);
+    child.kill("SIGKILL");
+    // On the next turn, so every drive under way kills its own app first.
+    setImmediate(() => process.exit(SIGNALLED + constants.signals[signal]));
+  };
+  for (const signal of STOPS) process.once(signal, stop);
+
   let out = "";
   let pending = "";
   child.stdout.on("data", (chunk) => {
@@ -111,23 +151,26 @@ export async function drive(who, { electron, args, env, answer, deadlineMs, onTi
     const lines = pending.split("\n");
     pending = lines.pop() ?? "";
     for (const line of lines) {
+      if (line.startsWith(`${who}: check `)) {
+        step = `check "${line.slice(`${who}: check `.length)}"`;
+        began = { awake: performance.now(), clock: Date.now() };
+        arm();
+        continue;
+      }
+      process.stdout.write(`${line}\n`);
       if (!line.startsWith(`${who}: ask `)) continue;
       const what = line.slice(`${who}: ask `.length);
       void Promise.resolve(answer(what)).then((could) => {
         child.stdin.write(`${who}: ${could ? "done" : "nothing here does"} ${what}\n`);
       });
     }
-    process.stdout.write(chunk);
   });
   child.stderr.on("data", (chunk) => process.stderr.write(chunk));
 
-  const deadline = setTimeout(() => {
-    console.error(`${who}: timed out after ${deadlineMs / 1000}s`);
-    if (child.pid !== undefined) process.kill(child.pid, "SIGKILL");
-    onTimeout?.();
-  }, deadlineMs);
   const code = await new Promise((resolve) => child.on("close", resolve));
   clearTimeout(deadline);
+  for (const signal of STOPS) process.off(signal, stop);
+  process.stdout.write(pending);
   return { code, out };
 }
 

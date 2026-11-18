@@ -664,7 +664,7 @@ async function run(only, folder, deadlineMs) {
       AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
     }),
     answer,
-    // The run's own minute, and what the scheduled chart may wait.
+    // Each check's, from the line the app prints as it begins one.
     deadlineMs,
     onTimeout: () => void shut(),
   });
