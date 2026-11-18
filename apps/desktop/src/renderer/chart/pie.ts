@@ -108,7 +108,7 @@ export function belowZero(plot: Pie, groups: Groups): string {
  * What Other wears: the caption's ink, which the chart colours stand apart
  * from after the sixth. The six wear --chart-1 to --chart-6, in their order.
  */
-const OTHER_KEY = "var(--ink-3)";
+export const OTHER_KEY = "var(--ink-3)";
 
 /** The room between the ring and a label, in px: as far as a bar's value stands from its bar. */
 export const LABEL_GAP = TIP_GAP;
