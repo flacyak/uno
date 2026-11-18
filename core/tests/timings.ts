@@ -35,6 +35,74 @@ export interface FileTiming {
   tests: number;
 }
 
+/** One smoke check as it ran: how long it took, and whether it passed. */
+export interface CheckTiming {
+  name: string;
+  ms: number;
+  ok: boolean;
+}
+
+/** One step of a gate: what ran, how long it waited for a slot, how long it took. */
+export interface StepTiming {
+  step: string;
+  wait: number;
+  wall: number;
+  status: number;
+}
+
+/** How many of the slowest files and checks a report names. */
+const SLOWEST = 10;
+
+/** A file's cost before its first test runs. */
+const importOf = (f: FileTiming): number =>
+  f.collect + f.setup + f.prepare + f.environment;
+
+const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)} s`;
+
+const table = (head: string[], rows: string[][]): string =>
+  [head, head.map(() => '---'), ...rows]
+    .map((r) => `| ${r.join(' | ')} |`)
+    .join('\n');
+
+/**
+ * report lays out a gate's timings as markdown: each step, then the slowest
+ * test files with their import and test time apart, then the slowest smoke
+ * checks.
+ */
+export function report(
+  steps: StepTiming[],
+  files: FileTiming[],
+  checks: CheckTiming[],
+): string {
+  const slowFiles = files
+    .toSorted((a, b) => importOf(b) + b.tests - (importOf(a) + a.tests))
+    .slice(0, SLOWEST);
+  const slowChecks = checks.toSorted((a, b) => b.ms - a.ms).slice(0, SLOWEST);
+  const inChecks = checks.reduce((sum, c) => sum + c.ms, 0);
+  return [
+    '## Steps',
+    table(
+      ['step', 'wait', 'wall', 'status'],
+      steps.map((s) => [
+        s.step,
+        seconds(s.wait),
+        seconds(s.wall),
+        `${s.status}`,
+      ]),
+    ),
+    `## Slowest test files (${files.length} files, ${seconds(files.reduce((sum, f) => sum + importOf(f), 0))} importing, ${seconds(files.reduce((sum, f) => sum + f.tests, 0))} in tests, summed over workers)`,
+    table(
+      ['file', 'import', 'tests'],
+      slowFiles.map((f) => [f.file, seconds(importOf(f)), seconds(f.tests)]),
+    ),
+    `## Slowest smoke checks (${checks.length} checks, ${seconds(inChecks)} in checks, ${checks.filter((c) => !c.ok).length} failed)`,
+    table(
+      ['check', 'time'],
+      slowChecks.map((c) => [c.name, seconds(c.ms)]),
+    ),
+  ].join('\n\n');
+}
+
 /** timingOf reads one file's costs out of vitest's measurements. */
 export function timingOf(file: string, d: ModuleDiagnostic): FileTiming {
   return {
