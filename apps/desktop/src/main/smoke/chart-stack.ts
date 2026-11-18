@@ -7,7 +7,9 @@
  * from the same zero. A legend over the bars keys the series in the same
  * colours and order, clear of the first bar and inside the plot. The pointer
  * on a segment lists its value's series in its box, its own apart, and Down
- * steps to the next value's bar, keeping the series.
+ * steps to the next value's bar, keeping the series. t puts a table of a
+ * column per series, Other and the total in the plot's place, and the
+ * summary says what splits the bars.
  *
  * They open the workspace smoke.js wrote of a small export of four regions'
  * sales in eight channels: rows per region by channel in a new window, and
@@ -48,6 +50,20 @@ const DOWN_KEY: readonly Input[] = [
   { type: "keyDown", keyCode: "Down" },
   { type: "keyUp", keyCode: "Down" },
 ];
+
+/** The rows window's table's heads, and what its summary says of its split. */
+const STACKED_HEADS = [
+  "region",
+  "web",
+  "direct",
+  "partner",
+  "mail",
+  "phone",
+  "shop",
+  "Other",
+  "total",
+];
+const STACKED_SPLIT = "Split by channel into 7 series.";
 
 export const CHART_STACK: Check[] = [
   {
@@ -182,6 +198,24 @@ export const CHART_STACK: Check[] = [
       if (!(await until(() => south.classList.contains("cursor")))) return "South's direct wears no cursor";
       const said = document.querySelector(".chart .chart-tip-line.own").textContent;
       return said === "8 direct" ? "" : "the box's own line says " + said;
+    `,
+  },
+  {
+    name: "t puts a stacked chart's table in its plot's place, a column per series, Other and the total, and the summary says what splits its bars",
+    shot: "chart-stack-table",
+    script: `
+      const win = document.querySelector(".chart");
+      const plot = () => win.querySelector(".chart-plot");
+      plot().dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      const heads = () => [...win.querySelectorAll(".chart-table thead th")].map((th) => th.textContent);
+      if (!(await until(() => heads().length > 0))) return "t puts no table in place";
+      if (heads().join() !== ${JSON.stringify(STACKED_HEADS.join())}) return "the table heads " + heads().join();
+      const rows = win.querySelectorAll(".chart-table tbody tr").length;
+      if (rows !== ${STACKED_REGIONS.length}) return "the table has " + rows + " rows";
+      const told = win.querySelector(".chart-summary").textContent;
+      if (!told.includes(${JSON.stringify(STACKED_SPLIT)})) return "the summary says " + told;
+      plot().dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      return (await until(() => win.querySelector(".chart-segment") !== null)) ? "" : "t brings no bars back";
     `,
   },
 ];

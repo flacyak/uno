@@ -7,9 +7,13 @@
 
 import type { StackPlot } from "@document";
 import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
+import { PAIRS_AT_MOST } from "@tally";
 import { fitTips } from "../bars.ts";
 import type { ChartKind } from "../kind.ts";
 import { stack as drawStack } from "../stack.ts";
+import { split } from "../summary.ts";
+import { stacked, tableOf } from "../table.ts";
 import { stackTargets } from "../tooltip.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -33,5 +37,9 @@ export const stack: ChartKind<StackPlot> = (plot) => ({
           draw: (height) => drawStack(plot, tally, height, room),
           fit: fitTips,
           targets: (drawn) => stackTargets(plot, tally, drawn),
+          table: (called) => tableOf(stacked(plot, tally), called),
+          told: () => split(plot, tally),
+          notes: () =>
+            tally.unsplit > 0 ? [m.chart_stack_unsplit({ count: num(PAIRS_AT_MOST) })] : [],
         },
 });

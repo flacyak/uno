@@ -9,8 +9,8 @@
  * apart from them, so a window can mark them as the file's.
  */
 
-import type { ChartColumn, Plot, TimePlot } from "@document";
-import type { Group, Groups, Sample } from "@engine";
+import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
+import type { Group, Groups, Sample, StackTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent } from "@renderer/locale";
@@ -69,6 +69,25 @@ export function valued(plot: Grouped, tally: Groups): Told {
   const { others, below } = tally;
   const more = Math.max(each.length - SUMMARY_VALUES, 0) + others.values + below.values;
   return { span: "", each, more };
+}
+
+/**
+ * split gives what a stacked chart's summary says of its tally: the column
+ * that splits its bars and how many series it draws, Other one of them, and
+ * its values by their totals, as a bar chart's.
+ */
+export function split(plot: StackPlot, tally: StackTally): Told {
+  const measure = (g: { rows: number; sum: number }): number =>
+    plot.sum === undefined ? g.rows : g.sum;
+  const other = tally.values.some((v) => v.other.rows > 0) ? 1 : 0;
+  const count = num(tally.series.length + other);
+  const span = m.chart_summary_stack({
+    split: columnLabel(plot.split.header, plot.split.col),
+    count,
+  });
+  const each = tally.values.map((v) => `${named(v.value)} ${num(measure(v.total))}`);
+  const more = Math.max(each.length - SUMMARY_VALUES, 0) + tally.others.values + tally.below.values;
+  return { span, each, more };
 }
 
 /** spanned gives what a scatter's summary says of its points, and of what its axes span. */

@@ -593,6 +593,8 @@
   "chart_summary_points": "{points}, {x} from {xLeast} to {xMost} and {y} from {yLeast} to {yMost}.",
   "chart_table_rows": "rows",
   "chart_stack_total": "total",
+  "chart_summary_stack": "Split by {split} into {count} series.",
+  "chart_stack_unsplit": "rows past {count} pairs are in Other",
   "chart_table_share": "share",
   "chart_table_aria": "Table",
   "chart_refresh_aria": "Refresh",
