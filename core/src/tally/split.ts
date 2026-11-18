@@ -43,12 +43,17 @@ export interface SplitValue {
 
 /** What a fold holds, read. */
 export interface Split {
-  /** At most SERIES_AT_MOST series, the largest over the whole file first. */
+  /**
+   * At most SERIES_AT_MOST series, the largest over the whole file first,
+   * by size either side of zero, since a stack draws a negative sum leftward.
+   */
   series: string[];
   /** At most GROUPS_SENT values, the largest first, ties in value order. */
   values: SplitValue[];
-  /** The values not sent, read as one. */
+  /** The values not sent that measure more than zero, read as one. */
   others: Measured & { values: number };
+  /** The values not sent that measure zero or less, which a stack draws left. */
+  below: Measured & { values: number };
   /** The rows of values first seen past DISTINCT_AT_MOST. */
   rest: Measured;
   /** Rows a value counts apart from its series, past PAIRS_AT_MOST. */
@@ -134,7 +139,7 @@ export class SplitFold {
   snapshot(): Split {
     const size = (m: Measured) => (this.mark === undefined ? m.rows : m.sum);
     const series = [...this.totals]
-      .map(([name, total]) => ({ name, size: size(measured(total)) }))
+      .map(([name, total]) => ({ name, size: Math.abs(size(measured(total))) }))
       .sort((a, b) => b.size - a.size || compareStrings(a.name, b.name))
       .slice(0, SERIES_AT_MOST)
       .map(({ name }) => name);
@@ -160,7 +165,8 @@ export class SplitFold {
     return {
       series: series.map(label),
       values: values.map((v) => ({ ...v, value: label(v.value) })),
-      others: unsent(left),
+      others: unsent(left.filter((v) => size(v.total) > 0)),
+      below: unsent(left.filter((v) => size(v.total) <= 0)),
       rest: measured(this.rest),
       unsplit,
       skipped: { ...this.skipped },

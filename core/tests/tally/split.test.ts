@@ -75,7 +75,7 @@ function counted(rows: Row[], sums = false): Split {
     return x;
   });
   const series = [...totals]
-    .map(([name, t]) => ({ name, size: size(t.measured()) }))
+    .map(([name, t]) => ({ name, size: Math.abs(size(t.measured())) }))
     .sort((a, b) => b.size - a.size || compareStrings(a.name, b.name))
     .slice(0, SERIES_AT_MOST)
     .map(({ name }) => name);
@@ -107,6 +107,7 @@ function counted(rows: Row[], sums = false): Split {
     series,
     values,
     others: none,
+    below: none,
     rest: { rows: 0, sum: 0 },
     unsplit: 0,
     skipped,
@@ -262,4 +263,27 @@ test('series first seen past DISTINCT_AT_MOST have no total, so none is sent', (
   expect(series).not.toContain('later');
   // Its rows are still in its value, as Other.
   expect(values[0]!.total.rows).toBe(DISTINCT_AT_MOST / 2 + SERIES_AT_MOST - 1);
+});
+
+test('a split sum ranks its series by size either side of zero', () => {
+  const rows: Row[] = [
+    ['East', 'web', '3'],
+    ['West', 'loss', '-5'],
+  ];
+  for (let i = 0; i < SERIES_AT_MOST; i++) rows.push(['East', `${i}`, '1']);
+  const { series, values } = summed(rows).snapshot();
+  expect(series.slice(0, 2)).toEqual(['loss', 'web']);
+  expect(values.map((v) => v.value)).toEqual(['East', 'West']);
+  expect(values[1]!.cells[0]).toEqual({ rows: 1, sum: -5 });
+  // East's series 4 and 5 are Other, as only six are sent.
+  expect(values[0]!.other).toEqual({ rows: 2, sum: 2 });
+});
+
+test('unsent values at or below zero are read apart from the others', () => {
+  const rows: Row[] = [];
+  for (let i = 0; i < GROUPS_SENT; i++) rows.push([`${i}`, 'web', '1']);
+  rows.push(['up', 'web', '0.5'], ['even', 'web', '0'], ['down', 'web', '-2']);
+  const { others, below } = summed(rows).snapshot();
+  expect(others).toEqual({ values: 1, rows: 1, sum: 0.5 });
+  expect(below).toEqual({ values: 2, rows: 2, sum: -2 });
 });
