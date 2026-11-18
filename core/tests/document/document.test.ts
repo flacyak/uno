@@ -952,6 +952,50 @@ describe("a workspace's charts", () => {
     expect(back.carriedCharts).toStrictEqual([NEWER]);
   });
 
+  // A build before the over-time chart carried it as its text, which this one
+  // reads as a chart, and writes back as it was.
+  test('read an over-time chart an older build carried, and write back what it held', () => {
+    const plot = {
+      t: 'time',
+      at: { col: 0, header: 'date' },
+      per: 'month',
+      order: 'day',
+    };
+    const carried = JSON.stringify({ ...SAVED, id: 'c2', plot });
+    const entries = unzipSync(writeDocument(charted()));
+    const text = `{"version":${CHARTS_VERSION},"charts":[${carried}]}`;
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.carriedCharts).toStrictEqual([]);
+    expect(back.charts?.map((c) => c.plot)).toStrictEqual([plot]);
+    const written = unzipSync(writeDocument(back))[CHARTS_ENTRY]!;
+    const { charts } = JSON.parse(strFromU8(written)) as { charts: unknown[] };
+    expect(charts).toStrictEqual([JSON.parse(carried)]);
+  });
+
+  // A key a later build adds to a kind this one draws is carried whole, so
+  // this build neither draws the chart without it nor saves it back without it.
+  test('carry one whose plot has a key this build does not read', () => {
+    const plot = { ...PER_REGION.plot, split: { col: 2, header: 'rep' } };
+    const split = { ...SAVED, id: 'c2', plot };
+    const entries = unzipSync(writeDocument(charted()));
+    const text = JSON.stringify({
+      version: CHARTS_VERSION,
+      charts: [SAVED, split],
+    });
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.charts).toStrictEqual([SAVED]);
+    expect(back.carriedCharts).toStrictEqual([
+      {
+        id: 'c2',
+        source: 'sales',
+        place: SAVED.place,
+        json: JSON.stringify(split),
+      },
+    ]);
+  });
+
   test.each([
     ['is not JSON', `{"version":${CHARTS_VERSION},`],
     ['is a newer version', `{"version":${CHARTS_VERSION + 1},"charts":[]}`],

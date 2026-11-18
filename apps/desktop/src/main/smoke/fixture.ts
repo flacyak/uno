@@ -37,3 +37,8 @@ export const COMMAS_LEFT = 3149;
 
 /** A virtualising grid keeps fewer rows than this in the DOM. */
 export const DOM_ROWS = 120;
+
+/** The days the dates run over, 1 July to 29 September, and the weeks from
+ * Sunday 28 June that hold them. */
+export const DATED_DAYS = 91;
+export const DATED_WEEKS = 14;

@@ -3,6 +3,9 @@
  * columns. view/charts.json keeps its record and a `chart` request carries it.
  */
 
+import type { Order, UnixUnit } from '@date';
+import type { Per } from '@tally';
+
 /**
  * The most charts a workspace keeps, carried ones included. Sixteen windows
  * of a new chart's size, four by four, fill most of a full HD screen.
@@ -37,6 +40,18 @@ export interface ChartColumn {
   header: string;
 }
 
+/**
+ * An over-time chart: rows, or the sum of `sum`, per period of `at`, at the
+ * size `per` or the finest that fits. Its dates read with the column's
+ * `order`, or as Unix time in a `unit`, as the chart was made.
+ */
+export type TimePlot = {
+  t: 'time';
+  at: ChartColumn;
+  sum?: ChartColumn;
+  per: Per | 'auto';
+} & ({ order: Order } | { unit: UnixUnit });
+
 /** What a chart draws. This is all the engine needs to tally it. */
 export type Plot =
   /** No `sum`: count rows per value. */
@@ -44,7 +59,8 @@ export type Plot =
   /** Each value's share of the rows, or of the sum of `sum`. */
   | { t: 'pie'; by: ChartColumn; sum?: ChartColumn }
   /** One point per row, x against y, both number columns. */
-  | { t: 'scatter'; x: ChartColumn; y: ChartColumn };
+  | { t: 'scatter'; x: ChartColumn; y: ChartColumn }
+  | TimePlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are
@@ -77,5 +93,8 @@ export interface CarriedChart {
   id: string;
   /** The source it names, or '' for none, so it can go with its source. */
   source: string;
+  /** Where its window stood, when the record gives a place a read takes, so
+   * its window can stand there and say a newer uno made it. */
+  place?: ChartPlace;
   json: string;
 }

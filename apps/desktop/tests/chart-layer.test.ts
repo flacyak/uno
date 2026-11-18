@@ -15,7 +15,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
 import type { Chart, ChartPlace } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { GroupsTally, SampleTally, Skipped } from "@engine";
+import type { CarriedPlace, GroupsTally, SampleTally, Skipped } from "@engine";
 import { BLANK_ROWS, REGION, REVENUE, ROWS, UNITS } from "@main/smoke/fixture";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
@@ -34,6 +34,7 @@ import { madeTitle } from "@renderer/chart/window";
 import type { Heard, SourceState } from "@renderer/charts";
 import { clock, num } from "@renderer/locale";
 import type { Checks } from "@renderer/refresh";
+import type { Per } from "@tally";
 import { BARS, MOVED, PIE, SCATTER, SHARES, SHORT_ROWS, holding } from "./charted.ts";
 import { bodyMarkup } from "./markup.ts";
 import { frame } from "./smoke/dom-page.ts";
@@ -103,9 +104,11 @@ type HeldKeys = Pick<WheelEventInit, "ctrlKey" | "shiftKey">;
 /** What the layer reads of a workspace's charts, for a test to change. */
 interface Model {
   all: readonly Chart[];
+  carried: readonly CarriedPlace[];
   sourceLabel(source: string): string | undefined;
   move: (id: string, place: ChartPlace) => void;
   heard: (id: string) => Heard | undefined;
+  batch: (id: string, per: Per, offset: number) => Promise<boolean>;
 }
 
 const root = (): HTMLElement => document.querySelector<HTMLElement>("#charts")!;
@@ -140,6 +143,8 @@ const repoint = vi.fn();
 
 /** What the layer calls to find the cells a window's tally could not read as numbers. */
 const notNumbers = vi.fn();
+const notDates = vi.fn();
+const reorder = vi.fn();
 
 /** What the layer calls to open the chart form on a window's chart. */
 const edit = vi.fn();
@@ -170,7 +175,20 @@ let cell: DOMRect | undefined;
 const selected = (): DOMRect | undefined => cell;
 
 /** Everything the layer asks of the shell. */
-const asks = { leave, wheelBy, repoint, notNumbers, edit, refresh, remove, say, checks, selected };
+const asks = {
+  leave,
+  wheelBy,
+  repoint,
+  notNumbers,
+  notDates,
+  reorder,
+  edit,
+  refresh,
+  remove,
+  say,
+  checks,
+  selected,
+};
 
 /** A ResizeObserver that fires only when a test says, and only on #content or a plot. */
 class HeldObserver implements ResizeObserver {
@@ -215,8 +233,10 @@ function drawn({ style }: HTMLElement): Rect {
 function modelOf(...charts: Chart[]): Model {
   const model: Model = {
     all: charts,
+    carried: [],
     sourceLabel: () => undefined,
     heard: () => undefined,
+    batch: () => Promise.resolve(false),
     move: vi.fn((id: string, place: ChartPlace) => {
       model.all = model.all.map((chart) => (chart.id === id ? { ...chart, place } : chart));
     }),
@@ -718,6 +738,24 @@ test("a room too short tucks them too, and each goes back to its place with the 
     placed(FLUSH.place, ROOM),
     placed(INSIDE.place, ROOM),
   ]);
+});
+
+test("a chart this build cannot draw stands under the others at its place, out of a tucked stack", () => {
+  const { layer, model } = shown(FLUSH);
+  model.carried = [{ id: "c9", source: SOURCE, place: MOVED }];
+  layer.draw();
+  const carried = (): HTMLElement | null => document.querySelector<HTMLElement>(".chart-carried");
+  expect(root().firstElementChild).toBe(carried());
+  expect(drawn(carried()!)).toStrictEqual(placed(MOVED, ROOM));
+
+  resize({ w: ROOM.w, h: MIN_HEIGHT - 1 });
+  expect(carried()!.hidden).toBe(true);
+  resize(ROOM);
+  expect(carried()!.hidden).toBe(false);
+
+  model.carried = [];
+  layer.draw();
+  expect(carried()).toBeNull();
 });
 
 test("the layer says while it tucks, so heads can join into one stack", () => {

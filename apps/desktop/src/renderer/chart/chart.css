@@ -157,12 +157,18 @@
   cursor: default;
 }
 
+/* A title shows its columns' names as the file writes them, as the grid's
+ * header row does: in their own case, at the font's own spacing. It clips
+ * only across, for its ellipsis, so an underscore, which stands below the
+ * font's descent, shows. */
 .chart-title {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
+  overflow: clip visible;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 /* As far from the window's edge as from the head's top and from its 1 px rule. */
@@ -310,6 +316,18 @@
   border-color: var(--accent);
 }
 
+/* A window of a chart this build cannot draw, from layer.ts: one line in the
+ * caption's ink, in its middle as a plot's state stands. It takes no pointer,
+ * so the sheet under it stays the sheet's. */
+.chart.chart-carried {
+  justify-content: center;
+  padding: 0 10px;
+  color: var(--ink-3);
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
 /* A bar chart's rows, from bars.ts: each value's label, then its bar on a track.
  * bars.ts sets a bar's thickness, the window's ground before the next, the
  * inset and the gap before a value. A label takes what it needs, up to
@@ -406,10 +424,19 @@
   left: auto;
 }
 
+/* The characters window.ts measures a tick's character by, written as a tick
+ * is, out of sight and out of the window's flow. */
+.chart-gauged {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* An axis's tick, from axes.ts: in the caption's ink, which reads at 4.5:1 on
  * every ground, its digits in columns, on one line. The window is mono, so the
  * gutter axes.ts gives in ch holds the widest at this size. */
-.chart-tick {
+.chart-tick,
+.chart-gauged {
   color: var(--ink-3);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -425,7 +452,8 @@
  * size, so its ch is theirs. A point at an axis's end shows whole past it. The
  * SVG paints from the whole px nearest its start, so the points start on one,
  * and a gridline lands where its label centres. */
-.chart-scatter {
+.chart-scatter,
+.chart-time {
   display: grid;
   grid-template: minmax(0, 1fr) auto / round(up, var(--gutter), 1px) minmax(0, 1fr);
   column-gap: var(--tick-gap);
@@ -466,6 +494,65 @@
   width: 100%;
   height: 100%;
   overflow: visible;
+}
+
+/* An over-time chart's plot, from columns.ts, laid out as a scatter's. A label
+ * under the periods centres under its column, kept from the gutter's start to
+ * the periods' right edge, which timeAxis.ts reckons with in thinning them. */
+.chart-time {
+  --x-first: 0px;
+  --x-last: 0px;
+}
+
+.chart-time .chart-ticks.x .chart-tick {
+  --low: calc(-1 * (round(up, var(--gutter), 1px) + var(--tick-gap)));
+  left: clamp(var(--low), calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
+}
+
+/* Each period's slot takes one share of the width over the gridlines. Its
+ * column, in its middle as wide as a bar is thick or its slot less the bars'
+ * gap, in whole px so every column paints alike, runs from zero up, or down
+ * under zero, square at the baseline and round at the data's end, and takes
+ * its whole slot, a px at least, where the periods have no room for gaps. */
+.chart-periods {
+  position: relative;
+  display: flex;
+}
+
+.chart-gridlines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-period {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.chart-column {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(var(--zero) * 100%);
+  width: round(down, min(var(--bar-thick), 100% - var(--bar-gap)), 1px);
+  height: calc(var(--share) * 100%);
+  margin-inline: auto;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+}
+
+.chart-period.below .chart-column {
+  top: calc((1 - var(--zero)) * 100%);
+  bottom: auto;
+  border-radius: 0 0 4px 4px;
+}
+
+.chart-time.crowded .chart-column {
+  width: max(1px, 100%);
 }
 
 /* The dialogs' divider, where --rule-2, mixed with --paper, all but meets a dark
@@ -593,15 +680,25 @@
 }
 
 /* The mark the cursor is on, from tooltip.ts. A bar moves a fifth of the way
- * from the accent to the ink, over a wash of the accent across its row, a
- * slice the same from its own colour, and a point the same in full, ringed in
- * the page's ground, as tooltip.ts brings it in front of the points after it. */
+ * from the accent to the ink, over a wash of the accent across its row, as a
+ * column does over its period's slot, a slice the same from its own colour,
+ * and a point the same in full, ringed in the page's ground, as tooltip.ts
+ * brings it in front of the points after it. */
 .chart-bar-row.cursor {
   border-radius: 4px;
   background: var(--accent-b);
 }
 
 .chart-bar-row.cursor .chart-bar {
+  background: color-mix(in srgb, var(--accent) 80%, var(--ink));
+}
+
+.chart-period.cursor {
+  border-radius: 4px;
+  background: var(--accent-b);
+}
+
+.chart-period.cursor .chart-column {
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
@@ -671,6 +768,7 @@
  * and a pie's slices, its thinnest too, stand apart by the page's. */
 @media (forced-colors: active) {
   .chart-bar,
+  .chart-column,
   .chart-coverage::after {
     background: CanvasText;
     forced-color-adjust: none;
@@ -691,7 +789,8 @@
     visibility: visible;
   }
 
-  .chart-bar-row.cursor .chart-bar {
+  .chart-bar-row.cursor .chart-bar,
+  .chart-period.cursor .chart-column {
     background: Highlight;
   }
 
@@ -716,7 +815,9 @@
  * ticks' size, and a row is as high as a head's button, which its digits sit
  * in with room. A person can select from it, where the window lets nothing
  * else be selected. Its caption is a screen reader's: in the page, out of
- * sight. A cell stands as far from the window's edge as the head's words. Its
+ * sight. A cell stands as far from the window's edge as the head's words, and
+ * as far from the cell before it, so a window of the least width holds a
+ * period, its rows and a sum of eight digits with no bar across it. Its
  * own ground paints the header row's band and rule across the top, under the
  * bar where no cell reaches, so the band runs to the window's edge as the
  * grid's does. */
@@ -745,10 +846,14 @@
 .chart-table th,
 .chart-table td {
   height: var(--x-size);
-  padding: 0 10px;
+  padding: 0 0 0 10px;
   font-weight: 400;
   text-align: left;
   white-space: nowrap;
+}
+
+.chart-table :is(th, td):last-child {
+  padding-right: 10px;
 }
 
 /* The header row stays at the top as the rows scroll, as the grid's does, in
@@ -806,8 +911,8 @@
  * and the words of the source's checks after it take what is left. Where a
  * window is too narrow for it, the words after the button give way first, as
  * they take only the room the rest leaves, down to none, and then the words
- * before it, each ending in an ellipsis while any of it shows; the button and
- * the · before it stay whole. `--find-reach` is how far the button's box
+ * before it, each ending in an ellipsis while any of it shows; the button, the
+ * · before it and what the kind keeps whole stay whole. `--find-reach` is how far the button's box
  * stands past its words, its padding and its border; the padding keeps that
  * box inside the caption's where no words follow it, off the grip's box,
  * though the grip's reach still stands over its last `--grip-reach` there.
@@ -837,7 +942,9 @@
 }
 
 .chart-said-dot,
+.chart-said-kept,
 .chart-find,
+.chart-find-dates,
 .chart-every {
   flex: none;
 }
@@ -879,6 +986,7 @@
  * does. The schedule is a button the same way, which opens the chart form on
  * it. */
 .chart-find,
+.chart-find-dates,
 .chart-every {
   position: relative;
   z-index: 1;
@@ -893,6 +1001,7 @@
 }
 
 .chart-find:hover,
+.chart-find-dates:hover,
 .chart-every:hover {
   color: var(--ink);
   background: var(--surface);
@@ -900,6 +1009,7 @@
 }
 
 .chart-find:focus-visible,
+.chart-find-dates:focus-visible,
 .chart-every:focus-visible {
   outline: none;
   border-color: var(--accent);

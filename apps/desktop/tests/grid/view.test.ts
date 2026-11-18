@@ -15,6 +15,7 @@ import { OVERSCAN } from "@renderer/grid/metrics";
 import type { Rows } from "@renderer/grid/rows";
 import { View } from "@renderer/grid/view";
 import { m } from "@paraglide/messages";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { frame } from "@desktop-tests/smoke/dom-page";
 
 /** The row height the view falls back to with the stylesheet unloaded. */
@@ -299,6 +300,27 @@ test("a blank header is drawn as the column's place, and dressed as a name the f
   // Every column still has its badge, and the body row has all its cells.
   expect(scroller.querySelectorAll("thead th .badge").length).toBe(3);
   expect(scroller.querySelector("tbody tr")?.children.length).toBe(4);
+});
+
+test("a kind badge says on hover how its column's dates read, and the Unix unit its numbers are", async () => {
+  const { view, scroller } = make(200);
+  const rows = sheet(10, 3);
+  const columns = [...rows.columns];
+  columns[0] = { ...columns[0]!, kind: "date", order: "day" };
+  columns[1] = { ...columns[1]!, kind: "date", order: "either" };
+  columns[2] = { ...columns[2]!, kind: "num", unit: "ms" };
+  view.show({ ...rows, columns }, false);
+  const titles = () =>
+    [...scroller.querySelectorAll<HTMLElement>("thead th .badge")].map((b) => b.title);
+  expect(titles()).toEqual([
+    "dates read day first: 03/04/2024 is April 3, 2024",
+    "dates could read either way",
+    "Unix milliseconds",
+  ]);
+  await setLocale("en-GB", { reload: false });
+  view.show({ ...rows, columns: [{ ...columns[0]!, order: "month" }, ...columns.slice(1)] }, false);
+  await setLocale(baseLocale, { reload: false });
+  expect(titles()[0]).toBe("dates read month first: 03/04/2024 is 4 March 2024");
 });
 
 test("a kind badge says on hover that its column does not parse, or reads a decimal comma", () => {

@@ -19,7 +19,8 @@ import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { ALONG_COMPACT_FROM, axis, gutter, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
-import { BARS_INSET, TIP_GAP } from "./bars.ts";
+import { TIP_GAP } from "./bars.ts";
+import { BARS_INSET } from "./rows.ts";
 
 /** A point's radius, in px: the dataviz skill's least marker, 8 px across. */
 export const POINT_RADIUS = 4;
@@ -57,7 +58,7 @@ function share(axis: Axis, value: number): number {
 }
 
 /** percent writes `share` of the plot as SVG takes it. */
-function percent(share: number): string {
+export function percent(share: number): string {
   return `${share * 100}%`;
 }
 
@@ -72,7 +73,13 @@ function scales(axis: Axis): boolean {
 }
 
 /** gridline gives a line across the plot from `x1`, `y1` to `x2`, `y2`. */
-function gridline(cls: string, x1: string, y1: string, x2: string, y2: string): SVGLineElement {
+export function gridline(
+  cls: string,
+  x1: string,
+  y1: string,
+  x2: string,
+  y2: string,
+): SVGLineElement {
   const line = mark("line", `chart-grid ${cls}`);
   for (const [name, at] of Object.entries({ x1, y1, x2, y2 })) line.setAttribute(name, at);
   return line;

@@ -11,6 +11,7 @@ import { placeOf } from "@engine";
 import type { FindRequest } from "@engine";
 
 import { m } from "@paraglide/messages";
+import type { Dated } from "@renderer/chart/kind";
 import { columnLabel } from "@renderer/grid/rows";
 import type { Grid } from "@renderer/grid";
 import { num } from "@renderer/locale";
@@ -99,6 +100,26 @@ export class Finder {
       const ending = await this.find({ t: "not-number" }, 1, missing, from);
       if (ending !== "missed") return;
     }
+  }
+
+  /**
+   * notDates is an over-time chart's "3 not dates": moves to the first cell
+   * down its date column that it could not read as a date with its reading.
+   */
+  async notDates({ at, reading }: Dated): Promise<void> {
+    const on = this.showing();
+    const col =
+      on === undefined
+        ? undefined
+        : placeOf(
+            at,
+            on.workspace.rows.columns.map((c) => c.header),
+          );
+    if (on === undefined || col === undefined) return;
+    on.grid.moveTo(FIRST_ROW, col);
+    const column = columnLabel(at.header, col);
+    const missing = () => m.find_unparsed_date_below({ row: num(FIRST_ROW + 1), column });
+    await this.find({ t: "not-date", reading }, 1, missing, { row: ABOVE_FIRST_ROW, col });
   }
 
   /**

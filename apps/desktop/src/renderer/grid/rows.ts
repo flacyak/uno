@@ -4,6 +4,7 @@
  * the grid itself unloaded.
  */
 
+import type { ShownOrder, UnixUnit } from "@date";
 import type { Mark } from "@num";
 import type { Kind } from "@sheet";
 
@@ -27,6 +28,10 @@ export interface Column {
   kind: Kind;
   flagged: boolean;
   mark: Mark;
+  /** How its dates written year last read, from its sample; absent where it writes none so. */
+  order?: ShownOrder;
+  /** The Unix time unit its whole numbers are, from its sample. */
+  unit?: UnixUnit;
 }
 
 /**

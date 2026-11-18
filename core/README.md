@@ -9,6 +9,7 @@ codebase.
 | module     | what it owns                                             |
 | ---------- | -------------------------------------------------------- |
 | `num`      | what a cell is worth                                     |
+| `date`     | what date a cell writes, in minutes since 1970           |
 | `notation` | markdown in, symbols out                                 |
 | `formula`  | parse, evaluate, the column dependency graph             |
 | `program`  | the transform language a proposal names and a log stores |
