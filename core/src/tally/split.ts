@@ -13,6 +13,7 @@ import {
   GROUPS_SENT,
   LABEL_AT_MOST,
 } from './groups.ts';
+import type { SavedSum } from './exact.ts';
 import type { Skipped } from './skipped.ts';
 
 /**
@@ -59,6 +60,31 @@ export interface Split {
   /** Rows a value counts apart from its series, past PAIRS_AT_MOST. */
   unsplit: number;
   /** Cells of the summed column, none when the fold counts rows. */
+  skipped: Skipped;
+}
+
+/** One count as a save writes it: its rows, and their sum when summed. */
+export interface SavedTally {
+  rows: number;
+  sum?: SavedSum;
+}
+
+/** One cell or series total as a save writes it, its series first. */
+export type SavedCell =
+  | [series: string, rows: number]
+  | [series: string, rows: number, sum: SavedSum];
+
+/**
+ * SavedSplit is every bit of a SplitFold, as a save writes it: the mark it
+ * sums with, none when it counts rows, its groups, cells and series totals
+ * in the order they began, each rest, and the cells it left out.
+ */
+export interface SavedSplit {
+  mark?: Mark;
+  groups: Array<{ value: string; cells: SavedCell[]; unsplit: SavedTally }>;
+  rest: SavedTally;
+  totals: SavedCell[];
+  totalsRest: SavedTally;
   skipped: Skipped;
 }
 
@@ -133,6 +159,29 @@ export class SplitFold {
     if (x === undefined && cell === '') this.skipped.blank += sign;
     else if (x === undefined) this.skipped.unparsed += sign;
     return x;
+  }
+
+  /** saved is what the fold holds, which `restored` reads back as it was. */
+  saved(): SavedSplit {
+    const summed = this.mark !== undefined;
+    const tally = ({ rows, sum }: Count): SavedTally =>
+      summed ? { rows, sum: sum.saved() } : { rows };
+    const cells = (held: Map<string, Count>) =>
+      [...held].map(([series, c]): SavedCell =>
+        summed ? [series, c.rows, c.sum.saved()] : [series, c.rows],
+      );
+    return {
+      mark: this.mark,
+      groups: [...this.groups].map(([value, group]) => ({
+        value,
+        cells: cells(group.cells),
+        unsplit: tally(group.unsplit),
+      })),
+      rest: tally(this.rest),
+      totals: cells(this.totals),
+      totalsRest: tally(this.totalsRest),
+      skipped: { ...this.skipped },
+    };
   }
 
   /** snapshot reads the fold as plain numbers and strings. */

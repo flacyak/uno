@@ -14,6 +14,7 @@ import {
   GroupsFold,
   HELD_AT_MOST,
   SampleFold,
+  SplitFold,
   TALLY_VERSION,
   TimeFold,
 } from '@tally';
@@ -133,6 +134,54 @@ test('a save that holds no groups fold reads back as none', () => {
     { ...saved, rest: { rows: 0 } },
   ];
   for (const v of unsaved) expect(GroupsFold.restored(v)).toBeUndefined();
+});
+
+test('a split fold saves each count in the order it began, with its exact sum', () => {
+  const fold = new SplitFold('point');
+  fold.add('East', 'web', '1.5');
+  fold.add('East', 'direct', 'n/a');
+  fold.add('East', 'web', '');
+  fold.add('West', 'web', '-2');
+  const sum = (...xs: number[]) => {
+    const s = new ExactSum();
+    for (const x of xs) s.add(x);
+    return s.saved();
+  };
+  const none = sum();
+  expect(throughJson(fold.saved())).toStrictEqual({
+    mark: 'point',
+    groups: [
+      {
+        value: 'East',
+        cells: [
+          ['web', 2, sum(1.5)],
+          ['direct', 1, none],
+        ],
+        unsplit: { rows: 0, sum: none },
+      },
+      {
+        value: 'West',
+        cells: [['web', 1, sum(-2)]],
+        unsplit: { rows: 0, sum: none },
+      },
+    ],
+    rest: { rows: 0, sum: none },
+    totals: [
+      ['web', 3, sum(1.5, -2)],
+      ['direct', 1, none],
+    ],
+    totalsRest: { rows: 0, sum: none },
+    skipped: { blank: 1, unparsed: 1 },
+  });
+  const counted = new SplitFold();
+  counted.add('East', 'web');
+  expect(throughJson(counted.saved())).toStrictEqual({
+    groups: [{ value: 'East', cells: [['web', 1]], unsplit: { rows: 0 } }],
+    rest: { rows: 0 },
+    totals: [['web', 1]],
+    totalsRest: { rows: 0 },
+    skipped: { blank: 0, unparsed: 0 },
+  });
 });
 
 /** Blocks a page of a scatter's least and most holds, and rows a block. */
@@ -362,7 +411,8 @@ test('a save that holds no time fold reads back as none', () => {
  * The hash of the folds TALLY_VERSION makes of the fixture: its rows by
  * region, its revenue and units summed by channel with each mark, its
  * revenue against units with each mark, and its rows and revenue over its
- * dates in each order, with DATES added. It
+ * dates in each order, with DATES added, and its rows and revenue per
+ * region by channel with each mark, with CELLS added. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -371,6 +421,7 @@ const GOLDEN = {
   groups: '2ae37431f8e378df8ef90b5aa4776174d479cc156f24f3a898676c88cdd7c6cd',
   sample: '82b28cba5c4ad68f0358cb3c9b9cfbe9e4aaecbb4f143ca0412395470acb6432',
   time: '2df69fd36bdc14b0210c23556d82b8f16274974e471b7d7464b59c1c25e34b15',
+  split: '10134ed7db0713a75f0bbebee410afa91ef190bbc0d7ef23fed72bf12fd9191c',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -422,4 +473,17 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(times.map((f) => f.saved())))),
     'a time fold, or how a cell reads as a date or a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.time);
+  const splits = [
+    new SplitFold(),
+    new SplitFold('point'),
+    new SplitFold('comma'),
+  ];
+  for (const fold of splits) {
+    regions.forEach((v, r) => fold.add(v, channels[r]!, revenue[r]));
+    CELLS.forEach((cell) => fold.add('', '', cell));
+  }
+  expect(
+    hashOf(encoder.encode(JSON.stringify(splits.map((f) => f.saved())))),
+    'a split fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.split);
 });
