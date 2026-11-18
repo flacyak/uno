@@ -26,6 +26,7 @@ import { groupsFolder } from '@engine/fold/groups';
 import { FOLDERS } from '@engine/fold/index';
 import type { Folder, Folders, MakeFolder } from '@engine/fold/index';
 import { sampleFolder } from '@engine/fold/sample';
+import { splitFolder } from '@engine/fold/split';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -37,7 +38,13 @@ import { NO_ROW, Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { blobProvider, multiProvider } from '@store';
 import { diskProvider } from '@store/node';
-import { GroupsFold, LEVEL_BATCH, SampleFold, TimeFold } from '@tally';
+import {
+  GroupsFold,
+  LEVEL_BATCH,
+  SampleFold,
+  SplitFold,
+  TimeFold,
+} from '@tally';
 import {
   CHANNEL,
   COLS,
@@ -472,6 +479,51 @@ test("a scatter's folder keeps the key a save names it by, saves nothing an edit
   await folder.mend(blocks(sheet));
   expect(folder.saved()).toBeDefined();
   expect(folder.tally(plot, WHOLE)).toStrictEqual(pure(plot, sheet));
+});
+
+test("a stacked chart's folder counts or sums by both its columns, moves by the one row an edit changed, and reads back from its save", async () => {
+  const marks = HEADERS.map(() => 'point' as const);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, CHANNEL, 'mail');
+  for (const sum of [undefined, column(REVENUE)]) {
+    const plot = {
+      t: 'stack',
+      by: column(REGION),
+      split: column(CHANNEL),
+      ...(sum && { sum }),
+    } as const;
+    const folder = splitFolder(plot, HEADERS, marks);
+    if (typeof folder === 'string') throw new Error(`no column ${folder}`);
+    const cols =
+      sum === undefined ? [REGION, CHANNEL] : [REGION, CHANNEL, REVENUE];
+    expect(folder.key).toBe(`split ${cols.join(' ')}`);
+    expect(folder.cols).toStrictEqual(cols);
+    const whole = blocks(sales);
+    for (let block = 0; block * TINY.blockRows < ROWS; block++) {
+      folder.fold(block, await whole(block));
+    }
+    const block = Math.floor(EDITED / TINY.blockRows);
+    folder.move(block, EDITED, before, shownRow(sheet, EDITED));
+    // The pure fold of the edited sheet, row by row.
+    const fold = new SplitFold(sum === undefined ? undefined : 'point');
+    for (let r = 0; r < ROWS; r++) {
+      const cell = sum === undefined ? '' : sheet.display(r, REVENUE);
+      fold.add(sheet.display(r, REGION), sheet.display(r, CHANNEL), cell);
+    }
+    // A stack is no Plot yet, so the tally names the plot of a bar chart.
+    const heard = REGION_ROWS.plot;
+    const tally = { t: 'stack', plot: heard, coverage: WHOLE };
+    expect(folder.tally(heard, WHOLE)).toStrictEqual({
+      ...tally,
+      ...fold.snapshot(),
+    });
+    const back = folder.restored(JSON.parse(JSON.stringify(folder.saved())));
+    expect(back?.tally(heard, WHOLE)).toStrictEqual(folder.tally(heard, WHOLE));
+    expect(folder.readsWith(marks)).toBe(true);
+    const comma = marks.map(() => 'comma' as const);
+    expect(folder.readsWith(comma)).toBe(sum === undefined);
+  }
 });
 
 test('an over-time chart folded a block at a time reads as the pure fold of its dates, and a change of size alone keeps its fold', () => {
