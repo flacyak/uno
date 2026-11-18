@@ -7,18 +7,26 @@
  * pointed at with the same variables the AWS CLI reads. The app opens objects
  * in it with the real store, over the wire, with a real signature.
  *
- * Usage: node --import ../../paths.js scripts/smoke.js   (after node scripts/build.js)
+ * Usage: node --import ../../paths.js scripts/smoke.js [--affected <base>]
+ * (after node scripts/build.js). With --affected, only the groups the files
+ * changed since <base> touch are run, by smoke-groups.json; see
+ * src/main/smoke/affected.ts. UNO_SMOKE_ONLY set by hand wins over it.
  */
 
 import { newManifest, readContainer, writeDocument } from "@uno/core/document";
 import { parseConnection } from "@uno/core/library";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 import { HOME_REGION } from "@core-tests/store/regions";
 import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@core-tests/store/standin";
+import { affected } from "@main/smoke/affected";
+import { GROUPS, ONLY_VARIABLE, SCHEDULE, selected } from "@main/smoke/groups";
+import SMOKE_MAP from "../smoke-groups.json" with { type: "json" };
 import { CHECK_TIMEOUT_MS, MINUTE_MS } from "@renderer/timing";
 import {
   DRIVEN_LANGUAGE_ENV,
@@ -32,6 +40,40 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
+const root = join(pkg, "../..");
+
+// --affected <base>: the files changed since the merge base with <base>,
+// committed or not, decide the groups, unless UNO_SMOKE_ONLY already has.
+// `vp run smoke -- --affected main` hands the script the `--` as well, which
+// would end the options before the first one.
+const argv = process.argv.slice(2);
+if (argv[0] === "--") argv.shift();
+const { values: flags } = parseArgs({ args: argv, options: { affected: { type: "string" } } });
+if (flags.affected !== undefined && (process.env[ONLY_VARIABLE] ?? "") === "") {
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" })
+      .split("\n")
+      .filter((p) => p !== "");
+  const [base] = git("merge-base", flags.affected, "HEAD");
+  const changed = [
+    ...git("diff", "--name-only", base),
+    ...git("ls-files", "--others", "--exclude-standard"),
+  ];
+  const { groups, unmapped } = affected(SMOKE_MAP, changed);
+  for (const path of unmapped)
+    console.log(`smoke: ${path} is in no entry of smoke-groups.json, so every group runs`);
+  if (groups !== "all" && groups.length === 0) {
+    console.log(
+      `smoke: nothing changed since ${flags.affected} touches the app, so nothing to smoke`,
+    );
+    console.log("smoke: ok");
+    process.exit(0);
+  }
+  if (groups !== "all") process.env[ONLY_VARIABLE] = groups.join(",");
+  console.log(
+    `smoke: ${changed.length} files changed since ${flags.affected} run ${groups === "all" ? "every group" : groups.join(", ")}`,
+  );
+}
 const fixture = join(pkg, "../../core/tests/testdata/sales-q3.csv");
 // A second export, for the checks that a workspace holds several.
 const second = join(pkg, "../../core/tests/testdata/google-ads-sales.csv");
@@ -580,70 +622,111 @@ function answer(what) {
   return true;
 }
 
-const { code, out } = await drive("smoke", {
-  electron,
-  args: [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, fixture],
-  env: electronEnv(process.env, {
-    ...DRIVEN_LANGUAGE_ENV,
-    UNO_SMOKE: scratch,
-    UNO_SMOKE_SOURCE: second,
-    // The object's address, for the check that adds it.
-    UNO_SMOKE_OBJECT: object,
-    UNO_SMOKE_SENT: sent,
-    UNO_SMOKE_CHARTED: charted,
-    UNO_SMOKE_SIGNED: signed,
-    UNO_SMOKE_SCATTERED: scattered,
-    UNO_SMOKE_ALONG: along,
-    UNO_SMOKE_PIES: pies,
-    UNO_SMOKE_TIMED: timed,
-    UNO_SMOKE_PLACED: placed,
-    UNO_SMOKE_MISREAD: misread,
-    UNO_SMOKE_STATES: states,
-    UNO_SMOKE_BLANKS: blanks,
-    UNO_SMOKE_SCHEDULED: scheduled,
-    // What the + at the foot of the sidebar opens, in place of the Open dialog.
-    UNO_DRIVEN_OPEN: second,
-    // The stand-in's endpoint and keys. The engine's utility process inherits
-    // the app's environment.
-    ...standinEnv(standin),
-    AWS_CONFIG_FILE: join(aws, "config"),
-    AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
-  }),
-  answer,
-  // The run's own minute, and what the scheduled chart may wait.
-  deadlineMs: 60_000 + everyMinute * MINUTE_MS + CHECK_TIMEOUT_MS,
-  onTimeout: () => void shut(),
-});
-await shut();
+/**
+ * run drives one uno over the groups `only` names, with `folder` as its
+ * screenshots' and its data's, and resolves to its verdict, or undefined.
+ *
+ * @param {string[]} only
+ * @param {string} folder
+ * @param {number} deadlineMs
+ */
+async function run(only, folder, deadlineMs) {
+  const dataDir = join(folder, "data");
+  await rm(dataDir, { recursive: true, force: true });
+  const { code, out } = await drive("smoke", {
+    electron,
+    args: [pkg, `--user-data-dir=${dataDir}`, DRIVEN_LANGUAGE_SWITCH, fixture],
+    env: electronEnv(process.env, {
+      ...DRIVEN_LANGUAGE_ENV,
+      UNO_SMOKE: folder,
+      [ONLY_VARIABLE]: only.join(","),
+      UNO_SMOKE_SOURCE: second,
+      // The object's address, for the check that adds it.
+      UNO_SMOKE_OBJECT: object,
+      UNO_SMOKE_SENT: sent,
+      UNO_SMOKE_CHARTED: charted,
+      UNO_SMOKE_SIGNED: signed,
+      UNO_SMOKE_SCATTERED: scattered,
+      UNO_SMOKE_ALONG: along,
+      UNO_SMOKE_PIES: pies,
+      UNO_SMOKE_TIMED: timed,
+      UNO_SMOKE_PLACED: placed,
+      UNO_SMOKE_MISREAD: misread,
+      UNO_SMOKE_STATES: states,
+      UNO_SMOKE_BLANKS: blanks,
+      UNO_SMOKE_SCHEDULED: scheduled,
+      // What the + at the foot of the sidebar opens, in place of the Open dialog.
+      UNO_DRIVEN_OPEN: second,
+      // The stand-in's endpoint and keys. The engine's utility process inherits
+      // the app's environment.
+      ...standinEnv(standin),
+      AWS_CONFIG_FILE: join(aws, "config"),
+      AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
+    }),
+    answer,
+    // The run's own minute, and what the scheduled chart may wait.
+    deadlineMs,
+    onTimeout: () => void shut(),
+  });
+  return verdict("smoke", code, out, "smoke: all checks passed");
+}
 
-const failed = verdict("smoke", code, out, "smoke: all checks passed");
-if (failed !== undefined) {
-  console.error(failed);
+// The schedule's group waits on the clock for its minute, longer than every
+// other check together, so it runs in a second uno beside the rest, with a
+// folder of its own. Which groups run is UNO_SMOKE_ONLY's choice, each with
+// the groups it leans on; see src/main/smoke/groups.ts.
+const groups = selected(GROUPS, process.env[ONLY_VARIABLE]).map((g) => g.name);
+const rest = groups.filter((name) => name !== SCHEDULE);
+const aside = join(scratch, "schedule");
+await mkdir(aside, { recursive: true });
+const verdicts = await Promise.all([
+  rest.length > 0 ? run(rest, scratch, 60_000 + CHECK_TIMEOUT_MS) : undefined,
+  groups.includes(SCHEDULE)
+    ? run([SCHEDULE], aside, 60_000 + everyMinute * MINUTE_MS + CHECK_TIMEOUT_MS)
+    : undefined,
+]);
+await shut();
+const failed = verdicts.filter((v) => v !== undefined);
+if (failed.length > 0) {
+  for (const line of failed) console.error(line);
   process.exit(1);
 }
 
 // The saved .uno, read with the same reader the engine opens a workspace
 // with. Only here can the file on disk be checked.
+// What the run left is read back for the groups that ran. A run of some
+// groups (UNO_SMOKE_ONLY, see src/main/smoke/groups.ts) leaves only theirs.
+/** Every check both unos ran, read back from each one's folder. */
+const checks = [];
+for (const folder of [scratch, aside]) {
+  if (existsSync(join(folder, "checks.json"))) {
+    checks.push(...JSON.parse(await readFile(join(folder, "checks.json"), "utf8")));
+  }
+}
+await writeFile(join(scratch, "checks.json"), JSON.stringify(checks));
+const ran = new Set(checks.map((check) => check.group));
+const trouble = [];
 const written = (await readdir(scratch)).filter((name) => name.endsWith(".uno"));
 const saved = written[0];
-if (saved === undefined) {
+if (saved === undefined && ran.has("sources")) {
   console.error(`smoke: FAILED (no .uno was written under ${scratch})`);
   console.error("smoke: the run has to save the workspace before it quits -- see src/main/smoke/");
   process.exit(1);
 }
 
-const at = join(scratch, saved);
-const doc = readContainer(saved, await readFile(at), at);
-const pointers = doc.manifest.sources.map((s) => ({
-  name: s.name,
-  path: s.path,
-  version: s.version,
-  connection: s.connection,
-}));
+const pointers = [];
+if (saved !== undefined) {
+  const at = join(scratch, saved);
+  const doc = readContainer(saved, await readFile(at), at);
+  for (const s of doc.manifest.sources) {
+    pointers.push({ name: s.name, path: s.path, version: s.version, connection: s.connection });
+  }
+}
 
-const trouble = [];
 const remote = pointers.find((s) => s.path === object);
-if (remote === undefined) {
+if (saved === undefined) {
+  // Nothing to read back: the group that saves did not run.
+} else if (remote === undefined) {
   trouble.push(
     `the object was saved as ${JSON.stringify(pointers.map((s) => s.path))}, not ${object}`,
   );
@@ -660,7 +743,9 @@ if (remote === undefined) {
 }
 // The local fixture is saved by its absolute path.
 const local = pointers.find((s) => s.name === "sales-q3.csv");
-if (local === undefined) trouble.push(`${saved} holds no sales-q3.csv`);
+if (saved === undefined) {
+  // As above.
+} else if (local === undefined) trouble.push(`${saved} holds no sales-q3.csv`);
 else if (local.path !== fixture) {
   trouble.push(`sales-q3.csv points at ${JSON.stringify(local.path)}, not the absolute ${fixture}`);
 }
@@ -668,50 +753,53 @@ else if (local.path !== fixture) {
 // The connection the checks saved, read back from the disk: in the run's own
 // folder, parses as a connection, and signs in by profile.
 const kept = join(data, "connections", "acme-exports.unof");
-try {
-  const c = parseConnection("acme-exports.unof", await readFile(kept, "utf8"));
-  if (c.bucket !== BUCKET) trouble.push(`${kept} connects to ${c.bucket}, not ${BUCKET}`);
-  // Saved from the connect form: signed in as the chosen profile, with the
-  // region the test detected.
-  if (c.auth.mode !== "profile" || c.auth.profile !== "finance") {
-    trouble.push(`${kept} signs in as ${JSON.stringify(c.auth)}, not the finance profile`);
+if (ran.has("connections"))
+  try {
+    const c = parseConnection("acme-exports.unof", await readFile(kept, "utf8"));
+    if (c.bucket !== BUCKET) trouble.push(`${kept} connects to ${c.bucket}, not ${BUCKET}`);
+    // Saved from the connect form: signed in as the chosen profile, with the
+    // region the test detected.
+    if (c.auth.mode !== "profile" || c.auth.profile !== "finance") {
+      trouble.push(`${kept} signs in as ${JSON.stringify(c.auth)}, not the finance profile`);
+    }
+    if (c.region !== HOME_REGION)
+      trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
+    // Connected for the reopened workspace, so it covers the object's folder,
+    // as the form filled it in.
+    if (c.prefix !== "2025/") trouble.push(`${kept} covers ${JSON.stringify(c.prefix)}, not 2025/`);
+    // The second connection, to the whole bucket, has its own file, as does the
+    // public bucket. The refused bucket left none.
+    const folder = (await readdir(join(data, "connections"))).toSorted();
+    const want = ["acme-exports-2.unof", "acme-exports.unof", `${OPEN_BUCKET}.unof`];
+    if (JSON.stringify(folder) !== JSON.stringify(want)) {
+      trouble.push(`the connections folder holds ${JSON.stringify(folder)}`);
+    }
+    const second = parseConnection(
+      "acme-exports-2.unof",
+      await readFile(join(data, "connections", "acme-exports-2.unof"), "utf8"),
+    );
+    if (second.prefix !== "")
+      trouble.push(`acme-exports-2.unof covers ${second.prefix}, not the whole bucket`);
+  } catch (err) {
+    trouble.push(`the saved connection did not read back: ${err.message}`);
   }
-  if (c.region !== HOME_REGION)
-    trouble.push(`${kept} holds region ${c.region}, not ${HOME_REGION}`);
-  // Connected for the reopened workspace, so it covers the object's folder,
-  // as the form filled it in.
-  if (c.prefix !== "2025/") trouble.push(`${kept} covers ${JSON.stringify(c.prefix)}, not 2025/`);
-  // The second connection, to the whole bucket, has its own file, as does the
-  // public bucket. The refused bucket left none.
-  const folder = (await readdir(join(data, "connections"))).toSorted();
-  const want = ["acme-exports-2.unof", "acme-exports.unof", `${OPEN_BUCKET}.unof`];
-  if (JSON.stringify(folder) !== JSON.stringify(want)) {
-    trouble.push(`the connections folder holds ${JSON.stringify(folder)}`);
-  }
-  const second = parseConnection(
-    "acme-exports-2.unof",
-    await readFile(join(data, "connections", "acme-exports-2.unof"), "utf8"),
-  );
-  if (second.prefix !== "")
-    trouble.push(`acme-exports-2.unof covers ${second.prefix}, not the whole bucket`);
-} catch (err) {
-  trouble.push(`the saved connection did not read back: ${err.message}`);
-}
 
 // The charted workspace, which the last checks saved with Ctrl+S after moving
 // its first window. That window ends on the room's right edge at the least
 // height, a nudge wide of the least width and a nudge up from the foot. The
 // second never moved.
-const chartsBack = readContainer("charted.uno", await readFile(charted), charted).charts;
-const [firstBack, lastBack] = chartsBack.map((chart) => chart.place);
-const standsAt = (place, want) => Object.keys(want).every((side) => place[side] === want[side]);
-const nudgedUp = firstBack.y > 0 && firstBack.y < 1;
-const stepped = { x: 1, width: leastSize.width + nudge, height: leastSize.height };
-if (!nudgedUp || !standsAt(firstBack, stepped)) {
-  trouble.push(`the moved window was saved at ${JSON.stringify(firstBack)}`);
-}
-if (!standsAt(lastBack, { ...chartSize, x: 1, y: 1 })) {
-  trouble.push(`the window left alone was saved at ${JSON.stringify(lastBack)}`);
+if (ran.has("chart-moves")) {
+  const chartsBack = readContainer("charted.uno", await readFile(charted), charted).charts;
+  const [firstBack, lastBack] = chartsBack.map((chart) => chart.place);
+  const standsAt = (place, want) => Object.keys(want).every((side) => place[side] === want[side]);
+  const nudgedUp = firstBack.y > 0 && firstBack.y < 1;
+  const stepped = { x: 1, width: leastSize.width + nudge, height: leastSize.height };
+  if (!nudgedUp || !standsAt(firstBack, stepped)) {
+    trouble.push(`the moved window was saved at ${JSON.stringify(firstBack)}`);
+  }
+  if (!standsAt(lastBack, { ...chartSize, x: 1, y: 1 })) {
+    trouble.push(`the window left alone was saved at ${JSON.stringify(lastBack)}`);
+  }
 }
 
 if (trouble.length > 0) {
@@ -719,6 +807,8 @@ if (trouble.length > 0) {
   process.exit(1);
 }
 
-console.log(`smoke: ${saved} points at ${pointers.map((s) => s.path).join(", ")}`);
-console.log(`smoke: ${kept} reads back as a connection to ${BUCKET}`);
+if (saved !== undefined) {
+  console.log(`smoke: ${saved} points at ${pointers.map((s) => s.path).join(", ")}`);
+}
+if (ran.has("connections")) console.log(`smoke: ${kept} reads back as a connection to ${BUCKET}`);
 console.log("smoke: ok");
