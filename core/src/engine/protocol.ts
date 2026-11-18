@@ -8,7 +8,8 @@
  * a Web Worker, or a MessageChannel.
  */
 
-import type { Chart, ChartPlace, Plot } from '@document';
+import type { Order, ShownOrder, UnixUnit } from '@date';
+import type { CarriedChart, Chart, ChartPlace, Plot } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Mark } from '@num';
 import type { Change } from '@pattern';
@@ -16,7 +17,7 @@ import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
-import type { Groups, Sample } from '@tally';
+import type { Groups, Per, Sample, TimeLevel, Times } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -30,6 +31,16 @@ export interface ColumnInfo {
   flagged: boolean;
   /** The decimal mark the column's numbers are read with, from its sample. */
   mark: Mark;
+  /**
+   * How the column's dates written year last read, day first or month first,
+   * from its sample. Absent when it is not a date column or writes none so.
+   */
+  order?: ShownOrder;
+  /**
+   * The unit of Unix time the column's whole numbers are, seconds or
+   * milliseconds, from its sample. The column stays a number.
+   */
+  unit?: UnixUnit;
   /** The formula expression bound to the column, if any. */
   binding?: string;
 }
@@ -137,6 +148,9 @@ export interface PartInfo {
   path: string;
 }
 
+/** Where the window of a chart this build carries and cannot show stood. */
+export type CarriedPlace = Required<Omit<CarriedChart, 'json'>>;
+
 /** What an open added to the workspace, in display order. An older engine
  * leaves out the cells, the charts and all that follows them. */
 export interface Opening {
@@ -154,6 +168,9 @@ export interface Opening {
   /** The sources of those charts, which take them when they go. Empty
    * otherwise. */
   carriedOver?: string[];
+  /** Those charts whose records give a place, where their windows stood.
+   * Empty otherwise. */
+  carriedPlaces?: CarriedPlace[];
   /** Said once, when the .uno held charts this build cannot show. */
   chartsNote?: Said;
 }
@@ -206,9 +223,15 @@ export interface FindRequest {
   /**
    * Match a cell that fails to parse as its column's kind, one a chart's tally
    * could not read as a number (not blank, and no number once its formatting
-   * is removed, as a fold reads it), or one whose text contains `text`.
+   * is removed, as a fold reads it), one an over-time chart could not read
+   * as a date with its `reading` (not blank), or one whose text contains
+   * `text`.
    */
-  match: { t: 'unparsed' } | { t: 'not-number' } | { t: 'text'; text: string };
+  match:
+    | { t: 'unparsed' }
+    | { t: 'not-number' }
+    | { t: 'not-date'; reading: Order | UnixUnit }
+    | { t: 'text'; text: string };
 }
 
 export interface Found {
@@ -276,6 +299,13 @@ export interface SampleTally extends Sample {
   coverage: Coverage;
 }
 
+/** An over-time chart's tally: its periods at each size, from its own to years. */
+export interface TimeTally extends Times {
+  t: 'time';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
  * arrays, or why the source could not be read. Each names the plot it reads,
@@ -285,6 +315,7 @@ export interface SampleTally extends Sample {
 export type Tally =
   | GroupsTally
   | SampleTally
+  | TimeTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**
@@ -392,6 +423,8 @@ export type Request =
   | { t: 'chart'; id: number; chart: Chart }
   /** Remove a chart from the workspace, named by its id. */
   | { t: 'unchart'; id: number; chart: string }
+  /** A later batch of an over-time chart's periods at `per`, from `offset`. */
+  | { t: 'batch'; id: number; chart: string; per: Per; offset: number }
   /** Write the workspace as a .uno. Refused if carried sources total more than limit bytes. */
   | { t: 'save'; id: number; place: Place; limit: number }
   | { t: 'close' };
@@ -434,6 +467,8 @@ export type Reply =
     }
   | { t: 'charted'; id: number }
   | { t: 'uncharted'; id: number }
+  /** None where the chart holds no such batch now. */
+  | { t: 'batched'; id: number; batch?: TimeLevel }
   | { t: 'saved'; id: number; bytes: Uint8Array }
   /** Unnumbered, a failure of an index or a pass behind a source. */
   | { t: 'error'; id?: number; source?: string; said: Said };

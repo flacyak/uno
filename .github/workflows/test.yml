@@ -1,8 +1,14 @@
 name: test
 
+# Every pull request, whatever branch it targets. A stack's PRs target the
+# branch below them, and each is checked on its own change.
 on:
   pull_request:
-    branches: [main]
+
+# One run per branch: a push on top of a run still going replaces it.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Build, typecheck, and the 117 tests across core + desktop -- all

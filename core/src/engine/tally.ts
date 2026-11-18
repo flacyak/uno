@@ -8,19 +8,22 @@
  * by header where the file moved them, with each column's decimal mark.
  */
 
-import type { Chart, ChartColumn, Plot } from '@document';
+import type { Chart, Plot } from '@document';
 import type { Mark } from '@num';
 import type { Said } from '@said';
-import { GroupsFold, SampleFold, isCount, isRecord } from '@tally';
-import type { SavedGroups, SavedSample } from '@tally';
+import { isCount, isRecord } from '@tally';
+import type { Per, TimeLevel } from '@tally';
+import { FOLDERS, folderOf } from './fold/index.ts';
+import type { Block, Folder, Folders } from './fold/index.ts';
 import type { Tally } from './protocol.ts';
+
+export { placeOf } from './fold/index.ts';
+export type { Block } from './fold/index.ts';
 
 /** How far one chart's fold has got. */
 interface Folding {
   /** The plot the fold reads, which its tally names. */
   plot: Plot;
-  /** Which fold the plot's columns make, so a like chart can keep it. */
-  key: string;
   /** Rows folded: every row before the first block it lacks. */
   rows: number;
   /**
@@ -37,13 +40,12 @@ interface Folding {
 }
 
 /**
- * One chart's fold, over the plot's columns where the view's headers put
- * them: a sample of `x` against `y`, or groups by one column, summing
- * another where the plot names one.
+ * One chart's fold, through the folder of its kind, over the plot's columns
+ * where the view's headers put them.
  */
-type Tallying =
-  | (Folding & { t: 'sample'; fold: SampleFold; x: number; y: number })
-  | (Folding & { t: 'groups'; fold: GroupsFold; by: number; sum?: number });
+interface Tallying extends Folding {
+  folder: Folder;
+}
 
 /**
  * SavedChart is what a save keeps of a chart's fold: which fold its columns
@@ -53,17 +55,7 @@ export interface SavedChart {
   key: string;
   rows: number;
   ahead?: [number, number];
-  fold: SavedGroups | SavedSample;
-}
-
-/**
- * A block's rows as the folds read them: their range, and what a column of
- * them shows, by row.
- */
-export interface Block {
-  from: number;
-  end: number;
-  shown: (col: number) => (row: number) => string;
+  fold: object;
 }
 
 /**
@@ -71,6 +63,8 @@ export interface Block {
  * pending until it hears its complete tally.
  */
 export class Tallies {
+  /** Each kind of chart's folder. */
+  private readonly folders: Folders;
   private readonly charts = new Map<string, Tallying>();
   /** The folds a save kept of charts not attached since, by chart id. */
   private kept: Readonly<Record<string, unknown>> = {};
@@ -81,6 +75,10 @@ export class Tallies {
   /** Each column's decimal mark, by place, as `remark` was last told. */
   private marks: readonly Mark[] = [];
 
+  constructor(folders: Folders = FOLDERS) {
+    this.folders = folders;
+  }
+
   /**
    * attach folds `chart`, keeping the fold of the chart with its id when it
    * reads the same columns the same way, or returns the header of a column
@@ -88,13 +86,14 @@ export class Tallies {
    */
   attach(chart: Chart, headers: readonly string[]): string | undefined {
     const { id, plot } = chart;
-    const t = tallying(plot, headers, this.marks);
-    if (typeof t === 'string') {
+    const folder = folderOf(this.folders, plot.t, plot, headers, this.marks);
+    if (typeof folder === 'string') {
       this.charts.delete(id);
-      return t;
+      return folder;
     }
+    const t = { ...unfolded(), plot, folder };
     const was = this.charts.get(id) ?? this.restored(id, t);
-    if (was?.key === t.key && readsWith(was, this.marks)) {
+    if (was?.folder.key === folder.key && was.folder.readsWith(this.marks)) {
       was.plot = plot;
       was.done = false;
       this.charts.set(id, was);
@@ -127,7 +126,7 @@ export class Tallies {
    */
   private restored(id: string, t: Tallying): Tallying | undefined {
     const saved = this.kept[id];
-    if (!isRecord(saved) || saved['key'] !== t.key) return undefined;
+    if (!isRecord(saved) || saved['key'] !== t.folder.key) return undefined;
     const { rows, ahead, fold } = saved;
     const run: unknown[] = Array.isArray(ahead) ? ahead : [rows, rows];
     const [from, end] = run;
@@ -141,12 +140,8 @@ export class Tallies {
       rows,
       ahead: ran ? [from, end] : undefined,
     };
-    if (t.t === 'sample') {
-      const back = SampleFold.restored(fold);
-      return back && this.givenBack({ ...t, ...on, fold: back });
-    }
-    const back = GroupsFold.restored(fold);
-    return back && this.givenBack({ ...t, ...on, fold: back });
+    const folder = t.folder.restored(fold);
+    return folder && this.givenBack({ ...t, ...on, folder });
   }
 
   /** givenBack is `t` without the rows of the block restore said is gone. */
@@ -164,7 +159,7 @@ export class Tallies {
     this.marks = marks;
     let refolded = false;
     for (const [id, t] of this.charts) {
-      if (readsWith(t, marks)) continue;
+      if (t.folder.readsWith(marks)) continue;
       this.charts.set(id, fresh(t, marks));
       refolded = true;
     }
@@ -178,18 +173,24 @@ export class Tallies {
 
   /**
    * saved is the fold of each chart that holds any row, by the chart's id,
-   * as a save keeps it. A scatter an edit left stale is left out, to fold
-   * again when it opens.
+   * as a save keeps it. A fold an edit left to fold again when it opens is
+   * left out.
    */
   saved(): Record<string, SavedChart> {
     const saved: Record<string, SavedChart> = {};
     for (const [id, t] of this.charts) {
-      if (t.t === 'sample' && t.fold.stale().length > 0) continue;
       if (t.rows === 0 && t.ahead === undefined) continue;
-      const { key, rows, ahead } = t;
-      saved[id] = { key, rows, ahead, fold: t.fold.saved() };
+      const fold = t.folder.saved();
+      if (fold === undefined) continue;
+      const { rows, ahead } = t;
+      saved[id] = { key: t.folder.key, rows, ahead, fold };
     }
     return saved;
+  }
+
+  /** batch is the chart with `id`'s batch at `per` from `offset`, if any. */
+  batch(id: string, per: Per, offset: number): TimeLevel | undefined {
+    return this.charts.get(id)?.folder.batch?.(per, offset);
   }
 
   /** How many charts are attached. */
@@ -244,15 +245,7 @@ export class Tallies {
   ): void {
     for (const t of this.charts.values()) {
       if (t.done || !takes(t, from)) continue;
-      if (t.t === 'sample') {
-        sample(t.fold, t, block, { from, end, shown });
-      } else {
-        const by = shown(t.by);
-        const sum = t.sum === undefined ? undefined : shown(t.sum);
-        for (let row = from; row < end; row++) {
-          t.fold.add(by(row), sum?.(row));
-        }
-      }
+      t.folder.fold(block, { from, end, shown });
       took(t, from, end);
     }
   }
@@ -272,17 +265,17 @@ export class Tallies {
     const shows = (col: number) => (before[col] ?? '') !== (after[col] ?? '');
     const moved: string[] = [];
     for (const [id, t] of this.charts) {
-      if (!holds(t, row) || !colsOf(t).some(shows)) continue;
-      move(t, block, row, before, after);
+      if (!holds(t, row) || !t.folder.cols.some(shows)) continue;
+      t.folder.move(block, row, before, after);
       moved.push(id);
     }
     return moved;
   }
 
   /**
-   * mend reads again, through `read`, each block whose least or most the
-   * row of a scatter among `moved` sat on, and folds it alone, so the
-   * block's extent is exact again. Then each chart of `moved` is pending
+   * mend reads again, through `read`, each block the edit left a fold among
+   * `moved` inexact over, such as a scatter's block whose least or most the
+   * row sat on, and folds it alone. Then each chart of `moved` is pending
    * again, so it hears its tally with the row moved. A read that fails
    * leaves them pending too, so the caller can say unread to them.
    */
@@ -292,14 +285,7 @@ export class Tallies {
   ): Promise<void> {
     const charts = moved.flatMap((id) => this.charts.get(id) ?? []);
     try {
-      for (const t of charts) {
-        if (t.t !== 'sample') continue;
-        for (const stale of t.fold.stale()) {
-          const alone = new SampleFold(t.fold.marks);
-          sample(alone, t, stale, await read(stale));
-          t.fold.refold(stale, alone);
-        }
-      }
+      for (const t of charts) await t.folder.mend(read);
     } finally {
       for (const t of charts) t.done = false;
     }
@@ -344,7 +330,7 @@ export class Tallies {
   refold(cols: ReadonlySet<number>): boolean {
     let refolded = false;
     for (const [id, t] of this.charts) {
-      if (!colsOf(t).some((col) => cols.has(col))) continue;
+      if (!t.folder.cols.some((col) => cols.has(col))) continue;
       this.charts.set(id, fresh(t, this.marks));
       refolded = true;
     }
@@ -363,12 +349,7 @@ export class Tallies {
       const ahead = t.ahead === undefined ? 0 : t.ahead[1] - t.ahead[0];
       const complete = indexed && t.rows === total;
       const coverage = { rows: t.rows + ahead, total, complete };
-      const { plot } = t;
-      const tally: Tally =
-        t.t === 'sample'
-          ? { t: 'sample', plot, coverage, ...t.fold.snapshot() }
-          : { t: 'groups', plot, coverage, ...t.fold.snapshot() };
-      read.push([id, tally]);
+      read.push([id, t.folder.tally(t.plot, coverage)]);
       t.done = complete;
     }
     return read;
@@ -390,72 +371,14 @@ export class Tallies {
   }
 }
 
-/**
- * tallying makes the fold `plot` reads, over its columns where `headers`
- * put them and with the decimal marks `marks` gives them, or returns the
- * header of a column the view has not.
- */
-function tallying(
-  plot: Plot,
-  headers: readonly string[],
-  marks: readonly Mark[],
-): Tallying | string {
-  const folding = { ...unfolded(), plot };
-  if (plot.t === 'scatter') {
-    const x = placeOf(plot.x, headers);
-    const y = placeOf(plot.y, headers);
-    if (x === undefined) return plot.x.header;
-    if (y === undefined) return plot.y.header;
-    const key = `sample ${x} ${y}`;
-    const fold = new SampleFold({ x: markOf(marks, x), y: markOf(marks, y) });
-    return { ...folding, key, t: 'sample', fold, x, y };
-  }
-  const by = placeOf(plot.by, headers);
-  if (by === undefined) return plot.by.header;
-  if (plot.sum === undefined) {
-    const key = `groups ${by}`;
-    return { ...folding, key, t: 'groups', fold: new GroupsFold(), by };
-  }
-  const sum = placeOf(plot.sum, headers);
-  if (sum === undefined) return plot.sum.header;
-  const key = `groups ${by} ${sum}`;
-  const fold = new GroupsFold('sum', markOf(marks, sum));
-  return { ...folding, key, t: 'groups', fold, by, sum };
-}
-
 /** unfolded is how far a fold has got before any row: nothing, pending. */
-function unfolded(): Omit<Folding, 'plot' | 'key'> {
+function unfolded(): Omit<Folding, 'plot'> {
   return { rows: 0, ahead: undefined, done: false };
-}
-
-/**
- * markOf is the decimal mark `marks` gives column `col`, or the point for
- * one it does not reach, as a fold made before any mark was inferred reads.
- */
-function markOf(marks: readonly Mark[], col: number): Mark {
-  return marks[col] ?? 'point';
-}
-
-/** readsWith says whether `t`'s fold reads its columns with `marks`. */
-function readsWith(t: Tallying, marks: readonly Mark[]): boolean {
-  if (t.t === 'groups') {
-    return t.sum === undefined || t.fold.mark === markOf(marks, t.sum);
-  }
-  const { x, y } = t.fold.marks;
-  return x === markOf(marks, t.x) && y === markOf(marks, t.y);
 }
 
 /** fresh is `t` with nothing folded, pending again, read with `marks`. */
 function fresh(t: Tallying, marks: readonly Mark[]): Tallying {
-  if (t.t === 'sample') {
-    const read = { x: markOf(marks, t.x), y: markOf(marks, t.y) };
-    return { ...t, ...unfolded(), fold: new SampleFold(read) };
-  }
-  const fold =
-    t.sum === undefined
-      ? new GroupsFold()
-      : new GroupsFold('sum', markOf(marks, t.sum));
-  return { ...t, ...unfolded(), fold };
+  return { ...t, ...unfolded(), folder: t.folder.again(marks) };
 }
 
 /**
@@ -492,24 +415,6 @@ function holds(t: Tallying, row: number): boolean {
   return t.ahead !== undefined && t.ahead[0] <= row && row < t.ahead[1];
 }
 
-/** colsOf lists the columns `t` reads, the one it groups by first. */
-function colsOf(t: Tallying): number[] {
-  if (t.t === 'sample') return [t.x, t.y];
-  return t.sum === undefined ? [t.by] : [t.by, t.sum];
-}
-
-/** sample adds the rows of `block` to `fold`, as points of `x` against `y`. */
-function sample(
-  fold: SampleFold,
-  { x, y }: { x: number; y: number },
-  block: number,
-  { from, end, shown }: Block,
-): void {
-  const xs = shown(x);
-  const ys = shown(y);
-  for (let row = from; row < end; row++) fold.add(block, row, xs(row), ys(row));
-}
-
 /**
  * giveBack takes the rows of `block`, `last`, out of `t`'s fold where it
  * holds them, for a view that reads the block again with the rows that
@@ -519,66 +424,10 @@ function giveBack(t: Tallying, block: number, last: Block): void {
   const kept = last.from;
   // A fold takes blocks whole, so one that holds the block's first row
   // holds the block.
-  if (holds(t, kept)) unfold(t, block, last);
+  if (holds(t, kept)) t.folder.unfold(block, last);
   t.rows = Math.min(t.rows, kept);
   if (t.ahead !== undefined) {
     const [from, end] = t.ahead;
     t.ahead = from < kept ? [from, Math.min(end, kept)] : undefined;
   }
-}
-
-/**
- * unfold takes the rows of `block` out of `t`'s fold, as they showed, so
- * the block can be folded again whole. A sample's extent of the block is
- * empty until then.
- */
-function unfold(t: Tallying, block: number, { from, end, shown }: Block): void {
-  if (t.t === 'sample') {
-    const xs = shown(t.x);
-    const ys = shown(t.y);
-    for (let row = from; row < end; row++) {
-      t.fold.forget(row, xs(row), ys(row));
-    }
-    t.fold.refold(block, new SampleFold(t.fold.marks));
-  } else {
-    const by = shown(t.by);
-    const sum = t.sum === undefined ? undefined : shown(t.sum);
-    for (let row = from; row < end; row++) t.fold.remove(by(row), sum?.(row));
-  }
-}
-
-/**
- * move takes `row` of `block` out of `t`'s fold as it showed `before`, and
- * puts it back as it shows `after`.
- */
-function move(
-  t: Tallying,
-  block: number,
-  row: number,
-  before: readonly string[],
-  after: readonly string[],
-): void {
-  const at = (shown: readonly string[], col: number | undefined) =>
-    col === undefined ? '' : (shown[col] ?? '');
-  if (t.t === 'sample') {
-    t.fold.remove(block, row, at(before, t.x), at(before, t.y));
-    t.fold.add(block, row, at(after, t.x), at(after, t.y));
-  } else {
-    t.fold.remove(at(before, t.by), at(before, t.sum));
-    t.fold.add(at(after, t.by), at(after, t.sum));
-  }
-}
-
-/**
- * placeOf finds a chart's column among the headers: where the chart left it
- * while the header there is its own, else where its header is now. The
- * renderer finds the column a tally read the same way.
- */
-export function placeOf(
-  column: ChartColumn,
-  headers: readonly string[],
-): number | undefined {
-  if (headers[column.col] === column.header) return column.col;
-  const at = headers.indexOf(column.header);
-  return at < 0 ? undefined : at;
 }

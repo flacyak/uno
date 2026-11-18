@@ -27,12 +27,14 @@
  */
 
 import { m } from "@paraglide/messages";
-import { BARS_INSET, SPAN_LEAST } from "@renderer/chart/bars";
+import { SPAN_LEAST } from "@renderer/chart/bars";
+import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
 import { LABEL_GAP, PIE_SLICES_AT_MOST } from "@renderer/chart/pie";
 import { DEFAULT_HEIGHT, HEAD_LEAST_WIDTH } from "@renderer/chart/place";
 import { POINT_OPACITY, TICK_GAP } from "@renderer/chart/scatter";
 import { DEFAULT_THEME, THEMES } from "@renderer/theme";
 import type { Check, Input } from "./check.ts";
+import { BLANK_ROWS, DATED_DAYS, DATED_WEEKS, ROWS, counted } from "./fixture.ts";
 
 /** The workspace smoke.js wrote. */
 const CHARTED = process.env["UNO_SMOKE_CHARTED"] ?? "";
@@ -70,6 +72,48 @@ const ALONG_LABELS = [
  * of the least size.
  */
 const PIES = process.env["UNO_SMOKE_PIES"] ?? "";
+
+/**
+ * The one it wrote of two over-time charts of the fixture's dates: rows per
+ * day in a new window, and revenue over them in one of the least width, and
+ * how many periods each draws.
+ */
+const TIMED = process.env["UNO_SMOKE_TIMED"] ?? "";
+const TIMED_PERIODS = [DATED_DAYS, DATED_WEEKS];
+/** A press of End, with the keys on the plot a click gave them. */
+const END_KEY: readonly Input[] = [
+  { type: "keyDown", keyCode: "End" },
+  { type: "keyUp", keyCode: "End" },
+];
+/** The day window's third period, and the names of its first, third and last. */
+const TIMED_DAY_3 = ".chart .chart-period:nth-child(4)";
+const TIMED_FIRST = "Wednesday, July 1, 2026";
+const TIMED_THIRD = "Friday, July 3, 2026";
+const TIMED_LAST = "Tuesday, September 29, 2026";
+/** The first and last of them as its table's rows head them. */
+const TIMED_ROWS = ["Jul 1, 2026", "Sep 29, 2026"];
+/** What their captions say: the second draws weeks for want of room for days. */
+const TIMED_SAID = [
+  m.rows_count({ count: ROWS }),
+  [
+    m.rows_count({ count: ROWS }),
+    m.chart_blank({ count: counted(BLANK_ROWS) }),
+    m.chart_time_drawn({ drawn: m.chart_per_week() }),
+    m.chart_time_crowded({ per: m.chart_per_day() }),
+  ].join(" · "),
+];
+
+/** The one it wrote of rows over dates from 2024 to a placeholder, 9999-12-31, and their years, 2024 to 9999. */
+const PLACED = process.env["UNO_SMOKE_PLACED"] ?? "";
+const PLACED_YEARS = 7_976;
+const PLACED_ROWS = 4;
+
+/** The one it wrote of the second export's Ad_Date read month first, and its dates that read so not. */
+const MISREAD = process.env["UNO_SMOKE_MISREAD"] ?? "";
+const MISREAD_ROWS = 2600;
+const MISREAD_DATES = 551;
+/** Where the first of them is, as the status line says it. */
+const MISREAD_FIRST = "Ad_Date · row 2";
 const PIE_SLICES = [4, PIE_SLICES_AT_MOST + 1, PIE_SLICES_AT_MOST + 1];
 
 /**
@@ -349,6 +393,9 @@ export const CHARTS: Check[] = [
       ${GEOMETRY}
       ${CLEAR_X}
       if (!(await arrives(() => windows().length === 2))) return "the windows are " + windows().length + " · " + JSON.stringify(text("#status-msg"));
+      // The shot waits for both windows' bars and the sheet's rows, so it shows the same each run.
+      const drawn = () => document.querySelectorAll(".chart .chart-bar-row").length > 0 && [...document.querySelectorAll(".chart")].every((win) => win.querySelector(".chart-bar") !== null) && text("tbody tr td:nth-child(2)") !== "";
+      if (!(await arrives(drawn))) return "the windows or the sheet are still reading";
       const scroller = document.querySelector(".grid-scroll");
       if (scroller.scrollWidth <= scroller.clientWidth || scroller.scrollHeight <= scroller.clientHeight) {
         return "both scrollbars should show, so this checks nothing";
@@ -703,7 +750,7 @@ export const CHARTS: Check[] = [
       title.textContent = said;
       if (left !== stood) return "the × moved from " + stood + " to " + left;
       if (runs <= shows) return "the title wraps, running " + runs + "px in " + shows + "px";
-      return style(title).overflowX === "hidden" && style(title).textOverflow === "ellipsis" ? "" : "the title shows no ellipsis";
+      return style(title).overflowX === "clip" && style(title).textOverflow === "ellipsis" ? "" : "the title shows no ellipsis";
     `,
   },
   {
@@ -889,7 +936,9 @@ export const CHART_SIGNED: Check[] = [
   },
   {
     name: "a sum with long values on both sides of zero keeps its bars at the least width, and its values inside their tracks",
-    send: ["menu:open-path", SIGNED],
+    // The workspace the narrow window opened. Opening it again would race this
+    // check: the bars it waits for are drawn already, and the open would land
+    // under the next check's find.
     shot: "chart-signed",
     script: `
       const tracks = () => [...document.querySelectorAll(".chart-bar-track")];
@@ -1120,6 +1169,184 @@ export const CHART_PIE: Check[] = [
       const keys = [...list.querySelectorAll(".chart-legend-key")].map((key) => style(key).backgroundColor);
       const fills = [...list.querySelectorAll(".chart-slice")].map((slice) => style(slice).fill);
       return keys.join(" ") === fills.join(" ") ? "" : "the list's keys wear " + keys.join(" and ") + " beside slices of " + fills.join(" and ");
+    `,
+  },
+];
+
+/** A check after CHART_PIE, as it opens a workspace of two over-time charts in place of that one. */
+export const CHART_TIME: Check[] = [
+  {
+    name: "an over-time chart draws a column per period at the finest size its window holds, each in the accent on the zero gridline, at most a bar thick and a gap from the next, its periods labelled under them, apart and inside the plot, and its caption says when that is coarser than its own",
+    send: ["menu:open-path", TIMED],
+    shot: "chart-time",
+    script: `
+      ${CHROME}
+      const windows = () => [...document.querySelectorAll(".chart")];
+      const drawn = () => windows().length === ${TIMED_PERIODS.length} && windows().every((win) => win.querySelector(".chart-column") !== null);
+      if (!(await arrives(drawn))) return "the windows draw no columns";
+      const counts = windows().map((win) => win.querySelectorAll(".chart-period").length);
+      if (counts.join() !== "${TIMED_PERIODS.join()}") return "the windows draw " + counts.join(" and ") + " periods";
+      const rect = (at) => at.getBoundingClientRect();
+      for (const win of windows()) {
+        const zero = [...win.querySelectorAll(".chart-grid.y")].find((line) => line.getAttribute("y1") === "100%");
+        const base = (rect(zero).top + rect(zero).bottom) / 2;
+        const area = rect(win.querySelector(".chart-periods"));
+        const columns = [...win.querySelectorAll(".chart-column")].map(rect);
+        const off = columns.find((at) => Math.abs(at.bottom - base) > 1 || at.width > ${BAR_THICK} + ${RECT_SLACK} || at.left < area.left || at.right > area.right);
+        if (off !== undefined) return "a column stands at " + [off.left, off.top, off.right, off.bottom].join(" ") + " over a baseline at " + base + " in periods from " + area.left + " to " + area.right;
+        const near = columns.findIndex((at, i) => i > 0 && at.left - columns[i - 1].right < ${BAR_GAP} - ${RECT_SLACK});
+        if (near !== -1) return "two columns stand " + (columns[near].left - columns[near - 1].right) + " px apart";
+        // Each label stands over its column's middle, apart from the next, inside the plot's inset and under the y axis's.
+        const slots = [...win.querySelectorAll(".chart-period")].map(rect);
+        const ticks = [...win.querySelectorAll(".chart-ticks.x .chart-tick")];
+        const plot = rect(win.querySelector(".chart-plot"));
+        const foot = rect(win.querySelector(".chart-ticks.y .chart-tick:first-child"));
+        for (const [i, tick] of ticks.entries()) {
+          const at = rect(tick);
+          const slot = slots[Math.round(parseFloat(tick.style.getPropertyValue("--at")) * slots.length - 0.5)];
+          const middle = (slot.left + slot.right) / 2;
+          if (middle < at.left - ${RECT_SLACK} || middle > at.right + ${RECT_SLACK}) return tick.textContent + " stands from " + at.left + " to " + at.right + ", off its column at " + middle;
+          if (i > 0 && at.left - rect(ticks[i - 1]).right < ${TICK_GAP} - ${RECT_SLACK}) return tick.textContent + " stands " + (at.left - rect(ticks[i - 1]).right) + " px from the label before it";
+          if (at.left < plot.left + ${BARS_INSET} - ${RECT_SLACK} || at.right > plot.right - ${BARS_INSET} + ${RECT_SLACK}) return tick.textContent + " runs into the inset of a plot from " + plot.left + " to " + plot.right;
+          if (at.top - foot.bottom < ${TICK_GAP} - ${RECT_SLACK}) return tick.textContent + " stands " + (at.top - foot.bottom) + " px under the y axis's first label";
+          if (tick.scrollWidth > tick.clientWidth) return tick.textContent + " is cut";
+        }
+        if (ticks.length < 2) return "a window labels " + ticks.length + " periods";
+      }
+      const worn = style(document.querySelector(".chart-column")).backgroundColor;
+      if (worn !== computed("var(--accent)")) return "a column wears " + worn;
+      const said = windows().map((win) => win.querySelector(".chart-said").textContent);
+      if (said.join(" | ") !== ${JSON.stringify(TIMED_SAID.join(" | "))}) return "the captions say " + said.join(" | ");
+      // The least window's size it draws at stays whole where the words after it give way.
+      for (const kept of document.querySelectorAll(".chart-said-kept")) {
+        const room = rect(kept.closest(".chart-said"));
+        if (rect(kept).right > room.right + ${RECT_SLACK}) return kept.textContent + " runs to " + rect(kept).right + " past its caption's " + room.right;
+      }
+      return "";
+    `,
+  },
+  {
+    name: "the pointer on a period of an over-time chart names it in full with its rows, and its column darkens over a wash of its slot",
+    click: { selector: TIMED_DAY_3 },
+    shot: "chart-time-tip",
+    script: `
+      ${CHROME}
+      const win = document.querySelector(".chart");
+      const slot = win.querySelectorAll(".chart-period")[2];
+      const said = () => win.querySelector(".chart-tip-words").textContent;
+      if (!(await until(() => slot.classList.contains("cursor")))) return "the third day wears no cursor";
+      if (!said().endsWith(" ${TIMED_THIRD}")) return "the box says " + said();
+      const column = style(slot.querySelector(".chart-column")).backgroundColor;
+      if (column !== computed("color-mix(in srgb, var(--accent) 80%, var(--ink))")) return "the column is " + column;
+      return style(slot).backgroundColor === computed("var(--accent-b)") ? "" : "the slot is " + style(slot).backgroundColor;
+    `,
+  },
+  {
+    name: "End and Home step an over-time chart's cursor to its last period and its first",
+    input: { events: END_KEY, through: true },
+    script: `
+      const win = document.querySelector(".chart");
+      const said = () => win.querySelector(".chart-tip-words").textContent;
+      if (!(await until(() => said().endsWith(" ${TIMED_LAST}")))) return "after End the box says " + said();
+      win.querySelector(".chart-plot").dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+      return (await until(() => said().endsWith(" ${TIMED_FIRST}"))) ? "" : "after Home the box says " + said();
+    `,
+  },
+  {
+    name: "t puts an over-time chart's table in its plot's place, a row a period in time order, and the summary names the span",
+    shot: "chart-time-table",
+    script: `
+      const win = document.querySelector(".chart");
+      win.querySelector(".chart-plot").dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      const heads = () => [...win.querySelectorAll(".chart-table tbody th")].map((th) => th.textContent);
+      if (!(await until(() => heads().length === ${DATED_DAYS}))) return "the table heads " + heads().length + " rows";
+      if (heads()[0] !== "${TIMED_ROWS[0]}" || heads().at(-1) !== "${TIMED_ROWS[1]}") return "the table runs from " + heads()[0] + " to " + heads().at(-1);
+      const told = win.querySelector(".chart-summary").textContent;
+      return told.includes("From ${TIMED_FIRST} to ${TIMED_LAST}, the most in ") ? "" : "the summary says " + told;
+    `,
+  },
+  {
+    name: "t again brings an over-time chart's columns back",
+    script: `
+      const win = document.querySelector(".chart");
+      win.querySelector(".chart-plot").dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      return (await until(() => win.querySelector(".chart-column") !== null)) ? "" : "t brings no columns back";
+    `,
+  },
+  {
+    name: "the table of a least-width over-time chart's eight-digit sums fits its window with no bar across it, and t brings its columns back",
+    script: `
+      const win = document.querySelectorAll(".chart")[1];
+      const plot = () => win.querySelector(".chart-plot");
+      plot().dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      if (!(await until(() => win.querySelector(".chart-table tbody th") !== null))) return "t puts no table in place";
+      const table = win.querySelector(".chart-table");
+      const wide = table.scrollWidth - table.clientWidth;
+      plot().dispatchEvent(new KeyboardEvent("keydown", { key: "t", bubbles: true }));
+      if (!(await until(() => win.querySelector(".chart-column") !== null))) return "t brings no columns back";
+      return wide > 0 ? "the table runs " + wide + " px past its window" : "";
+    `,
+  },
+  {
+    name: "an over-time chart whose years run past the batch a tally sends asks for the rest, and draws every year to the last, with no gaps, and its caption says it is too narrow for them",
+    send: ["menu:open-path", PLACED],
+    shot: "chart-time-span",
+    script: `
+      const slots = () => [...document.querySelectorAll(".chart .chart-period")];
+      const last = () => slots().at(-1)?.querySelector(".chart-column") ?? null;
+      if (!(await arrives(() => slots().length === ${PLACED_YEARS} && last() !== null))) return "the window draws " + slots().length + " periods, the last " + (last() === null ? "with no column" : "with one");
+      const columns = document.querySelectorAll(".chart .chart-column").length;
+      if (columns !== ${PLACED_YEARS}) return "the window draws " + columns + " columns of ${PLACED_YEARS} years";
+      if (document.querySelector(".chart-time.crowded") === null) return "the years keep their gaps";
+      const said = document.querySelector(".chart-said").textContent;
+      const words = "${m.rows_count({ count: PLACED_ROWS })} · ${m.chart_time_crowded({ per: m.chart_per_year() })}";
+      return said === words ? "" : "the caption says " + said;
+    `,
+  },
+  {
+    name: "an over-time chart's caption counts the dates it could not read with its order, a button that finds the first",
+    send: ["menu:open-path", MISREAD],
+    shot: "chart-time-misread",
+    script: `
+      const find = () => document.querySelector(".chart .chart-find-dates");
+      const words = "${m.chart_not_dates({ count: MISREAD_DATES })}";
+      if (!(await arrives(() => find()?.textContent === words))) return "the caption says " + document.querySelector(".chart-said")?.textContent;
+      const said = document.querySelector(".chart-said").textContent;
+      if (!said.startsWith("${m.rows_count({ count: MISREAD_ROWS })} · " + words)) return "the caption says " + said;
+      find().click();
+      const cell = () => text("#status-cell");
+      return (await until(() => cell() === "${MISREAD_FIRST}")) ? "" : "the grid stands on " + cell();
+    `,
+  },
+  {
+    name: "a chart's head and the status line show a column's name as the grid's header row does, Ad_Date with its case and its underscore",
+    script: `
+      const title = document.querySelector(".chart .chart-title");
+      if (!title.innerText.includes("Ad_Date")) return "the head shows " + title.innerText;
+      // An underscore stands below the font's descent, so a box that holds a name clips it only across.
+      for (const box of [title, document.querySelector("#status-cell .col")]) {
+        const clips = getComputedStyle(box).overflowY;
+        if (clips !== "visible") return box.className + " clips " + clips + " down";
+      }
+      return "";
+    `,
+  },
+  {
+    name: "where those dates read only day first, the caption offers to read them so after its counts",
+    shot: "chart-time-reorder",
+    script: `
+      const said = document.querySelector(".chart-said").textContent;
+      // Every date it could not read reads day first, so the count says how many, and the button what.
+      const offer = "${m.chart_not_dates({ count: MISREAD_DATES })} · ${m.chart_read_order({ order: m.chart_order_day() })}";
+      return said.endsWith(offer) ? "" : "the caption says " + said;
+    `,
+  },
+  {
+    name: "a date column's kind badge says on hover how its dates read",
+    script: `
+      const head = [...document.querySelectorAll("thead th")].find((th) => th.textContent.startsWith("Ad_Date"));
+      const said = head?.querySelector(".badge")?.title;
+      return said === "${m.column_order_day_hint()}" ? "" : "Ad_Date's badge says " + said;
     `,
   },
 ];

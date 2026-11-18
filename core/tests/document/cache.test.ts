@@ -6,7 +6,7 @@
  */
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { expect, test } from 'vite-plus/test';
+import { expect, test, vi } from 'vite-plus/test';
 
 import {
   FORMAT_VERSION,
@@ -27,6 +27,8 @@ import {
 /** Fixed created time, so two saves can be compared byte for byte. */
 const CREATED = new Date('2026-11-01T09:00:00Z');
 const AT = '/home/cpa/q4/books.uno';
+/** When the saves that are compared whole are made. */
+const SAVED_AT = new Date('2026-10-29T12:00:00Z');
 const ORDERS = '/home/cpa/q4/orders.csv';
 
 /** A cache of orders.csv as a save writes it. */
@@ -104,10 +106,17 @@ test('a cache leaves the format as it was, and the manifest and every other entr
 });
 
 test('a reader that drops cache/, as builds before 7a0c3a2b do, opens the workspace a save without one writes', () => {
-  const cached = writeDocument(workspace(new Map([['orders', saved()]])));
-  const stripped = zipSync(uncached(cached));
-  const plain = readContainer('books.uno', writeDocument(workspace()), AT);
-  expect(readContainer('books.uno', stripped, AT)).toStrictEqual(plain);
+  // One save time for both, so a second turning between them cannot part
+  // their modified times.
+  vi.setSystemTime(SAVED_AT);
+  try {
+    const cached = writeDocument(workspace(new Map([['orders', saved()]])));
+    const stripped = zipSync(uncached(cached));
+    const plain = readContainer('books.uno', writeDocument(workspace()), AT);
+    expect(readContainer('books.uno', stripped, AT)).toStrictEqual(plain);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('a reader that carries cache/ as entries it does not know writes it back, and this build reads it again', () => {

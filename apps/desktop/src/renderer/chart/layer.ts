@@ -17,26 +17,40 @@
 
 import "./chart.css";
 
+import type { Order } from "@date";
 import type { Chart, ChartColumn, ChartPlace } from "@document";
+import { m } from "@paraglide/messages";
 import type { Charts, Heard } from "@renderer/charts";
 import { readRowHeight } from "@renderer/grid/view";
 import type { ColumnSpan } from "@renderer/grid/view";
 import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
 import { el, must } from "@renderer/shell/util";
+import type { Per } from "@tally";
+import type { Dated } from "./kind.ts";
 import { fresh, NO_CORNER, overfull, shown, stackHeight, thin, tucked, tucks } from "./place.ts";
 import type { Corner, Room } from "./place.ts";
-import { ChartWindow } from "./window.ts";
+import { ChartWindow, standAt } from "./window.ts";
 import type { Stage } from "./window.ts";
 
 /** What a window asks of the shell, which the layer hands on, and the selected cell's box. */
 export type Asks = Pick<
   Stage,
-  "leave" | "wheelBy" | "repoint" | "notNumbers" | "edit" | "refresh" | "remove" | "say" | "checks"
+  | "leave"
+  | "wheelBy"
+  | "repoint"
+  | "notNumbers"
+  | "notDates"
+  | "reorder"
+  | "edit"
+  | "refresh"
+  | "remove"
+  | "say"
+  | "checks"
 > & { selected(): DOMRect | undefined };
 
 /** What the layer reads of a workspace's charts, and where it stands one. */
-type Shown = Pick<Charts, "all" | "sourceLabel" | "move" | "heard">;
+type Shown = Pick<Charts, "all" | "carried" | "sourceLabel" | "move" | "heard" | "batch">;
 
 /** The thinnest a border draws, in device px. */
 const THINNEST_BORDER = 1;
@@ -60,14 +74,18 @@ function covers(box: DOMRect, cell: DOMRect | undefined): boolean {
 export class ChartLayer implements Stage {
   /** The window of each chart showing, by chart id. */
   private readonly windows = new Map<string, ChartWindow>();
+  /** The window of each chart this build carries and cannot draw, by chart id. */
+  private readonly kept = new Map<string, HTMLElement>();
   /** The height of the header row, and of a tucked window's head. */
   private readonly head: number;
   /** The charts of the open workspace. */
   private charts: Shown = {
     all: [],
+    carried: [],
     sourceLabel: () => undefined,
     move: () => undefined,
     heard: () => undefined,
+    batch: () => Promise.resolve(false),
   };
   /** Fills the grid's scroller inside its bars, so the two boxes differ by a bar. */
   private readonly gauge = el("div", "chart-gauge");
@@ -125,6 +143,7 @@ export class ChartLayer implements Stage {
     if (charts === this.charts) return;
     this.charts = charts;
     this.windows.clear();
+    this.kept.clear();
     this.reach = 0;
     this.round = [];
     this.root.replaceChildren();
@@ -222,6 +241,16 @@ export class ChartLayer implements Stage {
     this.asks.repoint(source);
   }
 
+  /** notDates shows `source`, and finds the cells of `dated` its chart could not read as dates. */
+  notDates(source: string, dated: Dated): void {
+    this.asks.notDates(source, dated);
+  }
+
+  /** reorder reads chart `id`'s dates in `order` from now on. */
+  reorder(id: string, order: Order): void {
+    this.asks.reorder(id, order);
+  }
+
   /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */
   notNumbers(source: string, columns: readonly ChartColumn[]): void {
     this.asks.notNumbers(source, columns);
@@ -255,6 +284,13 @@ export class ChartLayer implements Stage {
   /** heard gives what chart `id` last heard, for its window to draw. */
   heard(id: string): Heard | undefined {
     return this.charts.heard(id);
+  }
+
+  /** batch asks for chart `id`'s periods at `per` from `offset`, and draws its window again once they join. */
+  batch(id: string, per: Per, offset: number): void {
+    void this.charts.batch(id, per, offset).then((joined) => {
+      if (joined) this.tallied(id);
+    });
   }
 
   /** checks gives when `source` was last checked, for its windows' captions. */
@@ -309,6 +345,7 @@ export class ChartLayer implements Stage {
       const slot = tucked(index, this.head, border, room);
       held.stand(tucking ? { ...slot, y: slot.y - this.reach } : shown(chart.place, room, corner));
     });
+    this.carry(room, corner, tucking);
     const stack = stackHeight(charts.length, this.head, border);
     this.root.style.setProperty("--stack-height", `${stack}px`);
     this.root.classList.toggle("tucked", tucking && charts.length > 0);
@@ -324,6 +361,31 @@ export class ChartLayer implements Stage {
     const cell = keyed ? this.asks.selected() : undefined;
     for (const held of this.windows.values()) {
       held.aside(covers(held.box.getBoundingClientRect(), cell));
+    }
+    for (const box of this.kept.values()) {
+      box.classList.toggle("aside", covers(box.getBoundingClientRect(), cell));
+    }
+  }
+
+  /**
+   * carry stands a window at the place of each chart this build cannot draw,
+   * under the ones it draws, saying a newer uno made it, and takes away the
+   * rest. A tucked stack holds only the windows it draws.
+   */
+  private carry(room: Room, corner: Corner, tucking: boolean): void {
+    const carried = new Map(this.charts.carried.map((c) => [c.id, c]));
+    for (const [id, box] of this.kept) {
+      if (carried.has(id)) continue;
+      box.remove();
+      this.kept.delete(id);
+    }
+    for (const { id, place } of carried.values()) {
+      const box = this.kept.get(id) ?? el("div", "chart chart-carried");
+      if (!this.kept.has(id)) this.root.prepend(box);
+      this.kept.set(id, box);
+      box.textContent = m.chart_carried();
+      box.hidden = tucking;
+      standAt(box, shown(place, room, corner));
     }
   }
 

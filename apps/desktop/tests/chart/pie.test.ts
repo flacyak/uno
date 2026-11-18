@@ -18,7 +18,7 @@ import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { BARS_INSET } from "@renderer/chart/bars";
+import { BARS_INSET } from "@renderer/chart/rows";
 import {
   LABEL_GAP,
   PIE_SLICES_AT_MOST,

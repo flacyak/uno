@@ -31,6 +31,14 @@ const COLUMNS = [
   { header: "revenue", kind: "text", flagged: true },
 ] as const;
 
+/** A band of `columns` holding `rows`, cell by cell. */
+function banded(
+  columns: ChartSource["band"]["columns"],
+  rows: ReadonlyArray<readonly string[]> = [],
+): ChartSource["band"] {
+  return { columns, ready: (row) => row < rows.length, raw: (row, col) => rows[row]?.[col] ?? "" };
+}
+
 /** The column selected in the grid: region. */
 const REGION = 1;
 
@@ -44,27 +52,27 @@ const REVENUE = 5;
 const SALES = {
   id: "sales",
   name: "sales-q3.csv",
-  band: { columns: COLUMNS },
+  band: banded(COLUMNS),
   missing: false,
   link: { path: "/exports/sales-q3.csv" },
 };
 const ADS = {
   id: "ads",
   name: "ads-q3.csv",
-  band: { columns: [COLUMNS[4], COLUMNS[REGION]] },
+  band: banded([COLUMNS[4], COLUMNS[REGION]]),
   missing: false,
   link: { path: "/exports/ads-q3.csv" },
 };
-const GONE = { id: "gone", name: "ads-q2.csv", band: { columns: [] }, missing: true };
+const GONE = { id: "gone", name: "ads-q2.csv", band: banded([]), missing: true };
 /** Then the sales export's sums, revenue before units, and its takings, revenue beside a cost. */
-const SUMS = { ...SALES, id: "sums", band: { columns: [COLUMNS[REVENUE], COLUMNS[UNITS]] } };
+const SUMS = { ...SALES, id: "sums", band: banded([COLUMNS[REVENUE], COLUMNS[UNITS]]) };
 const COST = { header: "cost", kind: "num", flagged: false } as const;
-const TAKINGS = { ...SALES, id: "takings", band: { columns: [COLUMNS[REVENUE], COST] } };
+const TAKINGS = { ...SALES, id: "takings", band: banded([COLUMNS[REVENUE], COST]) };
 /** Then one that names units twice and region twice, and the second of each. */
 const TWINS = {
   ...SALES,
   id: "twins",
-  band: { columns: [COLUMNS[UNITS], COLUMNS[UNITS], COLUMNS[REGION], COLUMNS[REGION]] },
+  band: banded([COLUMNS[UNITS], COLUMNS[UNITS], COLUMNS[REGION], COLUMNS[REGION]]),
 };
 const UNITS_TWIN = 1;
 const REGION_TWIN = 3;
@@ -158,11 +166,16 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a pie and a scatter, and opens on bars", () => {
+test("it offers bars, a pie, a scatter and a chart over time, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.textContent, o.disabled]);
-  const kinds = [m.chart_kind_bars(), m.chart_kind_pie(), m.chart_kind_scatter()];
+  const kinds = [
+    m.chart_kind_bars(),
+    m.chart_kind_pie(),
+    m.chart_kind_scatter(),
+    m.chart_kind_time(),
+  ];
   expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
   expect(kind.value).toBe("bars");
 });
@@ -536,4 +549,148 @@ test("every worded label of the chart form and the formula form sets the column 
     expect(worded.filter((label) => label !== EQUALS && !said.includes(label))).toStrictEqual([]);
   }
   void setLocale(baseLocale, { reload: false });
+});
+
+/** The sales export's date column, and a Unix column of the times its orders came in. */
+const DATE = { col: 0, header: "date" };
+const STAMPS = { header: "placed", kind: "num", flagged: false, unit: "s" } as const;
+const STAMPED = { ...SALES, id: "stamped", band: banded([...COLUMNS, STAMPS]) };
+const PLACED = COLUMNS.length;
+
+test("a date column selected in the grid opens the form on a chart over time of it, asking for its dates, size and sum", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: DATE.col });
+  expect(select("kind").value).toBe("time");
+  expect(shown(box)).toStrictEqual([
+    "source",
+    "chart",
+    "dates",
+    "per",
+    "sum of",
+    "title",
+    "checks",
+  ]);
+  expect([...select("per").options].map((o) => o.textContent)).toStrictEqual([
+    "automatic",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+  ]);
+  pick("per", "month");
+  pick("sum", String(REVENUE));
+  press("Enter");
+  await settle();
+  const sum = { col: REVENUE, header: "revenue" };
+  expect(asked).toStrictEqual([
+    inserting({ t: "time", at: DATE, per: "month", sum, order: "month" }),
+    "closed",
+  ]);
+});
+
+test("dates whose order the sample left open read as the language reads them, and a Unix column as its unit", async () => {
+  await setLocale("en-GB", { reload: false });
+  const dated = form(undefined, { t: "insert", col: DATE.col }, STAMPED);
+  expect([...select("at").options].map((o) => o.textContent)).toStrictEqual([
+    "date",
+    "placed (Unix seconds)",
+  ]);
+  press("Enter");
+  await settle();
+  const stamped = form(undefined, { t: "insert", col: PLACED }, STAMPED);
+  press("Enter");
+  await settle();
+  await setLocale(baseLocale, { reload: false });
+  const placed = { col: PLACED, header: "placed" };
+  expect([...dated.asked, ...stamped.asked].filter((a) => a !== "closed")).toStrictEqual([
+    inserting({ t: "time", at: DATE, per: "auto", order: "day" }, "", STAMPED.id),
+    inserting({ t: "time", at: placed, per: "auto", unit: "s" }, "", STAMPED.id),
+  ]);
+});
+
+test("a chart over time opened to change keeps its kind, size, sum and the order it reads its dates in", async () => {
+  const sum = { col: REVENUE, header: "revenue" };
+  const plot: Plot = { t: "time", at: DATE, per: "week", sum, order: "day" };
+  const { asked } = form(undefined, { t: "change", chart: { plot, title: "", refresh: BY_HAND } });
+  expect([select("kind").value, select("at").value, select("per").value]).toStrictEqual([
+    "time",
+    "0",
+    "week",
+  ]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(plot), "closed"]);
+});
+
+test("a source with no date column offers no chart over time", () => {
+  form(undefined, { t: "insert", col: 0 }, ADS);
+  const time = [...select("kind").options].find((o) => o.value === "time")!;
+  expect(time.disabled).toBe(true);
+});
+
+/** A source of dates written year last, the first of whose cells reads both ways, decided by none or by its sample. */
+const WRITTEN = { header: "booked", kind: "date", flagged: false, order: "either" } as const;
+const BOOKED = [["03/04/2024"], ["13/04/2024 09:30"]];
+const BOOKINGS = { ...SALES, id: "bookings", band: banded([WRITTEN], BOOKED) };
+const BOOKED_AT = { col: 0, header: "booked" };
+
+/** The words of each option of the select named `name`, and whether it is off. */
+const options = (name: string): Array<[string | null, boolean]> =>
+  [...select(name).options].map((o) => [o.textContent, o.disabled]);
+
+test("dates written year last offer their order as a cell of them that reads both ways, the language's chosen where the sample decided none", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: 0 }, BOOKINGS);
+  expect(shown(box)).toContain("reads");
+  expect(options("order")).toStrictEqual([
+    ["03/04/2024: April 3", false],
+    ["03/04/2024: March 4", false],
+  ]);
+  expect(select("order").value).toBe("month");
+  pick("order", "day");
+  press("Enter");
+  await settle();
+  expect(asked[0]).toBe(
+    inserting({ t: "time", at: BOOKED_AT, per: "auto", order: "day" }, "", BOOKINGS.id),
+  );
+});
+
+test("the order's words fit the form in each language, day and month named with the cell's year as written", async () => {
+  await setLocale("es", { reload: false });
+  form(undefined, { t: "insert", col: 0 }, BOOKINGS);
+  await setLocale(baseLocale, { reload: false });
+  expect(options("order").map(([words]) => words)).toStrictEqual([
+    "03/04/2024: 3 abril",
+    "03/04/2024: 4 marzo",
+  ]);
+});
+
+test("a sample that decided its order chooses it, an order no cell shows reads in words, and ISO dates ask none", () => {
+  const decided = { ...BOOKINGS, band: banded([{ ...WRITTEN, order: "day" }], [["13/04/2024"]]) };
+  form(undefined, { t: "insert", col: 0 }, decided);
+  expect(select("order").value).toBe("day");
+  expect(options("order").map(([words]) => words)).toStrictEqual(["day first", "month first"]);
+  const { box } = form(undefined, { t: "insert", col: 0 });
+  expect(shown(box)).not.toContain("reads");
+});
+
+test("Hour is offered for a date column that writes a time of day, and not for one of dates alone", () => {
+  form(undefined, { t: "insert", col: 0 }, BOOKINGS);
+  expect(options("per")[1]).toStrictEqual(["hour", false]);
+  form(undefined, { t: "insert", col: 0 }, { ...BOOKINGS, band: banded([WRITTEN], [BOOKED[0]!]) });
+  expect(options("per")[1]).toStrictEqual(["hour", true]);
+});
+
+test("a chart opened to change keeps the order it reads in, whatever the sample now decides", async () => {
+  const plot: Plot = { t: "time", at: BOOKED_AT, per: "day", order: "month" };
+  const decided = { ...BOOKINGS, band: banded([{ ...WRITTEN, order: "day" }], BOOKED) };
+  const { asked } = form(
+    undefined,
+    { t: "change", chart: { plot, title: "", refresh: BY_HAND } },
+    decided,
+  );
+  expect(select("order").value).toBe("month");
+  press("Enter");
+  await settle();
+  expect(asked[0]).toBe(inserting(plot, "", BOOKINGS.id));
 });
