@@ -1,8 +1,11 @@
 /**
- * @fileoverview A column's rows counted per value and per series.
+ * @fileoverview A column's rows counted, or another column summed, per value
+ * and per series.
  */
 
 import { compareStrings, runes } from '@go';
+import type { Mark } from '@num';
+import { parse } from '@num';
 
 import {
   Count,
@@ -10,6 +13,7 @@ import {
   GROUPS_SENT,
   LABEL_AT_MOST,
 } from './groups.ts';
+import type { Skipped } from './skipped.ts';
 
 /**
  * PAIRS_AT_MOST is how many cells, a value and a series together, a fold
@@ -20,9 +24,10 @@ export const PAIRS_AT_MOST = 20_000;
 /** SERIES_AT_MOST is how many series a snapshot sends, the most a stack colours. */
 export const SERIES_AT_MOST = 6;
 
-/** Rows counted together, as a snapshot sends them. */
+/** Rows counted together, and their sum, 0 when counting rows. */
 export interface Measured {
   rows: number;
+  sum: number;
 }
 
 /** One value's rows, split by series. */
@@ -48,6 +53,8 @@ export interface Split {
   rest: Measured;
   /** Rows a value counts apart from its series, past PAIRS_AT_MOST. */
   unsplit: number;
+  /** Cells of the summed column, none when the fold counts rows. */
+  skipped: Skipped;
 }
 
 /** One value's cells per series, and its rows no cell holds. */
@@ -59,7 +66,8 @@ class Group {
 /**
  * SplitFold counts a column's rows per value, and each value's rows per
  * series, the cell of a second column. Rows are added and taken back one at
- * a time, so an edit moves a fold by the row it changed.
+ * a time, so an edit moves a fold by the row it changed. When it sums, it
+ * parses each row's cell in a third column once, for its cell and its total.
  * A value gets a group as in GroupsFold, and other values count in the rest.
  * Inside a group, a series gets a cell while fewer than PAIRS_AT_MOST cells
  * exist and the group's unsplit is empty; other rows of the value count in
@@ -68,70 +76,122 @@ class Group {
  * exactly past any pair.
  */
 export class SplitFold {
+  /** The mark summed cells are read with; undefined when counting rows. */
+  readonly mark: Mark | undefined;
   private readonly groups = new Map<string, Group>();
   private readonly rest = new Count();
   private readonly totals = new Map<string, Count>();
   private readonly totalsRest = new Count();
   private pairs = 0;
+  private readonly skipped: Skipped = { blank: 0, unparsed: 0 };
 
-  /** add counts a row of `value` whose cell in the split column is `series`. */
-  add(value: string, series: string): void {
+  /** A fold that sums reads its cells with `mark`; one with none counts rows. */
+  constructor(mark?: Mark) {
+    this.mark = mark;
+  }
+
+  /** add counts a row of `value` in `series`, whose summed cell is `cell`. */
+  add(value: string, series: string, cell = ''): void {
+    const x = this.parsed(cell, 1);
     const fresh = roomIn(this.groups, this.rest);
     const group = placed(this.groups, value, fresh, () => new Group());
-    if (group === undefined) this.rest.rows++;
+    if (group === undefined) tallied(this.rest, x, 1);
     else {
       const room = this.pairs < PAIRS_AT_MOST && group.unsplit.rows === 0;
-      const cell = placed(group.cells, series, room, () => new Count());
+      const held = placed(group.cells, series, room, () => new Count());
       // A cell made now has no rows, as an emptied one is deleted.
-      if (cell?.rows === 0) this.pairs++;
-      (cell ?? group.unsplit).rows++;
+      if (held?.rows === 0) this.pairs++;
+      tallied(held ?? group.unsplit, x, 1);
     }
     const named = roomIn(this.totals, this.totalsRest);
     const total = placed(this.totals, series, named, () => new Count());
-    (total ?? this.totalsRest).rows++;
+    tallied(total ?? this.totalsRest, x, 1);
   }
 
   /** remove takes back a row that add counted, and any place it emptied. */
-  remove(value: string, series: string): void {
+  remove(value: string, series: string, cell = ''): void {
+    const x = this.parsed(cell, -1);
     const group = this.groups.get(value);
-    if (group === undefined) this.rest.rows--;
+    if (group === undefined) tallied(this.rest, x, -1);
     else {
-      if (taken(group.cells, series, group.unsplit)) this.pairs--;
+      if (taken(group.cells, series, group.unsplit, x)) this.pairs--;
       if (group.cells.size === 0 && group.unsplit.rows === 0)
         this.groups.delete(value);
     }
-    taken(this.totals, series, this.totalsRest);
+    taken(this.totals, series, this.totalsRest, x);
+  }
+
+  /** parsed is `cell` as a number where the fold sums, counting one left out. */
+  private parsed(cell: string, sign: 1 | -1): number | undefined {
+    if (this.mark === undefined) return undefined;
+    const x = parse(cell, this.mark);
+    if (x === undefined && cell === '') this.skipped.blank += sign;
+    else if (x === undefined) this.skipped.unparsed += sign;
+    return x;
   }
 
   /** snapshot reads the fold as plain numbers and strings. */
   snapshot(): Split {
+    const size = (m: Measured) => (this.mark === undefined ? m.rows : m.sum);
     const series = [...this.totals]
-      .sort(([a, x], [b, y]) => y.rows - x.rows || compareStrings(a, b))
+      .map(([name, total]) => ({ name, size: size(measured(total)) }))
+      .sort((a, b) => b.size - a.size || compareStrings(a.name, b.name))
       .slice(0, SERIES_AT_MOST)
-      .map(([name]) => name);
+      .map(({ name }) => name);
+    const sent = new Set(series);
     let unsplit = 0;
     const values = [...this.groups].map(([value, group]) => {
       unsplit += group.unsplit.rows;
-      const cells = series.map((s) => ({
-        rows: group.cells.get(s)?.rows ?? 0,
-      }));
-      const rows = added([...group.cells.values(), group.unsplit]);
-      const other = { rows: rows - added(cells) };
-      return { value, cells, other, total: { rows } };
+      const cells = series.map((s) => measured(group.cells.get(s)));
+      const apart = [...group.cells].filter(([s]) => !sent.has(s));
+      const other = merged([...apart.map(([, c]) => c), group.unsplit]);
+      return { value, cells, other, total: merged(held(group)) };
     });
     values.sort(
-      (a, b) => b.total.rows - a.total.rows || compareStrings(a.value, b.value),
+      (a, b) =>
+        size(b.total) - size(a.total) || compareStrings(a.value, b.value),
     );
-    const unsent = values.splice(GROUPS_SENT);
-    const rows = added(unsent.map((v) => v.total));
+    // The unsent values read as one, their sums merged and read once.
+    const unsent = (vs: SplitValue[]) => ({
+      values: vs.length,
+      ...merged(vs.flatMap((v) => held(this.groups.get(v.value)!))),
+    });
+    const left = values.splice(GROUPS_SENT);
     return {
       series: series.map(label),
       values: values.map((v) => ({ ...v, value: label(v.value) })),
-      others: { values: unsent.length, rows },
-      rest: { rows: this.rest.rows },
+      others: unsent(left),
+      rest: measured(this.rest),
       unsplit,
+      skipped: { ...this.skipped },
     };
   }
+}
+
+/** held is every count of a group's rows. */
+function held(group: Group): Count[] {
+  return [...group.cells.values(), group.unsplit];
+}
+
+/** measured is a count as plain numbers, or none where there is no count. */
+function measured(count: Count | undefined): Measured {
+  return { rows: count?.rows ?? 0, sum: count?.sum.value() ?? 0 };
+}
+
+/** merged reads counts as one, their sums merged and read once. */
+function merged(counts: Count[]): Measured {
+  const all = new Count();
+  for (const { rows, sum } of counts) {
+    all.rows += rows;
+    all.sum.merge(sum);
+  }
+  return measured(all);
+}
+
+/** tallied adds a row to `to`, or takes one back, with `x` its number if any. */
+function tallied(to: Count, x: number | undefined, sign: 1 | -1): void {
+  to.rows += sign;
+  if (x !== undefined) to.sum.add(sign * x);
 }
 
 /** roomIn says whether a key first seen gets a place, by GroupsFold's rule. */
@@ -155,17 +215,18 @@ function placed<T>(
 }
 
 /**
- * taken takes a row back from `key`'s count, or from `rest` where it has
- * none, and says whether it emptied and deleted the count.
+ * taken takes a row back from `key`'s cell, or from `rest` where it has none,
+ * and says whether it emptied and deleted the cell.
  */
-function taken(counts: Map<string, Count>, key: string, rest: Count): boolean {
-  const count = counts.get(key) ?? rest;
-  return --count.rows === 0 && count !== rest && counts.delete(key);
-}
-
-/** added is the rows of `counts` together. */
-function added(counts: Measured[]): number {
-  return counts.reduce((all, { rows }) => all + rows, 0);
+function taken(
+  cells: Map<string, Count>,
+  key: string,
+  rest: Count,
+  x: number | undefined,
+): boolean {
+  const cell = cells.get(key) ?? rest;
+  tallied(cell, x, -1);
+  return cell.rows === 0 && cell !== rest && cells.delete(key);
 }
 
 /** label cuts a value to the LABEL_AT_MOST code points a snapshot sends. */
