@@ -8,9 +8,7 @@
 # A flaky check is a fix to make, and this finds it on a quiet machine before
 # an agent meets it mid-stack. Every run goes through uno-bounded when it is
 # on the PATH. The report is out/flake/report.md, with each run's log beside
-# it. scripts/flake-watch.timer runs this nightly once linked:
-#   systemctl --user link "$PWD/scripts/flake-watch.service" "$PWD/scripts/flake-watch.timer"
-#   systemctl --user enable --now flake-watch.timer
+# it. Run it by hand when a check is suspected, or before a stack's last gate.
 
 set -uo pipefail
 
