@@ -219,7 +219,7 @@ const STACKS: StackTally = {
 
 test("a stacked chart's kind draws its tally as stack.ts draws it, and none of another kind", () => {
   const drawing = stack(STACKED).drawing(STACKS, ROOM)!;
-  expect(drawing.draw(HEIGHT).outerHTML).toBe(drawStack(STACKED, STACKS, HEIGHT).outerHTML);
+  expect(drawing.draw(HEIGHT).outerHTML).toBe(drawStack(STACKED, STACKS, HEIGHT, ROOM).outerHTML);
   expect(drawing.empty).toBe(false);
   expect(stack(STACKED).drawing({ ...STACKS, values: [] }, ROOM)?.empty).toBe(true);
   expect(stack(STACKED).drawing(GROUPS, ROOM)).toBeUndefined();

@@ -12,7 +12,7 @@ import type { StackPlot } from "@document";
 import type { StackTally } from "@engine";
 import { keyOf, stack } from "@renderer/chart/stack";
 import type { SplitValue } from "@tally";
-import { holding } from "../charted.ts";
+import { ROOM, holding } from "../charted.ts";
 
 const ROWS: StackPlot = {
   t: "stack",
@@ -74,9 +74,13 @@ const sided = (box: HTMLElement) =>
       Number(property(s, "--part")),
     ]),
   );
+/** The box of bars under a stack's legend. */
+const barsOf = (box: HTMLElement) => box.querySelector<HTMLElement>(".chart-bars")!;
 const tips = (box: HTMLElement) => all(box, ".chart-bar-tip").map((tip) => tip.textContent);
 
 const TALL = holding(3);
+/** A plot wide enough for every key on one line. */
+const WIDE = { ...ROOM, width: 2_000 };
 
 test("each bar's segments run in slot order from zero, then Other, each its share of the longest bar", () => {
   const tally = tallyOf(
@@ -84,7 +88,7 @@ test("each bar's segments run in slot order from zero, then Other, each its shar
     valued("North", [cell(6), cell(3)], cell(1)),
     valued("South", [cell(0), cell(5)]),
   );
-  const box = stack(ROWS, tally, TALL);
+  const box = stack(ROWS, tally, TALL, WIDE);
   expect(segments(box)).toStrictEqual([
     [
       ["var(--chart-1)", 0, 0.6],
@@ -112,7 +116,7 @@ test("a sum per value and series draws each value's sum, and a part of nothing n
     ["web", "direct"],
     valued("North", [cell(2, 4.5), cell(1, 0)], cell(1, 1.5)),
   );
-  const box = stack(SUMS, tally, TALL);
+  const box = stack(SUMS, tally, TALL, WIDE);
   expect(segments(box)).toStrictEqual([
     [
       ["var(--chart-1)", 0, 0.75],
@@ -120,7 +124,7 @@ test("a sum per value and series draws each value's sum, and a part of nothing n
     ],
   ]);
   expect(tips(box)).toStrictEqual(["6"]);
-  expect(box.style.getPropertyValue("--room-above")).toBe("calc(1ch + var(--tip-gap))");
+  expect(barsOf(box).style.getPropertyValue("--room-above")).toBe("calc(1ch + var(--tip-gap))");
 });
 
 test("a value's parts below zero stack leftward, and its net total stands at the tip of its side", () => {
@@ -129,10 +133,10 @@ test("a value's parts below zero stack leftward, and its net total stands at the
     valued("North", [cell(2, 300), cell(1, -100), cell(1, 100)]),
     valued("South", [cell(1, 50), cell(1, -250), cell(0)]),
   );
-  const box = stack(SUMS, tally, TALL);
+  const box = stack(SUMS, tally, TALL, WIDE);
   // 250 below zero and 400 above it share one scale of 650.
   const span = 650;
-  expect(box.style.getPropertyValue("--zero")).toBe(`${250 / span}`);
+  expect(barsOf(box).style.getPropertyValue("--zero")).toBe(`${250 / span}`);
   expect(sided(box)).toStrictEqual([
     [
       ["var(--chart-1)", "above", 0, 300 / span],
@@ -152,8 +156,8 @@ test("a value's parts below zero stack leftward, and its net total stands at the
   expect(tracks.map((t) => t.classList.contains("below"))).toStrictEqual([false, true]);
   expect(tracks.map((t) => Number(property(t, "--share")))).toStrictEqual([400 / span, 250 / span]);
   expect([
-    box.style.getPropertyValue("--room-above"),
-    box.style.getPropertyValue("--room-below"),
+    barsOf(box).style.getPropertyValue("--room-above"),
+    barsOf(box).style.getPropertyValue("--room-below"),
   ]).toStrictEqual(["calc(3ch + var(--tip-gap))", "calc(4ch + var(--tip-gap))"]);
 });
 
@@ -168,7 +172,18 @@ test("slot i wears the i-th chart colour, and past the series Other's ink", () =
 
 test("a plot holds as many bars as rows fit, and a line counts the rest", () => {
   const values = ["a", "b", "c", "d"].map((v) => valued(v, [cell(1)]));
-  const box = stack(ROWS, tallyOf(["web"], ...values), TALL);
+  const box = stack(ROWS, tallyOf(["web"], ...values), TALL, WIDE);
   expect(all(box, ".chart-bar-label").map((l) => l.textContent)).toStrictEqual(["a", "b"]);
   expect(all(box, ".chart-bars-line")).toHaveLength(1);
+});
+
+test("a legend over the bars keys each series and Other, and the bars keep the height it leaves", () => {
+  const tally = tallyOf(["web", "direct"], valued("North", [cell(6), cell(3)], cell(1)));
+  const drawn = stack(ROWS, tally, TALL, WIDE);
+  const keys = all(drawn, ".chart-key-list .chart-legend-key").map((k) => property(k, "--key"));
+  expect(keys).toStrictEqual(["var(--chart-1)", "var(--chart-2)", "var(--ink-3)"]);
+  expect(drawn.firstElementChild?.classList.contains("chart-key-list")).toBe(true);
+  // One series and no Other has no legend, as the title names it.
+  const alone = stack(ROWS, tallyOf(["web"], valued("North", [cell(6)])), TALL, WIDE);
+  expect(alone.querySelector(".chart-key-list")).toBeNull();
 });

@@ -23,13 +23,13 @@ export const stack: ChartKind<StackPlot> = (plot) => ({
   },
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.by, plot.split],
-  drawing: (tally) =>
+  drawing: (tally, room) =>
     tally.t !== "stack"
       ? undefined
       : {
           ...undrawn,
           empty: tally.values.length === 0,
-          draw: (height) => drawStack(plot, tally, height),
+          draw: (height) => drawStack(plot, tally, height, room),
           fit: fitTips,
         },
 });

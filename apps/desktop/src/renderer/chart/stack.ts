@@ -15,8 +15,17 @@ import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import type { Measured, SplitValue } from "@tally";
 import { barsBox, room } from "./bars.ts";
+import type { PlotRoom } from "./kind.ts";
+import {
+  ENTRY_GAP,
+  KEY_GAP,
+  KEY_SIZE,
+  LEGEND_LINE,
+  LEGEND_NAME_AT_MOST,
+  legend,
+} from "./legend.ts";
 import { OTHER_KEY } from "./pie.ts";
-import { ranked, row } from "./rows.ts";
+import { BARS_INSET, ranked, row } from "./rows.ts";
 
 /** The window's ground between two segments of a bar, in px: the dataviz skill's gap. */
 export const SEGMENT_GAP = 2;
@@ -39,12 +48,46 @@ function asGroups(tally: StackTally): Groups {
 }
 
 /**
- * stack draws `tally` as rows or sums per value and series, as `plot`
- * measures them, in a plot `height` px high.
+ * keyed gives a stack's legend over its bars, and the height it takes from
+ * the plot: a key per series, then Other where a value has rows in it. One
+ * series alone has none, as the title names it.
  */
-export function stack(plot: StackPlot, tally: StackTally, height: number): HTMLElement {
+function keyed(
+  tally: StackTally,
+  plot: PlotRoom,
+  height: number,
+): { box: HTMLElement; height: number } {
+  const { series, values } = tally;
+  const other = values.some((v) => v.other.rows > 0) ? [undefined] : [];
+  const entries = [...series, ...other].map((name, i) => ({
+    key: keyOf(i, series.length),
+    series: name,
+  }));
+  if (entries.length < 2) return { box: el("div"), height: 0 };
+  const keys = legend(entries, plot, height);
+  keys.box.style.setProperty("--bars-inset", `${BARS_INSET}px`);
+  keys.box.style.setProperty("--key-size", `${KEY_SIZE}px`);
+  keys.box.style.setProperty("--key-gap", `${KEY_GAP}px`);
+  keys.box.style.setProperty("--entry-gap", `${ENTRY_GAP}px`);
+  keys.box.style.setProperty("--legend-line", `${LEGEND_LINE}px`);
+  keys.box.style.setProperty("--name-most", `${LEGEND_NAME_AT_MOST}ch`);
+  return keys;
+}
+
+/**
+ * stack draws `tally` as rows or sums per value and series, as `plot`
+ * measures them, in a plot `height` px high and as wide as `across`, its legend over
+ * its bars.
+ */
+export function stack(
+  plot: StackPlot,
+  tally: StackTally,
+  height: number,
+  across: PlotRoom,
+): HTMLElement {
   const measure = (m: Measured): number => (plot.sum === undefined ? m.rows : m.sum);
-  const { shown, lines } = ranked(asGroups(tally), height);
+  const keys = keyed(tally, across, height);
+  const { shown, lines } = ranked(asGroups(tally), height - keys.height);
   const series = tally.series.length;
   const drawn = tally.values.slice(0, shown.length).map((v: SplitValue) => {
     const parts = [...v.cells, v.other].map((cell, i): Part => ({
@@ -92,5 +135,7 @@ export function stack(plot: StackPlot, tally: StackTally, height: number): HTMLE
     box.append(row(label, track));
   }
   box.append(...lines);
-  return box;
+  const whole = el("div", "chart-stacked");
+  whole.append(keys.box, box);
+  return whole;
 }

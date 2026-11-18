@@ -4,7 +4,8 @@
  * colours, then Other in the caption's ink, each a gap of the window's ground
  * from the one before, as thick as a bar and ending where the next begins,
  * with the value's total past the last. A part below zero stacks leftward
- * from the same zero.
+ * from the same zero. A legend over the bars keys the series in the same
+ * colours and order, clear of the first bar and inside the plot.
  *
  * They open the workspace smoke.js wrote of a small export of four regions'
  * sales in eight channels: rows per region by channel in a new window, and
@@ -17,6 +18,7 @@ import { BAR_THICK } from "@renderer/chart/rows";
 import { SEGMENT_GAP } from "@renderer/chart/stack";
 import { SERIES_AT_MOST } from "@tally";
 import { RECT_SLACK } from "./charts.ts";
+import { BARS_INSET } from "@renderer/chart/rows";
 import type { Check } from "./check.ts";
 
 /** The workspace smoke.js wrote of two stacked charts. */
@@ -84,6 +86,42 @@ export const CHART_STACK: Check[] = [
       }
       const under = document.querySelectorAll(".chart-segment.under").length;
       if (under !== ${STACKED_REGIONS.length}) return "the sums draw " + under + " parts under zero";
+      return "";
+    `,
+  },
+  {
+    name: "a stacked chart's legend keys its series in slot order, then Other, in the segments' colours, inside the plot and over its first bar",
+    shot: "chart-stack-legend",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      const style = (at) => getComputedStyle(at);
+      const computed = (colour) => {
+        const probe = document.createElement("div");
+        probe.style.color = colour;
+        document.body.append(probe);
+        const worn = style(probe).color;
+        probe.remove();
+        return worn;
+      };
+      const slots = [...Array(${SERIES_AT_MOST}).keys()].map((i) => computed("var(--chart-" + (i + 1) + ")"));
+      slots.push(computed("var(--ink-3)"));
+      for (const win of document.querySelectorAll(".chart")) {
+        const list = win.querySelector(".chart-key-list");
+        if (list === null) return "a window has no legend";
+        const keys = [...list.querySelectorAll(".chart-legend-key")].map((key) => style(key).backgroundColor);
+        const worn = [...win.querySelectorAll(".chart-segment")].map((segment) => style(segment).backgroundColor);
+        const order = keys.map((key) => slots.indexOf(key));
+        if (order.some((at, i) => at !== i) || keys.some((key) => !worn.includes(key))) return "the keys wear " + keys.join(" | ");
+        const more = list.querySelector(".chart-key-more");
+        if (keys.length !== ${STACKED_SEGMENTS} && more === null) return "the legend keys " + keys.length + " and counts no more";
+        const plot = rect(win.querySelector(".chart-plot"));
+        for (const entry of list.children) {
+          const at = rect(entry);
+          if (at.left < plot.left + ${BARS_INSET} - ${RECT_SLACK} || at.right > plot.right - ${BARS_INSET} + ${RECT_SLACK}) return entry.textContent + " runs from " + at.left + " to " + at.right + " in a plot from " + plot.left + " to " + plot.right;
+        }
+        const bar = rect(win.querySelector(".chart-bar-row"));
+        if (rect(list).bottom > bar.top + ${RECT_SLACK}) return "the legend runs to " + rect(list).bottom + " over a bar at " + bar.top;
+      }
       return "";
     `,
   },

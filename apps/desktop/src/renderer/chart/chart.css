@@ -459,6 +459,44 @@
   border-radius: 4px 0 0 4px;
 }
 
+/* A stack's legend over its bars, from legend.ts: its keys in lines that wrap
+ * as legend.ts counted them, each a pie's key and a name in the value's ink,
+ * cut with an ellipsis past --name-most, inset as the bars are above them. */
+.chart-key-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--entry-gap);
+  margin: 0;
+  padding: var(--bars-inset) var(--bars-inset) 0;
+  font-size: 11px;
+  line-height: var(--legend-line);
+  list-style: none;
+}
+
+.chart-key-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--key-gap);
+  min-width: 0;
+}
+
+.chart-key-list .chart-legend-key {
+  flex: none;
+  width: var(--key-size);
+}
+
+.chart-key-name {
+  max-width: var(--name-most);
+  overflow: hidden;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-key-more {
+  color: var(--ink-3);
+}
+
 /* The characters window.ts measures a tick's character by, written as a tick
  * is, out of sight and out of the window's flow. */
 .chart-gauged {
@@ -815,7 +853,8 @@
     forced-color-adjust: none;
   }
 
-  .chart-segment {
+  .chart-segment,
+  .chart-key-list .chart-legend-key {
     background: CanvasText padding-box;
     forced-color-adjust: none;
   }
