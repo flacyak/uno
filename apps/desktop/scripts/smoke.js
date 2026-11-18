@@ -13,12 +13,14 @@
 import { newManifest, readContainer, writeDocument } from "@uno/core/document";
 import { parseConnection } from "@uno/core/library";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HOME_REGION } from "@core-tests/store/regions";
 import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@core-tests/store/standin";
+import { GROUPS, ONLY_VARIABLE, SCHEDULE, selected } from "@main/smoke/groups";
 import { CHECK_TIMEOUT_MS, MINUTE_MS } from "@renderer/timing";
 import {
   DRIVEN_LANGUAGE_ENV,
@@ -484,42 +486,70 @@ function answer(what) {
   return true;
 }
 
-const { code, out } = await drive("smoke", {
-  electron,
-  args: [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, fixture],
-  env: electronEnv(process.env, {
-    ...DRIVEN_LANGUAGE_ENV,
-    UNO_SMOKE: scratch,
-    UNO_SMOKE_SOURCE: second,
-    // The object's address, for the check that adds it.
-    UNO_SMOKE_OBJECT: object,
-    UNO_SMOKE_SENT: sent,
-    UNO_SMOKE_CHARTED: charted,
-    UNO_SMOKE_SIGNED: signed,
-    UNO_SMOKE_SCATTERED: scattered,
-    UNO_SMOKE_ALONG: along,
-    UNO_SMOKE_PIES: pies,
-    UNO_SMOKE_STATES: states,
-    UNO_SMOKE_BLANKS: blanks,
-    UNO_SMOKE_SCHEDULED: scheduled,
-    // What the + at the foot of the sidebar opens, in place of the Open dialog.
-    UNO_DRIVEN_OPEN: second,
-    // The stand-in's endpoint and keys. The engine's utility process inherits
-    // the app's environment.
-    ...standinEnv(standin),
-    AWS_CONFIG_FILE: join(aws, "config"),
-    AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
-  }),
-  answer,
-  // The run's own minute, and what the scheduled chart may wait.
-  deadlineMs: 60_000 + everyMinute * MINUTE_MS + CHECK_TIMEOUT_MS,
-  onTimeout: () => void shut(),
-});
-await shut();
+/**
+ * run drives one uno over the groups `only` names, with `folder` as its
+ * screenshots' and its data's, and resolves to its verdict, or undefined.
+ *
+ * @param {string[]} only
+ * @param {string} folder
+ * @param {number} deadlineMs
+ */
+async function run(only, folder, deadlineMs) {
+  const dataDir = join(folder, "data");
+  await rm(dataDir, { recursive: true, force: true });
+  const { code, out } = await drive("smoke", {
+    electron,
+    args: [pkg, `--user-data-dir=${dataDir}`, DRIVEN_LANGUAGE_SWITCH, fixture],
+    env: electronEnv(process.env, {
+      ...DRIVEN_LANGUAGE_ENV,
+      UNO_SMOKE: folder,
+      [ONLY_VARIABLE]: only.join(","),
+      UNO_SMOKE_SOURCE: second,
+      // The object's address, for the check that adds it.
+      UNO_SMOKE_OBJECT: object,
+      UNO_SMOKE_SENT: sent,
+      UNO_SMOKE_CHARTED: charted,
+      UNO_SMOKE_SIGNED: signed,
+      UNO_SMOKE_SCATTERED: scattered,
+      UNO_SMOKE_ALONG: along,
+      UNO_SMOKE_PIES: pies,
+      UNO_SMOKE_STATES: states,
+      UNO_SMOKE_BLANKS: blanks,
+      UNO_SMOKE_SCHEDULED: scheduled,
+      // What the + at the foot of the sidebar opens, in place of the Open dialog.
+      UNO_DRIVEN_OPEN: second,
+      // The stand-in's endpoint and keys. The engine's utility process inherits
+      // the app's environment.
+      ...standinEnv(standin),
+      AWS_CONFIG_FILE: join(aws, "config"),
+      AWS_SHARED_CREDENTIALS_FILE: join(aws, "credentials"),
+    }),
+    answer,
+    // The run's own minute, and what the scheduled chart may wait.
+    deadlineMs,
+    onTimeout: () => void shut(),
+  });
+  return verdict("smoke", code, out, "smoke: all checks passed");
+}
 
-const failed = verdict("smoke", code, out, "smoke: all checks passed");
-if (failed !== undefined) {
-  console.error(failed);
+// The schedule's group waits on the clock for its minute, longer than every
+// other check together, so it runs in a second uno beside the rest, with a
+// folder of its own. Which groups run is UNO_SMOKE_ONLY's choice, each with
+// the groups it leans on; see src/main/smoke/groups.ts.
+const groups = selected(GROUPS, process.env[ONLY_VARIABLE]).map((g) => g.name);
+const rest = groups.filter((name) => name !== SCHEDULE);
+const aside = join(scratch, "schedule");
+await mkdir(aside, { recursive: true });
+const verdicts = await Promise.all([
+  rest.length > 0 ? run(rest, scratch, 60_000 + CHECK_TIMEOUT_MS) : undefined,
+  groups.includes(SCHEDULE)
+    ? run([SCHEDULE], aside, 60_000 + everyMinute * MINUTE_MS + CHECK_TIMEOUT_MS)
+    : undefined,
+]);
+await shut();
+const failed = verdicts.filter((v) => v !== undefined);
+if (failed.length > 0) {
+  for (const line of failed) console.error(line);
   process.exit(1);
 }
 
@@ -527,7 +557,14 @@ if (failed !== undefined) {
 // with. Only here can the file on disk be checked.
 // What the run left is read back for the groups that ran. A run of some
 // groups (UNO_SMOKE_ONLY, see src/main/smoke/groups.ts) leaves only theirs.
-const checks = JSON.parse(await readFile(join(scratch, "checks.json"), "utf8"));
+/** Every check both unos ran, read back from each one's folder. */
+const checks = [];
+for (const folder of [scratch, aside]) {
+  if (existsSync(join(folder, "checks.json"))) {
+    checks.push(...JSON.parse(await readFile(join(folder, "checks.json"), "utf8")));
+  }
+}
+await writeFile(join(scratch, "checks.json"), JSON.stringify(checks));
 const ran = new Set(checks.map((check) => check.group));
 const trouble = [];
 const written = (await readdir(scratch)).filter((name) => name.endsWith(".uno"));
