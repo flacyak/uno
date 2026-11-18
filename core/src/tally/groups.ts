@@ -72,9 +72,29 @@ export interface SavedGroups {
 }
 
 /** Rows counted together, and their cells added exactly. */
-class Count {
+export class Count {
   rows = 0;
   sum = new ExactSum();
+}
+
+/**
+ * counted adds a row to `to`, or takes one back when `sign` is -1, with its
+ * cell read with `mark` where the fold sums. A cell left out is counted in
+ * `skipped`.
+ */
+export function counted(
+  to: Count,
+  cell: string,
+  sign: 1 | -1,
+  mark: Mark | undefined,
+  skipped: Skipped,
+): void {
+  to.rows += sign;
+  if (mark === undefined) return;
+  const x = parse(cell, mark);
+  if (x !== undefined) to.sum.add(sign * x);
+  else if (cell === '') skipped.blank += sign;
+  else skipped.unparsed += sign;
 }
 
 /**
@@ -201,11 +221,6 @@ export class GroupsFold {
 
   /** count adds a row to `to`, or takes one back when `sign` is -1. */
   private count(to: Count, cell: string, sign: 1 | -1): void {
-    to.rows += sign;
-    if (this.mark === undefined) return;
-    const x = parse(cell, this.mark);
-    if (x !== undefined) to.sum.add(sign * x);
-    else if (cell === '') this.skipped.blank += sign;
-    else this.skipped.unparsed += sign;
+    counted(to, cell, sign, this.mark, this.skipped);
   }
 }

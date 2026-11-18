@@ -54,12 +54,15 @@
  * - `aside`: arrows the selection from rep under the top chart window, which
  *   fades, presses a cell through it, and arrows back out, which brings it
  *   back. Goes to out/aside.gif.
+ * - `dates`: selects a date of the fixture written day first, opens the
+ *   chart form on it by Ctrl+Shift+G, reads its dates day first, sets it per
+ *   week and presses Enter for a window of its weeks. Goes to out/dates.gif.
  * - `chord`, `command` and `menu`: select region, open the chart form under its
  *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -117,6 +120,7 @@ const CHARTED = [
   "reread",
   "focus",
   "aside",
+  "dates",
 ];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
@@ -331,6 +335,22 @@ async function stageCharts(name, plots) {
   return uno;
 }
 
+/** A date the fixture writes year first, and the same written day first. */
+const YEAR_FIRST = /^(\d{4})-(\d{2})-(\d{2}),/gmu;
+const DAY_FIRST = "$3/$2/$1,";
+
+/**
+ * stageDates lays out the dates story: the fixture's workspace with its dates
+ * written day first, 01/07/2026 to 29/09/2026, whose first rows all read
+ * either way. Returns the .uno to open.
+ */
+async function stageDates() {
+  const uno = await stageCharts("dates", []);
+  const csv = join(dirname(uno), "sales-q3.csv");
+  await writeFile(csv, (await readFile(csv, "utf8")).replace(YEAR_FIRST, DAY_FIRST));
+  return uno;
+}
+
 /** The object the refresh story's workspace points at, in the stand-in bucket. */
 const REFRESH_KEY = "2025/ads-q3.csv";
 
@@ -416,6 +436,7 @@ const staged = {
   chord: () => stageCharts("chord", []),
   command: () => stageCharts("command", []),
   menu: () => stageCharts("menu", []),
+  dates: stageDates,
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 

@@ -299,6 +299,25 @@ test("an open says what it could not show of a .uno's charts, once", async () =>
   expect(message()).toBe("");
 });
 
+// The record is a later build's, so its window says so where it stood, and
+// lets the pointer through to the sheet.
+test("a chart this build cannot draw keeps its window at its place, saying a newer uno made it", async () => {
+  const room = { w: 1000, h: 600 };
+  const measured = vi.spyOn(layer(), "getBoundingClientRect");
+  measured.mockReturnValue(new DOMRect(0, 0, room.w, room.h));
+  const json = JSON.stringify({ ...BARS, id: "c2", plot: { t: "unknown" }, place: MOVED });
+  await open("unknown.uno", [BARS], [{ id: "c2", source: SALES, json }]);
+  const box = document.querySelector<HTMLElement>(".chart-carried");
+  measured.mockRestore();
+
+  expect(box).not.toBeNull();
+  const at = placed(MOVED, room);
+  const stood = [box!.style.left, box!.style.top, box!.style.width, box!.style.height];
+  expect(stood).toEqual([at.x, at.y, at.width, at.height].map((px) => `${px}px`));
+  expect(box!.textContent).toBe(m.chart_carried());
+  expect(windows()).toBe(2);
+});
+
 test("Ctrl+S after a move writes the new place, with no unsaved mark", async () => {
   const path = await open("moved.uno", [BARS]);
   shell.charts?.move(BARS.id, MOVED);

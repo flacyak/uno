@@ -19,6 +19,7 @@ import type { Sources } from '@plugin';
 import type { Connection } from '@library';
 import type { Connections } from '@store';
 import type { Meeting, Tried } from '@store/s3';
+import { PER } from '@tally';
 import { MILLISECONDS, REQUEST, unmeasured } from './telemetry.ts';
 import type { Telemetry } from './telemetry.ts';
 import { Workspace } from './workspace.ts';
@@ -261,6 +262,15 @@ export function serve(
         throw new Refusal({ t: 'text', text: 'an unchart names no chart' });
       await workspace.unchart(m.chart);
       return { t: 'uncharted' };
+    },
+    batch: async (m) => {
+      const placed = Number.isSafeInteger(m.offset) && m.offset >= 0;
+      if (typeof m.chart !== 'string' || !PER.includes(m.per) || !placed)
+        throw new Refusal({
+          t: 'text',
+          text: 'a batch names no chart, size or offset',
+        });
+      return { t: 'batched', batch: workspace.batch(m.chart, m.per, m.offset) };
     },
     save: async (m) => ({
       t: 'saved',

@@ -11,7 +11,9 @@ import { connect, multiProviders } from "@core-tests/engine/harness";
 import { PART_FIXTURES, PART_NAMES, PART_ROWS } from "@core-tests/testdata/sales-q3-parts";
 import { readContainer } from "@document";
 import type { Chart, ChartColumn, Plot } from "@document";
-import type { GroupsTally, SampleTally, SourceRef } from "@engine";
+import type { SourceRef } from "@engine";
+import { LEVEL_BATCH } from "@tally";
+import type { Drawn } from "@renderer/chart/kind";
 import { REGION, ROWS, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
@@ -54,7 +56,7 @@ function uno(bytes: Uint8Array): SourceRef {
 }
 
 /** Waits for a complete tally of the chart BARS over `rows` rows, and returns it. */
-async function completeOf(w: Workspace, rows = ROWS): Promise<GroupsTally | SampleTally> {
+async function completeOf(w: Workspace, rows = ROWS): Promise<Drawn> {
   await expect.poll(() => w.charts.heard(BARS.id)?.complete?.coverage.rows, TALLY_WAIT).toBe(rows);
   return w.charts.heard(BARS.id)!.complete!;
 }
@@ -196,10 +198,12 @@ test("a just-opened file is clean", async () => {
   await opened(FILE, async (w) => expect(w.dirty).toBe(false));
 });
 
-test("adding, removing, and changing a chart's source, kind, columns, title or schedule mark it unsaved", async () => {
+test("adding, removing, and changing a chart's source, kind, columns, title, schedule, size or reading mark it unsaved", async () => {
   const by: ChartColumn = { col: REGION, header: "region" };
   const units: ChartColumn = { col: UNITS, header: "units" };
   const scatter: Chart = { ...BARS, id: "c2", plot: { t: "scatter", x: by, y: units } };
+  const at: ChartColumn = { col: 0, header: "date" };
+  const time: Chart = { ...BARS, id: "c3", plot: { t: "time", at, per: "day", order: "day" } };
   const changes: ReadonlyArray<readonly [Chart, Partial<Shown>]> = [
     [BARS, { title: "Rows" }],
     [BARS, { refresh: 5 }],
@@ -209,8 +213,11 @@ test("adding, removing, and changing a chart's source, kind, columns, title or s
     [BARS, { plot: { t: "bars", by: { ...by, header: "area" } } }],
     [BARS, { plot: { t: "bars", by, sum: units } }],
     [scatter, { plot: { t: "scatter", x: by, y: by } }],
+    [time, { plot: { t: "time", at, per: "week", order: "day" } }],
+    [time, { plot: { t: "time", at, per: "day", order: "month" } }],
+    [time, { plot: { t: "time", at, per: "day", unit: "s" } }],
   ];
-  await opened(uno(unoOf([BARS, scatter])), async (w) => {
+  await opened(uno(unoOf([BARS, scatter, time])), async (w) => {
     for (const [chart, shown] of changes) {
       await w.charts.change(chart.id, shown);
       expect(w.dirty, JSON.stringify(shown)).toBe(true);
@@ -367,9 +374,18 @@ test("a chart takes its tallies with it, by a removal or its source's", async ()
     await w.remove(w.sources[1]!);
     expect(w.charts.heard(ads.id)).toBeUndefined();
     // The same records back would show anything still kept of them.
-    w.charts.seed({ charts: [BARS, ads], carriedIds: [], carriedOver: [] });
+    w.charts.seed({ charts: [BARS, ads], carriedIds: [], carriedOver: [], carriedPlaces: [] });
     expect(w.charts.heard(BARS.id)?.latest).toBeUndefined();
     expect(w.charts.heard(ads.id)?.latest).toBeUndefined();
+  });
+});
+
+test("a chart this build cannot draw stands where its record put it, and goes with its source", async () => {
+  const json = JSON.stringify({ ...BARS, id: "c2", source: ADS, plot: { t: "unknown" } });
+  await opened(uno(unoOf([BARS], [{ id: "c2", source: ADS, json }])), async (w) => {
+    expect(w.charts.carried).toStrictEqual([{ id: "c2", source: ADS, place: BARS.place }]);
+    await w.remove(w.sources[1]!);
+    expect(w.charts.carried).toStrictEqual([]);
   });
 });
 
@@ -456,5 +472,32 @@ test("a source goes by the stem of its file once there are several to tell apart
 
     const fresh = await w.relink(only!, { name: "sales.2025.q3.csv", path: FIXTURE });
     expect(w.charts.sourceLabel(fresh.id)).toBe("sales.2025.q3");
+  });
+});
+
+test("an over-time chart's later batches join its complete tally where its periods end, and no other", async () => {
+  const hours: Chart = {
+    ...BARS,
+    plot: { t: "time", at: { col: 0, header: "date" }, per: "hour", order: "day" },
+  };
+  await opened(FILE, async (w) => {
+    const { id } = await w.charts.add(hours);
+    const levelOf = (per: string) => {
+      const complete = w.charts.heard(id)?.complete;
+      return complete?.t === "time"
+        ? complete.levels.find((level) => level.per === per)
+        : undefined;
+    };
+    await expect.poll(() => levelOf("hour")?.rows.length, TALLY_WAIT).toBe(LEVEL_BATCH);
+    const { span } = levelOf("hour")!;
+    expect(await w.charts.batch(id, "hour", 2 * LEVEL_BATCH)).toBe(false);
+    for (let offset = LEVEL_BATCH; offset < span; offset += LEVEL_BATCH) {
+      expect(await w.charts.batch(id, "hour", offset)).toBe(true);
+    }
+    const sum = (rows: readonly number[]): number => rows.reduce((a, b) => a + b, 0);
+    expect(levelOf("hour")?.rows.length).toBe(span);
+    expect(sum(levelOf("hour")!.rows)).toBe(sum(levelOf("day")!.rows));
+    expect(await w.charts.batch(id, "hour", LEVEL_BATCH)).toBe(false);
+    expect(await w.charts.batch("c9", "hour", LEVEL_BATCH)).toBe(false);
   });
 });

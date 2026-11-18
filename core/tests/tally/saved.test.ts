@@ -12,8 +12,10 @@ import {
   DISTINCT_AT_MOST,
   ExactSum,
   GroupsFold,
+  HELD_AT_MOST,
   SampleFold,
   TALLY_VERSION,
+  TimeFold,
 } from '@tally';
 import { UINT32_RANGE, seeded } from '@core-tests/lab/cache/stats';
 import {
@@ -25,6 +27,8 @@ import {
 } from '@core-tests/testdata/sales-q3';
 
 const SEEDS = 200;
+// The fixture's first column, its dates.
+const DATE = 0;
 const DRAWS = 48;
 const HALF = DRAWS / 2;
 const encoder = new TextEncoder();
@@ -252,10 +256,113 @@ test('a save that holds no scatter fold reads back as none', () => {
   for (const v of unsaved) expect(SampleFold.restored(v)).toBeUndefined();
 });
 
+/** Dates in every layout, blank, not dates, and dates only one order reads. */
+const DATES = [
+  '',
+  'n/a',
+  '2024-03-04',
+  '2024-03-04 9:05',
+  '03/04/2024 23:59:59',
+  '13/04/2024',
+  '04/13/2024 0:30',
+  '2024-03-04T23:30:00-05:00',
+  '1700000000',
+];
+
+test('a time fold read back from its save folds on as the fold it was', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const rows = Array.from({ length: DRAWS }, (): [string, string] => [
+      pick(DATES),
+      pick(CELLS),
+    ]);
+    for (const make of [
+      () => new TimeFold('day'),
+      () => new TimeFold('month', 'point'),
+      () => new TimeFold('s', 'comma'),
+    ]) {
+      // An edit takes the first row back before the save, and puts it back
+      // after it.
+      const first = (fold: TimeFold) => {
+        for (const r of rows.slice(0, HALF)) fold.add(...r);
+        fold.remove(...rows[0]!);
+      };
+      const then = (fold: TimeFold) => {
+        for (const r of rows.slice(HALF)) fold.add(...r);
+        fold.add(...rows[0]!);
+      };
+      const [whole, before] = [make(), make()];
+      first(whole);
+      then(whole);
+      first(before);
+      const after = TimeFold.restored(throughJson(before.saved()))!;
+      then(after);
+      expect(after.saved(), `seed ${seed}`).toStrictEqual(whole.saved());
+      expect(after.read(), `seed ${seed}`).toStrictEqual(whole.read());
+    }
+  }
+});
+
+const HOUR_MINUTES = 60;
+const MINUTE_MS = 60_000;
+
+/** The cell of the hour `hour` hours after 1970. */
+function hourCell(hour: number): string {
+  const iso = new Date(hour * HOUR_MINUTES * MINUTE_MS).toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+}
+
+test('a time fold that coarsened reads back coarse', () => {
+  const fold = new TimeFold('day', 'point');
+  for (let h = 0; h <= HELD_AT_MOST; h++) fold.add(hourCell(h), `${h}.25`);
+  const after = TimeFold.restored(throughJson(fold.saved()))!;
+  expect(after.read().held).toBe('day');
+  after.add(hourCell(0), '1');
+  fold.add(hourCell(0), '1');
+  expect(after.saved()).toStrictEqual(fold.saved());
+});
+
+test('a save that holds no time fold reads back as none', () => {
+  const fold = new TimeFold('day', 'point');
+  fold.add('2024-03-04', '1');
+  const saved = fold.saved();
+  const [key, rows, sum] = saved.periods[0]!;
+  const yearOf = (k: number) => ({
+    ...saved,
+    held: 'year',
+    periods: [[k, 1, sum]],
+  });
+  // Hours, all in 1970, one past the bound.
+  const hours = Array.from({ length: HELD_AT_MOST + 1 }, (_, h) => [h, 1, sum]);
+  const unsaved = [
+    undefined,
+    { ...saved, reading: 'week' },
+    { ...saved, mark: 'dot' },
+    { ...saved, held: 'week' },
+    { ...saved, timed: -1 },
+    { ...saved, dates: { blank: 0, unparsed: 0 } },
+    { ...saved, skipped: { blank: 0.5, unparsed: 0 } },
+    { ...saved, undated: { rows: 0 } },
+    { ...saved, periods: [[key, 0, sum]] },
+    { ...saved, periods: [[key, rows]] },
+    { ...saved, periods: [[key + 0.5, rows, sum]] },
+    { ...saved, periods: [saved.periods[0], saved.periods[0]] },
+    { ...saved, held: 'hour', periods: hours },
+    // Years 0000 and 9999 are -1970 and 8029; one either side is past them.
+    yearOf(-1971),
+    yearOf(8030),
+  ];
+  for (const v of unsaved) expect(TimeFold.restored(v)).toBeUndefined();
+  expect(TimeFold.restored(yearOf(-1970))).toBeDefined();
+  expect(TimeFold.restored(yearOf(8029))).toBeDefined();
+});
+
 /**
  * The hash of the folds TALLY_VERSION makes of the fixture: its rows by
- * region, its revenue and units summed by channel with each mark, and its
- * revenue against units with each mark. It
+ * region, its revenue and units summed by channel with each mark, its
+ * revenue against units with each mark, and its rows and revenue over its
+ * dates in each order, with DATES added. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -263,6 +370,7 @@ const GOLDEN = {
   version: 1,
   groups: '2ae37431f8e378df8ef90b5aa4776174d479cc156f24f3a898676c88cdd7c6cd',
   sample: '82b28cba5c4ad68f0358cb3c9b9cfbe9e4aaecbb4f143ca0412395470acb6432',
+  time: '2df69fd36bdc14b0210c23556d82b8f16274974e471b7d7464b59c1c25e34b15',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -302,4 +410,16 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(samples))),
     'a scatter fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.sample);
+  const dates = [...column(DATE), ...DATES];
+  const cells = [...revenue, ...DATES.map((_, i) => CELLS[i % CELLS.length]!)];
+  const times = (['day', 'month'] as const).flatMap((order) => [
+    new TimeFold(order),
+    new TimeFold(order, 'point'),
+    new TimeFold(order, 'comma'),
+  ]);
+  for (const fold of times) dates.forEach((v, r) => fold.add(v, cells[r]));
+  expect(
+    hashOf(encoder.encode(JSON.stringify(times.map((f) => f.saved())))),
+    'a time fold, or how a cell reads as a date or a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.time);
 });

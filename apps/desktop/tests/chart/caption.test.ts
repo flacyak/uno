@@ -9,7 +9,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
-import type { GroupsTally, SampleTally, Tally } from "@engine";
+import type { GroupsTally, SampleTally, Tally, TimeTally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import type { Locale } from "@paraglide/runtime";
 import {
@@ -18,14 +18,16 @@ import {
   checked,
   coverage,
   every,
+  notDates,
   notNumbers,
+  otherOrder,
   trouble,
 } from "@renderer/chart/caption";
 import type { Heard } from "@renderer/charts";
 import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { MINUTE_MS } from "@renderer/timing";
-import { BARS, SCATTER } from "../charted.ts";
+import { BARS, ROOM, SCATTER, kindFor } from "../charted.ts";
 
 /** The sales export's rows, and how many of them a tally two fifths through has read. */
 const ROWS = 4812;
@@ -130,6 +132,57 @@ test("the caption counts the cells a tally left out as blank, in the language ch
   expect(blank(UNREAD)).toBe("");
 });
 
+/** What each language says of one date cell a chart could not read, and of LEFT_OUT. */
+const NOT_DATES: ReadonlyArray<[Locale, string, string]> = [
+  ["en-US", "1 not a date", "1,200 not dates"],
+  ["en-GB", "1 not a date", "1,200 not dates"],
+  ["es", "1 no es fecha", "1200 no son fechas"],
+  ["pt-BR", "1 não é data", "1.200 não são datas"],
+  ["pt-PT", "1 não é data", "1200 não são datas"],
+];
+
+/** An over-time chart's tally that could not read `unparsed` of its date cells. */
+const undated = (unparsed: number): TimeTally => ({
+  t: "time",
+  plot: { t: "time", at: { col: 0, header: "date" }, per: "auto", order: "month" },
+  coverage: { rows: LEFT_OUT, total: LEFT_OUT, complete: true },
+  levels: [],
+  undated: { rows: unparsed, sum: 0 },
+  dates: { blank: 0, unparsed, other: 0 },
+  skipped: { blank: 0, unparsed: 0 },
+});
+
+test("the caption counts the date cells an over-time chart could not read, one or more, in the language chosen", () => {
+  for (const [locale, one, more] of NOT_DATES) {
+    void setLocale(locale, { reload: false });
+    expect(notDates(undated(1)), locale).toBe(one);
+    expect(notDates(undated(LEFT_OUT)), locale).toBe(more);
+  }
+  expect(notDates(undated(0))).toBe("");
+  expect(notDates(leftOut(0, LEFT_OUT))).toBe("");
+});
+
+test("where some dates read only in the other order, the caption says how many and offers that order, in the language chosen", async () => {
+  // One date reads in no order, so the count of those that read day first says more than "not dates".
+  const misread = {
+    ...undated(LEFT_OUT + 1),
+    dates: { blank: 0, unparsed: LEFT_OUT + 1, other: LEFT_OUT },
+  };
+  const all = { ...misread, dates: { blank: 0, unparsed: LEFT_OUT, other: LEFT_OUT } };
+  expect(otherOrder(misread, "month")).toStrictEqual({
+    order: "day",
+    said: "1,200 read only day first",
+    button: "read day first",
+  });
+  expect(otherOrder(misread, "day")?.order).toBe("month");
+  expect(otherOrder(all, "month")?.said).toBe("");
+  expect(otherOrder(misread, "s")).toBeUndefined();
+  expect(otherOrder(undated(LEFT_OUT), "month")).toBeUndefined();
+  await setLocale("pt-BR", { reload: false });
+  expect(otherOrder(misread, "month")?.said).toBe("1.200 só se leem dia primeiro");
+  await setLocale(baseLocale, { reload: false });
+});
+
 /** What each language says of one cell that was not a number, and of LEFT_OUT. */
 const NOT_NUMBERS: ReadonlyArray<[Locale, string, string]> = [
   ["en-US", "1 not a number", "1,200 not numbers"],
@@ -173,42 +226,51 @@ const NO_POINTS: SampleTally = {
 const DRAWN = { ...tallyOf(ROWS, ROWS), groups: [{ value: "North", rows: ROWS, sum: 0 }] };
 
 test("the plot says it reads before the first tally, why it cannot read its column, with Edit chart, and that a tally has no values yet, in the language chosen", () => {
-  expect(body(BARS.plot, heardOf(undefined))).toStrictEqual({ words: `reading ${NAME}…` });
+  expect(body(kindFor(BARS.plot), heardOf(undefined), ROOM)).toStrictEqual({
+    words: `reading ${NAME}…`,
+  });
   const edit = { words: "Edit chart", opens: "form" };
   const gone = { words: `${NAME} has no column called region`, action: edit };
-  expect(body(BARS.plot, heardOf(UNREAD))).toStrictEqual(gone);
-  expect(body(BARS.plot, heardOf(tallyOf(ROWS, ROWS)))).toStrictEqual({
+  expect(body(kindFor(BARS.plot), heardOf(UNREAD), ROOM)).toStrictEqual(gone);
+  expect(body(kindFor(BARS.plot), heardOf(tallyOf(ROWS, ROWS)), ROOM)).toStrictEqual({
     words: "no values in region yet",
   });
-  expect(body(SCATTER.plot, heardOf(NO_POINTS))).toStrictEqual({
+  expect(body(kindFor(SCATTER.plot), heardOf(NO_POINTS), ROOM)).toStrictEqual({
     words: "no values in units, revenue yet",
   });
   // The column that has gone stands against a complete tally of before it went.
-  expect(body(BARS.plot, { ...heardOf(UNREAD), complete: DRAWN })).toStrictEqual(gone);
-  expect(body(BARS.plot, heardOf(DRAWN))).toBeUndefined();
+  expect(body(kindFor(BARS.plot), { ...heardOf(UNREAD), complete: DRAWN }, ROOM)).toStrictEqual(
+    gone,
+  );
+  expect(body(kindFor(BARS.plot), heardOf(DRAWN), ROOM)).toBeUndefined();
   void setLocale("es", { reload: false });
-  expect(body(BARS.plot, heardOf(undefined))).toStrictEqual({ words: `leyendo ${NAME}…` });
-  expect(body(BARS.plot, heardOf(tallyOf(ROWS, ROWS)))).toStrictEqual({
+  expect(body(kindFor(BARS.plot), heardOf(undefined), ROOM)).toStrictEqual({
+    words: `leyendo ${NAME}…`,
+  });
+  expect(body(kindFor(BARS.plot), heardOf(tallyOf(ROWS, ROWS)), ROOM)).toStrictEqual({
     words: "aún no hay valores en region",
   });
-  expect(body(BARS.plot, heardOf(UNREAD))?.action?.words).toBe("Editar gráfico");
+  expect(body(kindFor(BARS.plot), heardOf(UNREAD), ROOM)?.action?.words).toBe("Editar gráfico");
 });
 
 test("the plot says its source is missing or waits on its bucket, with Re-point or Connect, in the language chosen", () => {
   const missing = { ...heardOf(undefined), state: "missing" } as const;
   const waiting = { ...heardOf(undefined), state: "unconnected", bucket: "open-data" } as const;
-  expect(body(BARS.plot, missing)).toStrictEqual({
+  expect(body(kindFor(BARS.plot), missing, ROOM)).toStrictEqual({
     words: `${NAME} is missing`,
     action: { words: "Re-point", opens: "panel" },
   });
-  expect(body(BARS.plot, waiting)).toStrictEqual({
+  expect(body(kindFor(BARS.plot), waiting, ROOM)).toStrictEqual({
     words: "open-data is not connected",
     action: { words: "Connect open-data", opens: "panel" },
   });
   void setLocale("es", { reload: false });
   const repoint = { words: "Redirigir", opens: "panel" };
-  expect(body(BARS.plot, missing)).toStrictEqual({ words: `falta ${NAME}`, action: repoint });
-  expect(body(BARS.plot, waiting)).toStrictEqual({
+  expect(body(kindFor(BARS.plot), missing, ROOM)).toStrictEqual({
+    words: `falta ${NAME}`,
+    action: repoint,
+  });
+  expect(body(kindFor(BARS.plot), waiting, ROOM)).toStrictEqual({
     words: "open-data no está conectado",
     action: { words: "Conectar open-data", opens: "panel" },
   });

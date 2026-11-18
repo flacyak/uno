@@ -6,8 +6,8 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
-import type { Chart, Plot } from '@document';
-import { parsePlot } from '@document/codec';
+import type { Chart, Plot, TimePlot } from '@document';
+import { parseOverTime, parsePlot } from '@document/codec';
 
 const WHERE = 'books.uno: view/charts.json: chart 1 of 1';
 const PLOT = `${WHERE} (c1): plot`;
@@ -16,6 +16,9 @@ const REGION = { col: 1, header: 'region' };
 const REVENUE = { col: 4, header: 'revenue' };
 const UNITS = { col: 5, header: 'units' };
 const NO_HEADER = { col: 0, header: '' };
+const DATE = { col: 0, header: 'date' };
+const PERS = 'hour, day, week, month, quarter, year, auto';
+const ONE_READING = 'order or unit, one of the two, says how dates read';
 const PLACE = { x: 1, y: 0, width: 420, height: 260 };
 
 /** Revenue per region at the right edge, with the longest title and wait. */
@@ -37,8 +40,9 @@ describe('parsePlot', () => {
     { t: 'bars', by: REGION, sum: REVENUE },
     { t: 'pie', by: NO_HEADER },
     { t: 'scatter', x: REVENUE, y: UNITS },
-  ])('reads %j, and leaves out a key it does not know', (plot) => {
-    expect(parsePlot(PLOT, { ...plot, colour: 'teal' })).toStrictEqual(plot);
+    { t: 'time', at: DATE, sum: REVENUE, per: 'week', unit: 's' },
+  ])('reads %j', (plot) => {
+    expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });
 
   test.each<[unknown, string]>([
@@ -47,8 +51,52 @@ describe('parsePlot', () => {
     [{ t: 'bars', by: { col: -1 } }, 'by: col is not a column number'],
     [{ t: 'pie', by: REGION, sum: { col: 4 } }, 'sum: header is not text'],
     [{ t: 'scatter', x: REVENUE }, 'y: col is not a column number'],
+    [
+      { t: 'bars', by: REGION, colour: 'teal' },
+      'this build does not read "colour"',
+    ],
+    [{ t: 'pie', by: REGION, x: REVENUE }, 'this build does not read "x"'],
+    [
+      { t: 'scatter', x: REVENUE, y: UNITS, by: REGION },
+      'this build does not read "by"',
+    ],
+    [
+      { t: 'time', at: DATE, per: 'day', order: 'day', by: REGION },
+      'this build does not read "by"',
+    ],
+    [{ t: 'time', at: DATE, per: 'day' }, ONE_READING],
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parsePlot(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
+  });
+});
+
+describe('parseOverTime', () => {
+  test.each<TimePlot>([
+    { t: 'time', at: DATE, per: 'auto', order: 'month' },
+    { t: 'time', at: DATE, sum: REVENUE, per: 'quarter', order: 'day' },
+    { t: 'time', at: DATE, per: 'hour', unit: 'ms' },
+  ])('reads %j', (plot) => {
+    expect(parseOverTime(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'time', per: 'day', order: 'day' }, 'at: col is not a column number'],
+    [{ t: 'time', at: DATE, order: 'day' }, `per is not one of ${PERS}`],
+    [
+      { t: 'time', at: DATE, per: 'fortnight', order: 'day' },
+      `per is not one of ${PERS}`,
+    ],
+    [
+      { t: 'time', at: DATE, per: 'day', order: 'either' },
+      'order is not day or month',
+    ],
+    [{ t: 'time', at: DATE, per: 'day', unit: 'us' }, 'unit is not s or ms'],
+    [{ t: 'time', at: DATE, per: 'day' }, ONE_READING],
+    [{ t: 'time', at: DATE, per: 'day', order: 'day', unit: 's' }, ONE_READING],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseOverTime(PLOT, plot)).toThrow(
+      new Error(`${PLOT}: ${said}`),
+    );
   });
 });
 
