@@ -13,8 +13,8 @@
  * app's language.
  */
 
-import type { ChartColumn, Plot } from "@document";
-import type { Groups, Sample } from "@engine";
+import type { ChartColumn, Plot, StackPlot } from "@document";
+import type { Groups, Sample, StackTally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Press } from "@renderer/keys";
 import { columnLabel, unnamed } from "@renderer/grid/rows";
@@ -24,6 +24,7 @@ import { el } from "@renderer/shell/util";
 import type { TimeLevel } from "@tally";
 import { fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
+import { keyOf } from "./stack.ts";
 import type { Room } from "./place.ts";
 
 /**
@@ -264,6 +265,64 @@ export function periodTargets(level: TimeLevel, summed: boolean, box: HTMLElemen
     return { mark: slot, at: slot.firstElementChild!, front: false, key: ACCENT, said };
   });
   return { all, under: among(all, ".chart-period") };
+}
+
+/**
+ * stackTargets gives the targets of `box`, as stack drew `tally` for `plot`:
+ * each segment, value by value and in slot order within a value. Its box lists
+ * the value's series in slot order, then Other and the total, the segment's
+ * own line apart. The keys step through them in that order. A pointer over a
+ * row's label or its value is over its nearest segment.
+ */
+export function stackTargets(plot: StackPlot, tally: StackTally, box: HTMLElement): Targets {
+  const measure = (m: { rows: number; sum: number }): number =>
+    plot.sum === undefined ? m.rows : m.sum;
+  const slotOf = (segment: Element): number => Number((segment as HTMLElement).dataset["slot"]);
+  const rows = [...box.querySelectorAll(".chart-bar-row")].map((row) =>
+    [...row.querySelectorAll(".chart-segment")].sort((a, b) => slotOf(a) - slotOf(b)),
+  );
+  const said = (r: number, own: number) => (): Reading[] => {
+    const v = tally.values[r]!;
+    const series = tally.series.length;
+    const parts = [...v.cells, v.other].map((cell, slot) => ({ cell, slot }));
+    const read = parts
+      .filter(({ cell }) => measure(cell) !== 0)
+      .map(({ cell, slot }) => ({
+        value: num(measure(cell)),
+        label: slot < series ? named(tally.series[slot]!) : el("span", "", m.chart_pie_other()),
+        key: keyOf(slot, series),
+        own: slot === own,
+      }));
+    return [
+      ...read,
+      { value: num(measure(v.total)), label: el("span", "", m.chart_stack_total()) },
+    ];
+  };
+  const all: Target[] = rows.flatMap((segments, r) =>
+    segments.map((segment) => ({
+      mark: segment,
+      at: segment,
+      front: false,
+      key: (segment as HTMLElement).style.getPropertyValue("--key"),
+      lines: true,
+      said: said(r, slotOf(segment)),
+    })),
+  );
+  const under = (hit: EventTarget | null, x: number): number | undefined => {
+    const segment = hit instanceof Element ? hit.closest(".chart-segment") : null;
+    const by = all.findIndex((target) => target.mark === segment);
+    if (by !== -1) return by;
+    const row = hit instanceof Element ? hit.closest(".chart-bar-row") : null;
+    const r = [...box.querySelectorAll(".chart-bar-row")].indexOf(row as Element);
+    if (r === -1 || rows[r]!.length === 0) return undefined;
+    const apart = (s: Element) => {
+      const { left, right } = s.getBoundingClientRect();
+      return Math.max(left - x, x - right, 0);
+    };
+    const near = rows[r]!.reduce((best, s, i) => (apart(s) < apart(rows[r]![best]!) ? i : best), 0);
+    return all.findIndex((target) => target.mark === rows[r]![near]);
+  };
+  return { all, under };
 }
 
 /** A point in the page, or in the window's own px. */

@@ -10,6 +10,7 @@ import { m } from "@paraglide/messages";
 import { fitTips } from "../bars.ts";
 import type { ChartKind } from "../kind.ts";
 import { stack as drawStack } from "../stack.ts";
+import { stackTargets } from "../tooltip.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -31,5 +32,6 @@ export const stack: ChartKind<StackPlot> = (plot) => ({
           empty: tally.values.length === 0,
           draw: (height) => drawStack(plot, tally, height, room),
           fit: fitTips,
+          targets: (drawn) => stackTargets(plot, tally, drawn),
         },
 });

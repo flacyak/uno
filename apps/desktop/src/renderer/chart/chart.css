@@ -766,6 +766,17 @@
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
+/* A stack's segment under the cursor moves the same fifth of the way from
+ * its own colour to the ink, over the same wash across its row. */
+.chart-bar-row:has(.chart-segment.cursor) {
+  border-radius: 4px;
+  background: var(--accent-b);
+}
+
+.chart-segment.cursor {
+  background: color-mix(in srgb, var(--key) 80%, var(--ink)) padding-box;
+}
+
 .chart-period.cursor {
   border-radius: 4px;
   background: var(--accent-b);
@@ -895,6 +906,10 @@
 
   .chart-slice-gap.covers {
     visibility: visible;
+  }
+
+  .chart-segment.cursor {
+    background: Highlight padding-box;
   }
 
   .chart-bar-row.cursor .chart-bar,

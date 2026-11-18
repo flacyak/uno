@@ -34,6 +34,7 @@ export const SEGMENT_GAP = 2;
 interface Part {
   key: string;
   size: number;
+  slot: number;
 }
 
 /** keyOf gives what slot `i` wears: its chart colour, or Other's past the last. */
@@ -90,9 +91,10 @@ export function stack(
   const { shown, lines } = ranked(asGroups(tally), height - keys.height);
   const series = tally.series.length;
   const drawn = tally.values.slice(0, shown.length).map((v: SplitValue) => {
-    const parts = [...v.cells, v.other].map((cell, i): Part => ({
-      key: keyOf(i, series),
+    const parts = [...v.cells, v.other].map((cell, slot): Part => ({
+      key: keyOf(slot, series),
       size: measure(cell),
+      slot,
     }));
     const net = measure(v.total);
     const above = parts.filter(({ size }) => size > 0);
@@ -119,12 +121,13 @@ export function stack(
       [under, "under"],
     ] as const) {
       let from = 0;
-      for (const [i, { key, size }] of parts.entries()) {
+      for (const [i, { key, size, slot }] of parts.entries()) {
         const segment = el("div", `chart-segment ${side}`);
         // A part under zero gives the gap at zero where parts above meet it.
         segment.classList.toggle("after", i > 0 || (side === "under" && above.length > 0));
         segment.classList.toggle("end", i === parts.length - 1);
         segment.style.setProperty("--key", key);
+        segment.dataset["slot"] = String(slot);
         segment.style.setProperty("--from", share(from));
         segment.style.setProperty("--part", share(Math.abs(size)));
         from += Math.abs(size);

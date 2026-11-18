@@ -10,12 +10,13 @@
 
 import { afterEach, expect, test } from "vite-plus/test";
 
-import type { Group, Groups, GroupsTally, Sample, SampleTally } from "@engine";
+import type { Group, Groups, GroupsTally, Sample, SampleTally, StackTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { bars } from "@renderer/chart/bars";
 import { pie } from "@renderer/chart/pie";
 import { scatter } from "@renderer/chart/scatter";
+import { stack } from "@renderer/chart/stack";
 import {
   HIT_RADIUS,
   NONE,
@@ -24,6 +25,7 @@ import {
   Tooltip,
   barTargets,
   pointTargets,
+  stackTargets,
   sliceTargets,
   stood,
 } from "@renderer/chart/tooltip";
@@ -495,4 +497,82 @@ test("the keys a drawing steps itself go where it says, and the rest where STEPS
   expect(plot.getAttribute("aria-keyshortcuts")).toBe(
     "ArrowRight ArrowLeft Home End ArrowDown ArrowUp",
   );
+});
+
+/** Rows per region by channel: North in web, direct and Other, South in direct alone. */
+const STACKED = {
+  t: "stack",
+  by: { col: 1, header: "region" },
+  split: { col: 3, header: "channel" },
+} as const;
+const STACKS: StackTally = {
+  t: "stack",
+  plot: STACKED,
+  coverage: { rows: 12, total: 12, complete: true },
+  series: ["web", "direct"],
+  values: [
+    {
+      value: "North",
+      cells: [
+        { rows: 4, sum: 0 },
+        { rows: 3, sum: 0 },
+      ],
+      other: { rows: 2, sum: 0 },
+      total: { rows: 9, sum: 0 },
+    },
+    {
+      value: "South",
+      cells: [
+        { rows: 0, sum: 0 },
+        { rows: 3, sum: 0 },
+      ],
+      other: { rows: 0, sum: 0 },
+      total: { rows: 3, sum: 0 },
+    },
+  ],
+  others: { values: 0, rows: 0, sum: 0 },
+  below: { values: 0, rows: 0, sum: 0 },
+  rest: { rows: 0, sum: 0 },
+  unsplit: 0,
+  skipped: { blank: 0, unparsed: 0 },
+};
+
+test("a stack's segment says its value's every series in slot order, then Other and the total, its own line apart", () => {
+  const { tip } = over(stack(STACKED, STACKS, TALL, { ...PLOT_ROOM, width: 2_000 }), (box) =>
+    stackTargets(STACKED, STACKS, box),
+  );
+  tip.step(pressed("ArrowRight"));
+  tip.step(pressed("ArrowRight"));
+  const lines = [...tip.box.querySelectorAll(".chart-tip-line")];
+  expect(lines.map((line) => line.textContent)).toStrictEqual([
+    "4 web",
+    "3 direct",
+    "2 Other",
+    "9 total",
+  ]);
+  expect(lines.map((line) => line.classList.contains("own"))).toStrictEqual([
+    false,
+    true,
+    false,
+    false,
+  ]);
+  const keyed = lines.map((line) =>
+    line.querySelector<HTMLElement>(".chart-tip-key")!.style.getPropertyValue("--key"),
+  );
+  expect(keyed).toStrictEqual(["var(--chart-1)", "var(--chart-2)", "var(--ink-3)", ""]);
+});
+
+test("the keys step a stack's segments value by value in slot order, and a pointer on a row's label is over its nearest segment", () => {
+  const { tip } = over(stack(STACKED, STACKS, TALL, { ...PLOT_ROOM, width: 2_000 }), (box) =>
+    stackTargets(STACKED, STACKS, box),
+  );
+  const segments = [...document.querySelectorAll(".chart-segment")];
+  const worn = () => segments.findIndex((s) => s.classList.contains("cursor"));
+  tip.step(pressed("End"));
+  expect(worn()).toBe(3);
+  tip.step(pressed("ArrowLeft"));
+  expect(worn()).toBe(2);
+  const label = document.querySelectorAll(".chart-bar-label")[1]!;
+  label.dispatchEvent(new PointerEvent("pointermove", { clientX: 0, clientY: 0, bubbles: true }));
+  expect(worn()).toBe(3);
 });

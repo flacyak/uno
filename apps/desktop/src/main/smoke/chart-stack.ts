@@ -5,7 +5,8 @@
  * from the one before, as thick as a bar and ending where the next begins,
  * with the value's total past the last. A part below zero stacks leftward
  * from the same zero. A legend over the bars keys the series in the same
- * colours and order, clear of the first bar and inside the plot.
+ * colours and order, clear of the first bar and inside the plot. The pointer
+ * on a segment lists its value's series in its box, its own apart.
  *
  * They open the workspace smoke.js wrote of a small export of four regions'
  * sales in eight channels: rows per region by channel in a new window, and
@@ -28,6 +29,19 @@ const STACKED = process.env["UNO_SMOKE_STACKED"] ?? "";
 const STACKED_REGIONS = ["West", "East", "South", "North"];
 const STACKED_SEGMENTS = SERIES_AT_MOST + 1;
 
+/** The rows window's East bar's second segment, direct, under the pointer. */
+const EAST_DIRECT = ".chart .chart-bar-row:nth-child(2) .chart-segment:nth-child(2)";
+/** What its box says, line by line: East's rows per channel, then Other and the total. */
+const EAST_LINES = [
+  "10 web",
+  "9 direct",
+  "8 partner",
+  "7 mail",
+  "6 phone",
+  "5 shop",
+  "7 Other",
+  "52 total",
+];
 export const CHART_STACK: Check[] = [
   {
     name: "a stacked chart draws each value's bar as a segment per series in slot order, then Other, each in its colour, a gap from the one before, as thick as a bar, with its total at the tip",
@@ -123,6 +137,34 @@ export const CHART_STACK: Check[] = [
         if (rect(list).bottom > bar.top + ${RECT_SLACK}) return "the legend runs to " + rect(list).bottom + " over a bar at " + bar.top;
       }
       return "";
+    `,
+  },
+  {
+    name: "the pointer on a stack's segment lists its value's series in its box, its own line apart, and the segment darkens over a wash of its row",
+    click: { selector: EAST_DIRECT },
+    shot: "chart-stack-tip",
+    script: `
+      const style = (at) => getComputedStyle(at);
+      const computed = (colour) => {
+        const probe = document.createElement("div");
+        probe.style.color = colour;
+        document.body.append(probe);
+        const worn = style(probe).color;
+        probe.remove();
+        return worn;
+      };
+      const win = document.querySelector(".chart");
+      const segment = document.querySelector(${JSON.stringify(EAST_DIRECT)});
+      if (!(await until(() => segment.classList.contains("cursor")))) return "East's direct wears no cursor";
+      const lines = [...win.querySelectorAll(".chart-tip-line")];
+      const said = lines.map((line) => line.textContent);
+      if (said.join(" | ") !== ${JSON.stringify(EAST_LINES.join(" | "))}) return "the box says " + said.join(" | ");
+      const own = lines.findIndex((line) => line.classList.contains("own"));
+      if (own !== 1) return "the box's own line is " + own;
+      const darker = computed("color-mix(in srgb, var(--chart-2) 80%, var(--ink))");
+      if (style(segment).backgroundColor !== darker) return "the segment is " + style(segment).backgroundColor;
+      const row = segment.closest(".chart-bar-row");
+      return style(row).backgroundColor === computed("var(--accent-b)") ? "" : "the row is " + style(row).backgroundColor;
     `,
   },
 ];
