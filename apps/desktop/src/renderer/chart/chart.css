@@ -837,6 +837,35 @@
   color: var(--ink-3);
 }
 
+/* A box that says each reading on a line of its own, as a stack's bar's
+ * series, keys each line in its colour instead of the box, and says the
+ * mark's own line in the value's ink. */
+.chart-tip.lines > .chart-tip-key {
+  display: none;
+}
+
+.chart-tip.lines .chart-tip-words {
+  display: grid;
+  grid-template-columns: var(--key-length) auto minmax(0, 1fr);
+  gap: 4px 6px;
+  align-items: center;
+}
+
+.chart-tip-line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.chart-tip-line .chart-tip-value {
+  text-align: right;
+}
+
+.chart-tip-line.own .chart-tip-label {
+  color: var(--ink);
+}
+
 /* A forced palette would take the marks' colour away, so they wear the text's,
  * and a pie's slices, its thinnest too, stand apart by the page's. */
 @media (forced-colors: active) {

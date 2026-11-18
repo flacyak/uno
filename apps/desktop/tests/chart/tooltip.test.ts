@@ -428,3 +428,71 @@ test("a tap puts the cursor on a mark, and a finger lifting off leaves it there,
   plot.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
   expect([shown(tip)[0], ...cursors()]).toStrictEqual([false, false, false, false]);
 });
+
+/** Four marks in two rows of two, keyed, whose box says each reading on a line, as a stack's bar's. */
+function grid(): { tip: Tooltip; plot: HTMLElement; marks: HTMLElement[] } {
+  const drawn = el("div");
+  const marks = [0, 1, 2, 3].map((i) => {
+    const mark = el("div", "mark");
+    laidOut(mark, new DOMRect(BAR.left, BAR.top + i * BAR_PITCH, BAR.width, BAR.height));
+    drawn.append(mark);
+    return mark;
+  });
+  const keys = ["var(--chart-1)", "var(--chart-2)"];
+  const all = marks.map((mark, i) => ({
+    mark,
+    at: mark,
+    front: false,
+    key: keys[i % 2]!,
+    lines: true,
+    said: () =>
+      keys.map((key, j) => ({
+        value: `${i}${j}`,
+        label: el("span", "", `s${j}`),
+        key,
+        own: j === i % 2,
+      })),
+  }));
+  // Down and Up step a row, keeping the column.
+  const step = (key: string, at: number | undefined) => {
+    if (key === "ArrowDown") return at === undefined ? 0 : Math.min(at + 2, 3);
+    if (key === "ArrowUp") return at === undefined ? 3 : Math.max(at - 2, 0);
+    return undefined;
+  };
+  const laid = over(drawn, () => ({
+    all,
+    under: () => undefined,
+    step,
+    keys: ["ArrowDown", "ArrowUp"],
+  }));
+  return { ...laid, marks };
+}
+
+test("a mark whose box says its readings on lines keys each line in its colour, its own line apart, and hides the box's key", () => {
+  const { tip } = grid();
+  tip.step(pressed("ArrowRight"));
+  expect(tip.box.classList.contains("lines")).toBe(true);
+  const lines = [...tip.box.querySelectorAll(".chart-tip-line")];
+  expect(lines.map((line) => line.textContent)).toStrictEqual(["00 s0", "01 s1"]);
+  expect(lines.map((line) => line.classList.contains("own"))).toStrictEqual([true, false]);
+  const keyed = lines.map((line) =>
+    line.querySelector<HTMLElement>(".chart-tip-key")!.style.getPropertyValue("--key"),
+  );
+  expect(keyed).toStrictEqual(["var(--chart-1)", "var(--chart-2)"]);
+});
+
+test("the keys a drawing steps itself go where it says, and the rest where STEPS says, and the plot names them all", () => {
+  const { tip, plot, marks } = grid();
+  const worn = () => marks.findIndex((mark) => mark.classList.contains("cursor"));
+  expect(tip.step(pressed("ArrowDown"))).toBe(true);
+  expect(worn()).toBe(0);
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(2);
+  tip.step(pressed("ArrowRight"));
+  expect(worn()).toBe(3);
+  tip.step(pressed("ArrowUp"));
+  expect(worn()).toBe(1);
+  expect(plot.getAttribute("aria-keyshortcuts")).toBe(
+    "ArrowRight ArrowLeft Home End ArrowDown ArrowUp",
+  );
+});

@@ -83,6 +83,10 @@ type Scatter = Extract<Plot, { t: "scatter" }>;
 export interface Reading {
   value: string;
   label: Node;
+  /** The colour of what it is of, where the box says each reading on a line. */
+  key?: string;
+  /** Whether it is the mark's own reading among its neighbours'. */
+  own?: boolean;
 }
 
 /** A mark a person can point at or step to. */
@@ -97,6 +101,8 @@ export interface Target {
   key: string;
   /** What the mark is worth, read when the box says it. */
   said: () => Reading[];
+  /** Whether the box says each reading on a line of its own, keyed, as a stack's bar. */
+  lines?: boolean;
 }
 
 /** The marks of a drawing, in the order the keys step through them. */
@@ -107,6 +113,13 @@ export interface Targets {
    * over, or none.
    */
   under: (hit: EventTarget | null, x: number, y: number) => number | undefined;
+  /**
+   * step gives where `key` takes the cursor from `at`, for marks laid out in
+   * rows and columns, or none for a key it leaves to STEPS.
+   */
+  step?: (key: string, at: number | undefined) => number | undefined;
+  /** The keys `step` takes past STEPS', which the plot names for a screen reader. */
+  keys?: readonly string[];
 }
 
 /** The marks of nothing a pointer can point at. */
@@ -297,7 +310,7 @@ export class Tooltip {
   private cursor: { at: number; point?: Point } | undefined;
 
   constructor(
-    plot: HTMLElement,
+    private readonly plot: HTMLElement,
     private readonly within: HTMLElement,
     id: string,
   ) {
@@ -325,6 +338,10 @@ export class Tooltip {
    */
   show(targets: Targets): void {
     this.targets = targets;
+    this.plot.setAttribute(
+      "aria-keyshortcuts",
+      [...STEPS.keys(), ...(targets.keys ?? [])].join(" "),
+    );
     const count = targets.all.length;
     const point = this.cursor?.point;
     if (point !== undefined) this.hover(document.elementFromPoint(point.x, point.y), point);
@@ -338,7 +355,8 @@ export class Tooltip {
    */
   step(press: Press): boolean {
     const last = this.targets.all.length - 1;
-    const to = STEPS.get(press.key)?.(this.cursor?.at, last);
+    const at = this.cursor?.at;
+    const to = this.targets.step?.(press.key, at) ?? STEPS.get(press.key)?.(at, last);
     if (to === undefined || last < 0 || press.ctrl || press.alt || press.meta || press.shift) {
       return false;
     }
@@ -390,14 +408,24 @@ export class Tooltip {
     );
   }
 
-  /** say writes `target`'s key and its readings in the box, each value strong before its label. */
-  private say({ key, said }: Target): void {
+  /**
+   * say writes `target`'s key and its readings in the box, each value strong
+   * before its label, on one line, or each on a line of its own after its key.
+   */
+  private say({ key, said, lines = false }: Target): void {
     this.key.style.setProperty("--key", key);
+    this.box.classList.toggle("lines", lines);
     this.words.replaceChildren(
-      ...said().flatMap(({ value, label }, i) => {
+      ...said().flatMap(({ value, label, key: of, own = false }, i) => {
         const muted = el("span", "chart-tip-label");
         muted.append(label);
-        return [...(i > 0 ? [SEP] : []), el("strong", "chart-tip-value", value), " ", muted];
+        const read = [el("strong", "chart-tip-value", value), " ", muted];
+        if (!lines) return [...(i > 0 ? [SEP] : []), ...read];
+        const line = el("span", own ? "chart-tip-line own" : "chart-tip-line");
+        const swatch = el("span", "chart-tip-key");
+        if (of !== undefined) swatch.style.setProperty("--key", of);
+        line.append(swatch, ...read);
+        return [line];
       }),
     );
   }
