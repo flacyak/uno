@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#
+# Starts the checkout's own Electron with no screen, so a run through
+# scripts/bounded.sh opens no window. Electron's npm package starts this file
+# in place of its binary, because bounded.sh names this folder in
+# ELECTRON_OVERRIDE_DIST_PATH.
+
+set -euo pipefail
+
+readonly BINARY=node_modules/electron/dist/electron
+# Chromium's headless backend holds a window to a 640x400 screen unless told
+# otherwise, and a smoke's checks need the window size they ask for.
+readonly SCREEN_SIZE=1920,1200
+
+dir="${PWD}"
+until [[ -x "${dir}/${BINARY}" ]]; do
+  if [[ "${dir}" == / ]]; then
+    echo "headless-electron: no ${BINARY} at or above ${PWD}" >&2
+    exit 127
+  fi
+  dir="$(dirname "${dir}")"
+done
+
+exec "${dir}/${BINARY}" --ozone-platform=headless \
+  "--ozone-override-screen-size=${SCREEN_SIZE}" "$@"

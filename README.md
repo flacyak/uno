@@ -44,3 +44,14 @@ scripts/gate.sh 2          # the stack's top and before handing back: check, the
 Run a gate as a command of its own, never chained after another.
 The smoke's groups and what each file touches are in `apps/desktop/smoke-groups.json`; `vp run smoke -- --affected <base>` picks them, and `UNO_SMOKE_ONLY=charts,chart-pie vp run smoke` names them.
 `core/scripts/timings.ts` runs the full gate and writes where its time went.
+
+When several of these run at once on one machine, from several worktrees or agents, put each behind `scripts/bounded.sh`:
+
+```bash
+scripts/bounded.sh -- vp run test     # waits its turn, on half the CPUs, and leaves nothing running
+scripts/bounded.sh status             # what is running, and where
+scripts/bounded.sh reap --orphans     # stop what dead or unbounded runs left
+```
+
+Every copy of the script shares one queue, so a run from an older branch's copy still waits its turn.
+The top of the script says what it limits and how to change the limits.
