@@ -13,7 +13,10 @@ import {
   GROUPS_SENT,
   LABEL_AT_MOST,
 } from './groups.ts';
+import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
+import { isCount, isMark, isRecord } from './saved.ts';
+import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
 
 /**
@@ -184,6 +187,53 @@ export class SplitFold {
     };
   }
 
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none: a
+   * field out of range, more groups, cells or totals than the bounds hold, a
+   * key twice, or an empty cell, group or total, which the fold deletes.
+   */
+  static restored(saved: unknown): SplitFold | undefined {
+    if (!isRecord(saved)) return undefined;
+    const { mark, groups, totals } = saved;
+    const skipped = restoredSkipped(saved['skipped']);
+    if (skipped === undefined || (mark !== undefined && !isMark(mark)))
+      return undefined;
+    const fold = mark === undefined ? new SplitFold() : new SplitFold(mark);
+    const summed = mark !== undefined;
+    const tally = (v: unknown, into: Count) =>
+      isRecord(v) && restoredCell([v['rows'], v['sum']], summed, into);
+    const cells = (v: unknown, into: Map<string, Count>) =>
+      Array.isArray(v) &&
+      v.length <= DISTINCT_AT_MOST &&
+      v.every((c: unknown) => {
+        const [series, ...count]: unknown[] = Array.isArray(c) ? c : [];
+        const cell = new Count();
+        if (typeof series !== 'string' || into.has(series)) return false;
+        into.set(series, cell);
+        return restoredCell(count, summed, cell) && cell.rows > 0;
+      });
+    if (!Array.isArray(groups) || groups.length > DISTINCT_AT_MOST)
+      return undefined;
+    for (const g of groups as unknown[]) {
+      const group = new Group();
+      if (!isRecord(g) || typeof g['value'] !== 'string') return undefined;
+      if (fold.groups.has(g['value'])) return undefined;
+      if (!cells(g['cells'], group.cells)) return undefined;
+      if (!tally(g['unsplit'], group.unsplit)) return undefined;
+      if (group.cells.size === 0 && group.unsplit.rows === 0) return undefined;
+      fold.groups.set(g['value'], group);
+      fold.pairs += group.cells.size;
+    }
+    const whole =
+      fold.pairs <= PAIRS_AT_MOST &&
+      cells(totals, fold.totals) &&
+      tally(saved['rest'], fold.rest) &&
+      tally(saved['totalsRest'], fold.totalsRest);
+    if (!whole) return undefined;
+    Object.assign(fold.skipped, skipped);
+    return fold;
+  }
+
   /** snapshot reads the fold as plain numbers and strings. */
   snapshot(): Split {
     const size = (m: Measured) => (this.mark === undefined ? m.rows : m.sum);
@@ -247,6 +297,24 @@ function merged(counts: Count[]): Measured {
 function tallied(to: Count, x: number | undefined, sign: 1 | -1): void {
   to.rows += sign;
   if (x !== undefined) to.sum.add(sign * x);
+}
+
+/**
+ * restoredCell reads a saved count into `into`, and says whether it is one:
+ * whole rows, and where the fold sums, an exact sum.
+ */
+function restoredCell(
+  [rows, sum]: unknown[],
+  summed: boolean,
+  into: Count,
+): boolean {
+  if (!isCount(rows)) return false;
+  into.rows = rows;
+  if (!summed) return true;
+  const restored = ExactSum.restored(sum);
+  if (restored === undefined) return false;
+  into.sum = restored;
+  return true;
 }
 
 /** roomIn says whether a key first seen gets a place, by GroupsFold's rule. */

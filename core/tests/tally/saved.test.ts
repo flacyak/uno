@@ -13,6 +13,7 @@ import {
   ExactSum,
   GroupsFold,
   HELD_AT_MOST,
+  PAIRS_AT_MOST,
   SampleFold,
   SplitFold,
   TALLY_VERSION,
@@ -182,6 +183,91 @@ test('a split fold saves each count in the order it began, with its exact sum', 
     totalsRest: { rows: 0 },
     skipped: { blank: 0, unparsed: 0 },
   });
+});
+
+test('a split fold read back from its save folds on as the fold it was', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const values = ['', 'East', 'West', 'North America'];
+    const series = ['', 'web', 'direct'];
+    const rows = Array.from({ length: DRAWS }, (): [string, string, string] => [
+      pick(values),
+      pick(series),
+      pick(CELLS),
+    ]);
+    for (const make of [
+      () => new SplitFold(),
+      () => new SplitFold('point'),
+      () => new SplitFold('comma'),
+    ]) {
+      // An edit takes the first row back before the save, and puts it back
+      // after it.
+      const first = (fold: SplitFold) => {
+        for (const r of rows.slice(0, HALF)) fold.add(...r);
+        fold.remove(...rows[0]!);
+      };
+      const then = (fold: SplitFold) => {
+        for (const r of rows.slice(HALF)) fold.add(...r);
+        fold.add(...rows[0]!);
+      };
+      const [whole, before] = [make(), make()];
+      first(whole);
+      then(whole);
+      first(before);
+      const saved = JSON.stringify(before.saved());
+      const after = SplitFold.restored(JSON.parse(saved))!;
+      expect(JSON.stringify(after.saved()), `seed ${seed}`).toBe(saved);
+      then(after);
+      expect(after.saved(), `seed ${seed}`).toStrictEqual(whole.saved());
+      expect(after.snapshot(), `seed ${seed}`).toStrictEqual(whole.snapshot());
+    }
+  }
+});
+
+test('a split fold past PAIRS_AT_MOST reads back with its unsplit rows', () => {
+  const fold = new SplitFold('point');
+  const each = PAIRS_AT_MOST / 2;
+  for (const value of ['a', 'b']) {
+    for (let i = 0; i < each; i++) fold.add(value, `${i}`, '1');
+  }
+  fold.add('a', 'late', '2');
+  const after = SplitFold.restored(throughJson(fold.saved()))!;
+  // A place freed goes to a value with no unsplit rows, after as before.
+  for (const f of [fold, after]) {
+    f.remove('b', '0', '1');
+    f.add('a', 'later', '3');
+    f.add('b', 'later', '4');
+  }
+  expect(after.saved()).toStrictEqual(fold.saved());
+  expect(after.snapshot().unsplit).toBe(2);
+});
+
+test('a save that holds no split fold reads back as none', () => {
+  const fold = new SplitFold('point');
+  fold.add('East', 'web', '1');
+  const saved = fold.saved();
+  const [group] = saved.groups;
+  const cell = group!.cells[0]!;
+  const unsaved = [
+    undefined,
+    { ...saved, mark: 'dot' },
+    { ...saved, skipped: { blank: -1, unparsed: 0 } },
+    { ...saved, rest: { rows: 1 } },
+    { ...saved, totalsRest: undefined },
+    { ...saved, groups: [group, group] },
+    { ...saved, groups: [{ ...group, cells: [cell, cell] }] },
+    { ...saved, groups: [{ ...group, cells: [] }] },
+    { ...saved, groups: [{ ...group, cells: [['web', 0, cell[2]]] }] },
+    { ...saved, groups: [{ ...group, cells: [['web', 1]] }] },
+    { ...saved, totals: [[1, 1, cell[2]]] },
+    {
+      ...saved,
+      totals: Array.from({ length: DISTINCT_AT_MOST + 1 }, () => cell),
+    },
+  ];
+  for (const v of unsaved) expect(SplitFold.restored(v)).toBeUndefined();
+  expect(SplitFold.restored(throughJson(saved))).toBeDefined();
 });
 
 /** Blocks a page of a scatter's least and most holds, and rows a block. */
