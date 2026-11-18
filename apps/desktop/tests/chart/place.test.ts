@@ -215,6 +215,22 @@ test("a tucked window is its head, at the room's width, stacked in list order", 
   expect(stackHeight(3, HEAD, BORDER)).toBe(rect.y + rect.height);
 });
 
+test("tucked heads under the window's × stand short of it, each as wide, its × a gap clear", () => {
+  const room = { w: ZOOMED, h: ROOM.h };
+  const corner = cornerOf(room);
+  const heads = [0, 1, 2].map((index) => tucked(index, HEAD, BORDER, room, corner));
+  for (const head of heads) expect([head.x, head.width]).toEqual([0, room.w - CORNER]);
+  const [top] = heads;
+  const xRight = top!.x + top!.width - corner.inset;
+  expect(corner.cross.x - xRight).toBe(GAP);
+});
+
+test("tucked heads below a banner, clear of the window's ×, stand at the room's width", () => {
+  const room = { w: ZOOMED, h: ROOM.h };
+  const below = { ...cornerOf(room), cross: { ...cornerOf(room).cross, y: -ROOM.h } };
+  expect(tucked(0, HEAD, BORDER, room, below).width).toBe(room.w);
+});
+
 test("a new window goes at the top of the half away from the selected column", () => {
   const right = placed(fresh(0, columnAt(0), ROOM), ROOM);
   expect([right.y, right.width, right.height]).toEqual([0, DEFAULT_WIDTH, DEFAULT_HEIGHT]);

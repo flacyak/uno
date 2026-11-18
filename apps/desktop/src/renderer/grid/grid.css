@@ -34,6 +34,8 @@
  * inside its left border, the width the × centres in. */
 #content {
   position: relative;
+  /* How far a cell's text stands in from its borders. */
+  --cell-pad: 11px;
 }
 
 .win-sheet:has(> .banner[hidden]):has(+ .win-side > .panel[hidden]) #content::after {
@@ -48,6 +50,22 @@
   background: var(--sunken);
   border-left: min(1px, var(--corner)) solid var(--rule-2);
   border-bottom: min(1px, var(--corner)) solid var(--rule);
+}
+
+/* A header that scrolls under the patch fades out before its left border, so
+ * the × reads as standing beside it. The fade stops on the header row's rule,
+ * and is as wide as the last header keeps clear before the patch, so that
+ * header's text stays whole. A page with no × sets `--corner` to 0, and the
+ * fade goes with it. */
+.win-sheet:has(> .banner[hidden]):has(+ .win-side > .panel[hidden]) #content::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: calc(var(--corner) + min(1px, var(--corner)));
+  z-index: 4;
+  width: calc(min(var(--cell-pad), var(--corner)) - min(1px, var(--corner)));
+  height: calc(var(--row-h) - 1px);
+  background: linear-gradient(to right, transparent, var(--sunken));
 }
 
 /* The sizer is as tall as the whole sheet. The table inside holds only the
@@ -75,7 +93,7 @@ table.grid th,
 table.grid td {
   border-right: 1px solid var(--rule-2);
   border-bottom: 1px solid var(--rule-2);
-  padding: 0 11px;
+  padding: 0 var(--cell-pad);
   height: var(--row-h);
   text-align: left;
   white-space: nowrap;
@@ -97,9 +115,9 @@ table.grid thead th {
 
 /* Extra right padding on the last header cell so its text clears the
  * corner. A page with no × sets `--corner` to 0, and the cell keeps its
- * own 11px. */
+ * own padding. */
 .win-sheet:has(> .banner[hidden]):has(+ .win-side > .panel[hidden]) table.grid thead th:last-child {
-  padding-right: calc(11px + max(0px, var(--corner) - var(--bar)));
+  padding-right: calc(var(--cell-pad) + max(0px, var(--corner) - var(--bar)));
 }
 
 /* Gutter width from `--gutter-digits`, set by the grid from the row

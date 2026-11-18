@@ -301,7 +301,9 @@ export const GEOMETRY = `
   const edges = (at) => [at.left, at.top, at.right, at.bottom].join(" ");
   const unsaved = () => document.querySelector(".ws.open .dirty") !== null;
   const HEAD = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h"));
-  const heads = () => windows().every((at) => at.height === HEAD + border() && at.width === room().width);
+  // Tucked heads end as far short of the room's right as the room reaches under the window's ×.
+  const underX = () => Math.max(0, room().right - (innerWidth - parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--corner"))));
+  const heads = () => windows().every((at) => at.height === HEAD + border() && at.left === room().left && at.right === room().right - underX());
 `;
 
 /**
@@ -857,9 +859,10 @@ export const CHARTS: Check[] = [
   },
   {
     // The sheet is held short by hand: main keeps the window taller than this.
-    name: "tucked heads a short room cannot hold stop at its foot, and leave the scrollbar the pointer",
+    name: "tucked heads a short room cannot hold stop at its foot, leave the scrollbar the pointer, and stand clear of the window's ×",
     script: `
       ${GEOMETRY}
+      ${CLEAR_X}
       const sheet = document.querySelector(".win-sheet");
       const under = () => {
         const [, foot] = windows();
@@ -868,9 +871,11 @@ export const CHARTS: Check[] = [
       sheet.style.maxHeight = ${SHORT_SHEET} + "px";
       const stack = await until(() => heads() && windows()[1].bottom > room().bottom);
       const held = under();
+      const crossed = crossing();
       sheet.style.maxHeight = "";
       if (!stack) return "the windows stand at " + windows().map(edges).join(" and ") + " in a room at " + edges(room());
       if (held.closest(".chart") !== null) return "a head lies over the scrollbar";
+      if (crossed !== "") return crossed;
       return (await until(() => !heads())) ? "" : "the windows stayed tucked";
     `,
   },
