@@ -9,9 +9,11 @@
  */
 
 import { isPlace } from "@document";
-import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
+import type { Chart, ChartColumn, ChartPlace, Plot, TimePlot } from "@document";
 import { Refusal } from "@engine";
-import type { Added, Engine, GroupsTally, Place, SampleTally, Tally } from "@engine";
+import type { Drawn } from "./chart/kind.ts";
+import type { Added, CarriedPlace, Engine, Place, Tally } from "@engine";
+import type { Per, TimeLevel } from "@tally";
 
 import type { State } from "./sources.ts";
 
@@ -22,7 +24,7 @@ export type Shown = Pick<Chart, "source" | "plot" | "title" | "refresh">;
 interface Tallied {
   source: string;
   latest: Tally;
-  complete: GroupsTally | SampleTally | undefined;
+  complete: Drawn | undefined;
   /** Whether the source is being read again, with no tally of it heard yet. */
   rereading?: boolean;
 }
@@ -49,14 +51,15 @@ export interface Heard extends SourceState {
   /** The latest tally of what the chart shows, once one has come. */
   latest: Tally | undefined;
   /** The last complete one, which stays until the next one completes. */
-  complete: GroupsTally | SampleTally | undefined;
+  complete: Drawn | undefined;
   /** Whether the source is being read again, with no tally of it heard yet. */
   rereading?: boolean;
 }
 
 /** The columns a plot reads, in the order its kind names them. */
 function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
-  return plot.t === "scatter" ? [plot.x, plot.y] : [plot.by, plot.sum];
+  if (plot.t === "scatter") return [plot.x, plot.y];
+  return plot.t === "time" ? [plot.at, plot.sum] : [plot.by, plot.sum];
 }
 
 /** Returns whether two plots draw one kind from the same columns. */
@@ -68,19 +71,39 @@ function samePlot(a: Plot, b: Plot): boolean {
   );
 }
 
+/** Returns whether two plots read their dates alike at one size, as any two not over time do. */
+function sameReading(a: Plot, b: Plot): boolean {
+  if (a.t !== "time" || b.t !== "time") return true;
+  const reading = (plot: TimePlot): string => ("order" in plot ? plot.order : plot.unit);
+  return a.per === b.per && reading(a) === reading(b);
+}
+
 /** Returns whether two records show the same. Neither's place counts. */
 function sameShown(a: Chart, b: Chart): boolean {
   return (
     a.source === b.source &&
     a.title === b.title &&
     a.refresh === b.refresh &&
-    samePlot(a.plot, b.plot)
+    samePlot(a.plot, b.plot) &&
+    sameReading(a.plot, b.plot)
   );
 }
 
 /** Returns whether `held` are tallies of `plot` over `source`. */
 function reads(held: Tallied | undefined, source: string, plot: Plot): held is Tallied {
   return held?.source === source && samePlot(held.latest.plot, plot);
+}
+
+/**
+ * joined gives `level` with `batch` after the periods it holds, where the
+ * batch is of its size and span and starts where they end, or `level` as it
+ * is where the fold has moved since or the batch is another's.
+ */
+function joined(level: TimeLevel, batch: TimeLevel): TimeLevel {
+  const { per, from, span, offset } = batch;
+  const next = per === level.per && from === level.from && span === level.span;
+  if (!next || offset !== level.rows.length) return level;
+  return { ...level, rows: [...level.rows, ...batch.rows], sum: [...level.sum, ...batch.sum] };
 }
 
 export class Charts {
@@ -94,10 +117,14 @@ export class Charts {
   /** What each chart last heard. It stays through a change, so a refusal
    * gives it back. */
   private readonly tallied = new Map<string, Tallied>();
+  /** The batches asked for and not yet answered, by chart id, size and offset. */
+  private readonly asking = new Set<string>();
   /** Every id held, carried or made, so a new chart takes none of them. */
   private readonly taken = new Set<string>();
   /** The sources of the charts this workspace carries and cannot show. */
   private readonly carrying = new Set<string>();
+  /** Where the windows of those charts stand, by id, for those whose records give a place. */
+  private readonly kept = new Map<string, CarriedPlace>();
   /** The count behind the ids uno makes. */
   private made = 0;
   /** The charts as the last save recorded them. */
@@ -117,7 +144,7 @@ export class Charts {
 
   /** Takes the charts an open found, which count as saved, and the ids and
    * sources of the ones it carries. */
-  seed(opening: Pick<Added, "charts" | "carriedIds" | "carriedOver">): void {
+  seed(opening: Pick<Added, "charts" | "carriedIds" | "carriedOver" | "carriedPlaces">): void {
     for (const chart of opening.charts) {
       this.answered.set(chart.id, chart);
       this.recorded.set(chart.id, chart);
@@ -125,6 +152,12 @@ export class Charts {
     }
     for (const id of opening.carriedIds) this.taken.add(id);
     for (const source of opening.carriedOver) this.carrying.add(source);
+    for (const carried of opening.carriedPlaces) this.kept.set(carried.id, carried);
+  }
+
+  /** The windows of the charts this workspace carries and cannot show, where they stand. */
+  get carried(): readonly CarriedPlace[] {
+    return [...this.kept.values()];
   }
 
   /** The charts as their windows show them, oldest first. */
@@ -224,6 +257,33 @@ export class Charts {
     };
   }
 
+  /**
+   * batch asks the engine for chart `id`'s periods at `per` from `offset`, once
+   * at a time, and joins them to its last complete tally. It resolves to
+   * whether they joined, which none do where the chart or its tally has gone
+   * or its fold has moved since.
+   */
+  async batch(id: string, per: Per, offset: number): Promise<boolean> {
+    const asked = `${id} ${per} ${offset}`;
+    if (this.asking.has(asked)) return false;
+    this.asking.add(asked);
+    try {
+      const batch = await this.engine.batch(id, per, offset);
+      const held = this.tallied.get(id);
+      const complete = held?.complete;
+      if (batch === undefined || held === undefined || complete?.t !== "time") return false;
+      const levels = complete.levels.map((level) => joined(level, batch));
+      if (levels.every((level, i) => level === complete.levels[i])) return false;
+      this.tallied.set(id, { ...held, complete: { ...complete, levels } });
+      return true;
+    } catch (e) {
+      if (e instanceof Refusal) return false;
+      throw e;
+    } finally {
+      this.asking.delete(asked);
+    }
+  }
+
   /** Notes that `source` is being read again: each chart over it is reading
    * from the start until the first tally of the new read comes. */
   reread(source: string): void {
@@ -241,6 +301,9 @@ export class Charts {
       this.tallied.delete(chart.id);
     }
     this.carrying.delete(source);
+    for (const carried of this.kept.values()) {
+      if (carried.source === source) this.kept.delete(carried.id);
+    }
   }
 
   /** Notes the charts answered for now as the ones a save wrote. */

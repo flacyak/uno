@@ -9,6 +9,7 @@
  * a cell per column. A frame writes only the cells whose text changed.
  */
 
+import type { ShownOrder, UnixUnit } from "@date";
 import type { Kind } from "@sheet";
 
 import { m } from "@paraglide/messages";
@@ -422,15 +423,27 @@ export class View {
   }
 }
 
+/** What a column's kind badge says on hover of how its dates read, by order and Unix unit. */
+const READS: Readonly<Record<ShownOrder | UnixUnit, () => string>> = {
+  day: m.column_order_day_hint,
+  month: m.column_order_month_hint,
+  either: m.column_order_either_hint,
+  s: m.kind_unix_s,
+  ms: m.kind_unix_ms,
+};
+
 /**
  * kindHint is what a column's kind badge says on hover: that its numbers do
- * not parse where it is flagged, and that they use a decimal comma where they
- * do. Empty for a column with neither.
+ * not parse where it is flagged, that they use a decimal comma where they
+ * do, how its dates written year last read, and the Unix unit its numbers
+ * are. Empty for a column with none of these.
  */
-function kindHint({ flagged, mark }: Column): string {
+function kindHint({ flagged, mark, order, unit }: Column): string {
+  const reading = unit ?? order;
   const hints = [
     flagged ? m.column_flagged_hint() : "",
     mark === "comma" ? m.column_decimal_comma_hint() : "",
+    reading === undefined ? "" : READS[reading](),
   ];
   return hints.filter((hint) => hint !== "").join(" · ");
 }

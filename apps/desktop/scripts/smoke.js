@@ -327,6 +327,75 @@ await writeFile(
   }),
 );
 
+// A workspace of two over-time charts of the fixture's 91 days: rows per day
+// in a new window's size at the sheet's foot, which holds a column a day,
+// and revenue per day in a window of the least width at its top, which
+// holds weeks and not days, and says so.
+const timed = join(scratch, "sent", "timed.uno");
+const dated = { col: 0, header: "date" };
+const perDay = { t: "time", at: dated, per: "day", order: "day" };
+const revenuePerDay = { ...perDay, sum: { col: 5, header: "revenue" } };
+const timedChart = { source: salesSource.id, title: "", refresh: 0 };
+await writeFile(
+  timed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [salesSource],
+    active: salesSource.id,
+    log: [],
+    charts: [
+      { ...timedChart, id: "c1", plot: perDay, place: { ...chartSize, x: 0, y: 1 } },
+      {
+        ...timedChart,
+        id: "c2",
+        plot: revenuePerDay,
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: timed,
+  }),
+);
+
+// A workspace of rows over the dates of a file whose last is a placeholder,
+// 9999-12-31, in a new window's size. Its 7,976 years are past the batch a
+// tally sends, so the window asks for the rest. It stands at the sheet's
+// foot, clear of the selected cell.
+const placedFile = join(scratch, "sent", "placeholders.csv");
+const placedRows = ["2024-03-04", "2024-03-05", "2025-01-10", "9999-12-31"];
+await writeFile(placedFile, `${["date", ...placedRows].join("\n")}\n`);
+const placed = join(scratch, "sent", "placeholders.uno");
+const placedSource = {
+  id: "placeholders",
+  name: "placeholders.csv",
+  path: placedFile,
+  rows: placedRows.length,
+  cols: 1,
+  state: { active: { row: 0, col: 0 } },
+};
+const placedOver = { t: "time", at: { col: 0, header: "date" }, per: "auto", order: "day" };
+await writeFile(
+  placed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [placedSource],
+    active: placedSource.id,
+    log: [],
+    charts: [
+      {
+        id: "c1",
+        source: placedSource.id,
+        plot: placedOver,
+        title: "",
+        refresh: 0,
+        place: { ...chartSize, x: 1, y: 1 },
+      },
+    ],
+    extra: new Map(),
+    at: placed,
+  }),
+);
+
 // A workspace of pies of the second export's rows, in a new window's size: one
 // per Location, which it writes four ways, and one per Device, which it writes
 // nine, so its six largest have a slice each and the rest an Other. A third,
@@ -356,6 +425,33 @@ await writeFile(
     ],
     extra: new Map(),
     at: pies,
+  }),
+);
+
+// A workspace of rows over the second export's Ad_Date read month first. It
+// writes 551 of its dates day first past the 12th, which month first cannot
+// read, the first in its second row.
+const misread = join(scratch, "sent", "misread.uno");
+const monthFirst = { t: "time", at: { col: 9, header: "Ad_Date" }, per: "auto", order: "month" };
+await writeFile(
+  misread,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [adsSource],
+    active: adsSource.id,
+    log: [],
+    charts: [
+      {
+        id: "c1",
+        source: adsSource.id,
+        plot: monthFirst,
+        title: "",
+        refresh: 0,
+        place: { ...chartSize, x: 1, y: 1 },
+      },
+    ],
+    extra: new Map(),
+    at: misread,
   }),
 );
 
@@ -553,6 +649,9 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_SCATTERED: scattered,
       UNO_SMOKE_ALONG: along,
       UNO_SMOKE_PIES: pies,
+      UNO_SMOKE_TIMED: timed,
+      UNO_SMOKE_PLACED: placed,
+      UNO_SMOKE_MISREAD: misread,
       UNO_SMOKE_STATES: states,
       UNO_SMOKE_BLANKS: blanks,
       UNO_SMOKE_SCHEDULED: scheduled,

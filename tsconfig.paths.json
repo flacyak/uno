@@ -13,6 +13,8 @@
   "compilerOptions": {
     "paths": {
       "@never": ["./core/src/never.ts"],
+      "@date": ["./core/src/date/index.ts"],
+      "@date/*": ["./core/src/date/*.ts"],
       "@document": ["./core/src/document/index.ts"],
       "@document/*": ["./core/src/document/*.ts"],
       "@engine": ["./core/src/engine/index.ts"],

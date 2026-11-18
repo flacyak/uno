@@ -20,7 +20,8 @@ import type { Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { BARS_INSET, TIP_GAP } from "./bars.ts";
+import { TIP_GAP } from "./bars.ts";
+import { BARS_INSET } from "./rows.ts";
 import { mark } from "./scatter.ts";
 
 /** How many values have a slice of their own: the colours a theme gives a chart. */

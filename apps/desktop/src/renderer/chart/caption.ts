@@ -9,8 +9,8 @@
  */
 
 import { BY_HAND, DAY_MINUTES, HOUR_MINUTES } from "@document";
-import type { ChartColumn, Plot } from "@document";
-import type { Coverage, GroupsTally, SampleTally, Skipped, Tally } from "@engine";
+import type { ChartColumn } from "@document";
+import type { Coverage, Skipped, Tally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
@@ -19,6 +19,8 @@ import { NoAnswer } from "@renderer/refresh";
 import type { Checks } from "@renderer/refresh";
 import { said, say } from "@renderer/said";
 import { CHECK_TIMEOUT_MS } from "@renderer/timing";
+import type { Order, UnixUnit } from "@date";
+import type { Drawing, Drawn, Kind, PlotRoom } from "./kind.ts";
 
 /** What parts the caption's words. */
 export const SEP = " · ";
@@ -84,6 +86,38 @@ export function notNumbers(latest: Tally | undefined): string {
   return left > 0 ? m.chart_not_numbers({ count: left }) : "";
 }
 
+/** notDates gives what the caption says of the date cells a tally could not read, or nothing. */
+export function notDates(latest: Tally | undefined): string {
+  const left = latest?.t === "time" ? latest.dates.unparsed : 0;
+  return left > 0 ? m.chart_not_dates({ count: left }) : "";
+}
+
+/** The words for each order a date written year last reads in. */
+const ORDER_WORDS: Readonly<Record<Order, () => string>> = {
+  day: m.chart_order_day,
+  month: m.chart_order_month,
+};
+
+/**
+ * otherOrder gives the order an over-time chart read in `reading` could read
+ * its date cells in where `latest` found some that read only so, with what
+ * the caption says of them where they are not all it could not read, and its
+ * button's words, or else nothing.
+ */
+export function otherOrder(
+  latest: Tally | undefined,
+  reading: Order | UnixUnit | undefined,
+): { order: Order; said: string; button: string } | undefined {
+  if (latest?.t !== "time" || latest.dates.other === 0) return undefined;
+  if (reading !== "day" && reading !== "month") return undefined;
+  const { other, unparsed } = latest.dates;
+  const order = reading === "day" ? "month" : "day";
+  const words = ORDER_WORDS[order]();
+  // Where every date not read reads the other way, the count of them says it.
+  const said = other === unparsed ? "" : m.chart_read_only({ count: num(other), order: words });
+  return { order, said, button: m.chart_read_order({ order: words }) };
+}
+
 /**
  * reading gives how far a chart has read its source, from 0 to 1, while it
  * reads: nothing of it before the first tally, or of a source being read
@@ -102,39 +136,37 @@ export function reading(heard: Heard | undefined): number | undefined {
   return share(latest.coverage);
 }
 
-/** empty says whether `tally` has nothing a plot draws: no value, or no row a scatter can place. */
-function empty(tally: GroupsTally | SampleTally): boolean {
-  return tally.t === "groups" ? tally.groups.length === 0 : tally.plotted === 0;
-}
-
 /**
- * drawable gives the tally a window draws: the last complete one while the
- * next is read, or else the latest as it comes. A latest that says the chart
- * cannot read its source leaves nothing to draw, as no earlier tally stands
- * for it, and neither does a tally with nothing in it.
+ * drawable gives the tally a window draws, as `kind` draws it in `room`: the
+ * last complete one while the next is read, or else the latest as it comes. A
+ * latest that says the chart cannot read its source leaves nothing to draw,
+ * as no earlier tally stands for it, and neither does a tally with nothing in
+ * it, or one of another kind.
  */
-export function drawable(heard: Heard | undefined): GroupsTally | SampleTally | undefined {
+export function drawable(
+  heard: Heard | undefined,
+  kind: Kind,
+  room: PlotRoom,
+): { tally: Drawn; drawing: Drawing } | undefined {
   const latest = heard?.latest;
   if (latest?.t === "unread") return undefined;
   const tally = heard?.complete ?? latest;
-  return tally === undefined || empty(tally) ? undefined : tally;
-}
-
-/** The columns a plot's values come from, as the head names them. */
-function valued(plot: Plot): string[] {
-  const named = ({ header, col }: ChartColumn): string => columnLabel(header, col);
-  return plot.t === "scatter" ? [named(plot.x), named(plot.y)] : [named(plot.by)];
+  const drawing = tally === undefined ? undefined : kind.drawing(tally, room);
+  return tally === undefined || drawing === undefined || drawing.empty
+    ? undefined
+    : { tally, drawing };
 }
 
 /**
  * body gives what the plot says in place of a chart it cannot draw, or
- * undefined where it draws one: why the chart cannot read its column, that its
- * source is missing or waits on its bucket, with the action that mends it,
- * that it reads its source before the first tally, or that the tally has no
- * values in the plot's columns yet. A column that has gone offers Edit chart.
+ * undefined where it draws one in `room`: why the chart cannot read its
+ * column, that its source is missing or waits on its bucket, with the action
+ * that mends it, that it reads its source before the first tally, or that the
+ * tally has no values in the plot's columns yet. A column that has gone
+ * offers Edit chart.
  */
-export function body(plot: Plot, heard: Heard): Body | undefined {
-  if (drawable(heard) !== undefined) return undefined;
+export function body(kind: Kind, heard: Heard, room: PlotRoom): Body | undefined {
+  if (drawable(heard, kind, room) !== undefined) return undefined;
   const { state, latest, name } = heard;
   if (latest?.t === "unread") {
     const words = say(latest.said);
@@ -153,7 +185,8 @@ export function body(plot: Plot, heard: Heard): Body | undefined {
     };
   }
   if (latest === undefined) return { words: m.chart_reading({ name }) };
-  return { words: m.chart_no_values_yet({ columns: list(valued(plot)) }) };
+  const named = ({ header, col }: ChartColumn): string => columnLabel(header, col);
+  return { words: m.chart_no_values_yet({ columns: list(kind.valued.map(named)) }) };
 }
 
 /**

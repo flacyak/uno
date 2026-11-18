@@ -30,6 +30,7 @@ import {
   CHART_SCATTER,
   CHART_SIGNED,
   CHART_STATES,
+  CHART_TIME,
 } from "./charts.ts";
 import type { Check } from "./check.ts";
 import { GROUPS, ONLY_VARIABLE, selected } from "./groups.ts";
@@ -94,6 +95,7 @@ const CHECKS: Record<string, Check[]> = {
   "chart-table": CHART_TABLE,
   "chart-along": CHART_ALONG,
   "chart-pie": CHART_PIE,
+  "chart-time": CHART_TIME,
   "chart-blank": CHART_BLANK,
   "chart-states": CHART_STATES,
   "chart-edits": CHART_EDITS,
