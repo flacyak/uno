@@ -1,0 +1,437 @@
+#!/usr/bin/env bash
+#
+# Runs a build, check, test, smoke or preview of uno so that it cannot take
+# the machine down, and leaves nothing running once it ends.
+#
+# Agents run many of these at once, from many worktrees. Unbounded, each test
+# run loads every core for minutes, writes thousands of temporary directories
+# to /tmp (memory, on most Linux desktops), and whatever a killed run started,
+# an Electron window or a pool of vitest workers, keeps running after it. On
+# one development machine that load set off L2 cache machine-check errors and
+# reset it, three times in a day. A run through this script:
+#
+# - waits for one of a few slots that every worktree on the machine shares,
+#   and a run that drives the display (smoke, preview) waits for the display;
+# - is pinned to a share of the CPUs, both threads of a core before the next
+#   core, inside a systemd scope under one slice whose CPU, memory and task
+#   limits all runs share;
+# - gets a temporary directory of its own on disk, as TMPDIR;
+# - starts Electron with no screen, so no run opens a window;
+# - is stopped at a deadline of the machine's awake time, even if nothing
+#   is left to stop it; and
+# - once it ends, however it ends, has every process it started stopped,
+#   those that moved themselves to a scope of their own included, and its
+#   temporary directory removed.
+#
+# Electron moves its main process to a scope of its own
+# (app-uno-desktop-<pid>.scope), out of the slice. It keeps the run's CPUs,
+# which a process takes with it, and every process a run starts carries
+# UNO_BOUNDED_RUN, which is how the run finds it to stop it.
+#
+# A small run, a check or the tests related to a change, is one that ends in
+# seconds and never starts Electron. With UNO_BOUNDED_LIGHT_SLOTS set, it
+# takes a light slot and a quarter of the CPUs instead of waiting behind a
+# smoke, under the same slice and so the same cap on the machine. A command
+# that names check, lint, fmt, or test with a file or --changed is small;
+# --light says so for any other.
+#
+# Usage:
+#   scripts/bounded.sh [--display] [--light] [--timeout <seconds|Nm|Nh>] -- <command>...
+#   scripts/bounded.sh status
+#   scripts/bounded.sh reap [--orphans]
+#
+# Examples:
+#   scripts/bounded.sh -- vp run test
+#   scripts/bounded.sh -- vp run smoke
+#   (cd core && ../scripts/bounded.sh -- vp test tests/engine/save.test.ts)
+#
+# A command that names smoke, preview or electron drives the display without
+# --display. Inside a bounded run the script runs its command as it is.
+#
+# The limits come from the environment, with defaults sized for a desktop:
+#   UNO_BOUNDED_SLOTS    runs at once on the machine (1)
+#   UNO_BOUNDED_CPUS     logical CPUs all runs share (half the machine's)
+#   UNO_BOUNDED_LIGHT_SLOTS  small runs at once beside those, each on a quarter
+#                        of the CPUs (0: a small run takes an ordinary slot)
+#   UNO_BOUNDED_LIGHT_CPUS   logical CPUs a small run gets (a quarter)
+#   UNO_BOUNDED_MEMORY   memory all runs share, as systemd takes it (half)
+#   UNO_BOUNDED_TASKS    processes and threads all runs share (4096)
+#   UNO_BOUNDED_TIMEOUT  seconds one run may take (1800)
+
+set -euo pipefail
+
+readonly STATE="${XDG_CACHE_HOME:-${HOME}/.cache}/uno-bounded"
+readonly SLICE="uno-bounded.slice"
+readonly MARKER="UNO_BOUNDED_RUN"
+readonly SLOTS="${UNO_BOUNDED_SLOTS:-1}"
+readonly LIGHT_SLOTS="${UNO_BOUNDED_LIGHT_SLOTS:-0}"
+readonly TASKS="${UNO_BOUNDED_TASKS:-4096}"
+readonly DEFAULT_TIMEOUT_SECONDS="${UNO_BOUNDED_TIMEOUT:-1800}"
+# How often a waiting run looks for a free slot, and the guard for its run.
+readonly POLL_SECONDS=2
+# How long a stopped process has between SIGTERM and SIGKILL.
+readonly STOP_SECONDS=10
+# The scope's own deadline is this much past the run's, in case the guard
+# that enforces the run's is gone too.
+readonly BACKSTOP_SECONDS=60
+readonly NICENESS=10
+# coreutils timeout's exit status for a command stopped at its deadline.
+readonly TIMED_OUT_STATUS=124
+# Commands that start Electron: the smoke, the preview, and Electron itself.
+# The happy-dom tests under tests/smoke/ do not match.
+readonly DISPLAY_COMMANDS=' (smoke|preview) |smoke\.js|preview\.js|electron'
+# Commands that end in seconds: a check, or the tests related to a change.
+readonly LIGHT_COMMANDS=' vp (check|lint|fmt)( |$)| vp test .*(--changed|--related|\.test\.ts)'
+# Electron's npm package starts the binary in the folder that
+# ELECTRON_OVERRIDE_DIST_PATH names. This one opens no window.
+HEADLESS_ELECTRON="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/headless-electron"
+readonly HEADLESS_ELECTRON
+# The smoke and the preview refuse to start with no DISPLAY. Headless never
+# connects to it, so a shell that has none gets this.
+readonly UNUSED_DISPLAY=:0
+# What reap --orphans may stop: the tools a build, test or app run starts.
+readonly ORPHAN_COMMANDS='^(node|electron|esbuild|vp|vite|vitest)'
+
+#######################################
+# Prints a line to stderr, prefixed so it reads apart from the command's.
+#######################################
+say() {
+  echo "bounded: $*" >&2
+}
+
+#######################################
+# Prints the number of online logical CPUs.
+#######################################
+cpu_count() {
+  getconf _NPROCESSORS_ONLN
+}
+
+#######################################
+# Prints a CPU list ("0,8,1,9") of the first $1 logical CPUs, taking every
+# thread of a core before the next core, so the runs heat as few cores as
+# they can.
+#######################################
+cpu_list() {
+  local want="$1" cpu sibling
+  local -a picked=()
+  local -A taken=()
+  for cpu in $(printf '%s\n' /sys/devices/system/cpu/cpu[0-9]* | sort -V); do
+    local siblings="${cpu}/topology/thread_siblings_list"
+    [[ -r "${siblings}" ]] || continue
+    for sibling in $(expand_list "$(<"${siblings}")"); do
+      [[ -n "${taken[${sibling}]:-}" ]] && continue
+      taken[${sibling}]=1
+      picked+=("${sibling}")
+      if ((${#picked[@]} >= want)); then
+        (IFS=,; echo "${picked[*]}")
+        return
+      fi
+    done
+  done
+  (IFS=,; echo "${picked[*]}")
+}
+
+#######################################
+# Expands a kernel CPU list ("0-2,8") to one number per word.
+#######################################
+expand_list() {
+  local part
+  for part in ${1//,/ }; do
+    if [[ "${part}" == *-* ]]; then
+      seq "${part%-*}" "${part#*-}"
+    else
+      echo "${part}"
+    fi
+  done
+}
+
+#######################################
+# Prints half the machine's memory, in kibibytes as systemd reads them.
+#######################################
+half_memory() {
+  local kib
+  kib="$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)"
+  echo "$((kib / 2))K"
+}
+
+#######################################
+# Prints a duration given as seconds, Nm or Nh, in seconds.
+#######################################
+seconds_of() {
+  case "$1" in
+    *h) echo "$((${1%h} * 3600))" ;;
+    *m) echo "$((${1%m} * 60))" ;;
+    *) echo "$(($1))" ;;
+  esac
+}
+
+#######################################
+# Succeeds when a systemd user manager can take scopes for this user.
+#######################################
+have_systemd() {
+  command -v systemd-run >/dev/null || return 1
+  local state
+  state="$(systemctl --user is-system-running 2>/dev/null || true)"
+  [[ "${state}" == running || "${state}" == degraded ]]
+}
+
+#######################################
+# Prints the pids of every process that carries run $1's marker, wherever
+# its cgroup is now.
+#######################################
+marked_pids() {
+  local file
+  grep -lzx "${MARKER}=$1" /proc/[0-9]*/environ 2>/dev/null \
+    | while read -r file; do
+      file="${file#/proc/}"
+      echo "${file%/environ}"
+    done
+}
+
+#######################################
+# Stops everything run $1 started and removes its directory. Safe to call
+# more than once, and from the guard after the run's own script is gone.
+#######################################
+# shellcheck disable=SC2329  # the EXIT trap calls it
+cleanup_run() {
+  local id="$1" pid names=""
+  systemctl --user stop "uno-bounded-${id}.scope" >/dev/null 2>&1 || true
+  local -a left
+  mapfile -t left < <(marked_pids "${id}")
+  if ((${#left[@]} > 0)); then
+    for pid in "${left[@]}"; do
+      names+=" $(cat "/proc/${pid}/comm" 2>/dev/null || echo "${pid}")"
+    done
+    kill -TERM "${left[@]}" 2>/dev/null || true
+    local waited=0
+    while ((waited < STOP_SECONDS)) && [[ -n "$(marked_pids "${id}")" ]]; do
+      sleep 1
+      waited=$((waited + 1))
+    done
+    mapfile -t left < <(marked_pids "${id}")
+    ((${#left[@]} == 0)) || kill -KILL "${left[@]}" 2>/dev/null || true
+    echo "$(date -Is) ${id}:${names}" >>"${STATE}/escaped.log"
+    say "stopped what outlived the command:${names}"
+  fi
+  rm -rf "${STATE}/runs/${id}"
+}
+
+#######################################
+# Waits for one of the machine's slots, holds it on fd 8 for as long as this
+# script lives, and sets slot to its number. A light run ($1 = light) waits
+# for one of the light slots instead, named light-1 and so on.
+#######################################
+take_slot() {
+  local kind="${1:-}" n told=0 count="${SLOTS}" prefix=""
+  if [[ "${kind}" == light ]]; then
+    count="${LIGHT_SLOTS}"
+    prefix="light-"
+  fi
+  while true; do
+    for ((n = 1; n <= count; n++)); do
+      exec 8>"${STATE}/slots/${prefix}${n}.lock"
+      if flock -n 8; then
+        slot="${prefix}${n}"
+        return
+      fi
+      exec 8>&-
+    done
+    if ((!told)); then
+      say "waiting for a slot; scripts/bounded.sh status says who has them"
+      told=1
+    fi
+    sleep "${POLL_SECONDS}"
+  done
+}
+
+#######################################
+# Waits for the display and holds it on fd 9 for as long as this script
+# lives.
+#######################################
+take_display() {
+  exec 9>"${STATE}/display.lock"
+  flock -n 9 && return
+  say "waiting for the display"
+  flock 9
+}
+
+#######################################
+# Watches run $1 from outside it: stops it once it has run $3 seconds, and
+# cleans up once the script $2 that started it is gone, even if that script
+# was killed before it could.
+#
+# The seconds are the machine's awake time, as the smoke's own deadlines
+# count them: a sleep(1) of the run's length, whose clock stands still while
+# the machine sleeps. A run the machine slept through goes on where it was.
+#######################################
+guard() {
+  local id="$1" owner="$2" timeout="$3"
+  sleep "${timeout}" &
+  local clock=$!
+  while kill -0 "${owner}" 2>/dev/null; do
+    if ! kill -0 "${clock}" 2>/dev/null && [[ ! -e "${STATE}/runs/${id}/deadline" ]]; then
+      touch "${STATE}/runs/${id}/deadline"
+      systemctl --user stop "uno-bounded-${id}.scope" >/dev/null 2>&1 || true
+      local -a left
+      mapfile -t left < <(marked_pids "${id}")
+      ((${#left[@]} == 0)) || kill -TERM "${left[@]}" 2>/dev/null || true
+    fi
+    sleep "${POLL_SECONDS}"
+  done
+  kill "${clock}" 2>/dev/null || true
+  [[ -d "${STATE}/runs/${id}" ]] && cleanup_run "${id}"
+}
+
+#######################################
+# Runs a command bounded. See the top of the file.
+#######################################
+run() {
+  local display=0 light=0 timeout="${DEFAULT_TIMEOUT_SECONDS}"
+  while (($# > 0)); do
+    case "$1" in
+      --display) display=1 ;;
+      --light) light=1 ;;
+      --timeout) timeout="$(seconds_of "$2")"; shift ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+    shift
+  done
+  if (($# == 0)); then
+    say "no command; usage is at the top of $0"
+    exit 2
+  fi
+  if [[ -n "${!MARKER:-}" ]]; then
+    exec "$@"
+  fi
+  [[ " $* " =~ ${DISPLAY_COMMANDS} ]] && display=1
+  [[ " $* " =~ ${LIGHT_COMMANDS} ]] && light=1
+  # A light run takes a light slot only where there are any, and never the
+  # display.
+  ((light && LIGHT_SLOTS > 0 && !display)) || light=0
+
+  mkdir -p "${STATE}/slots" "${STATE}/runs"
+  local slot
+  if ((light)); then take_slot light; else take_slot; fi
+  ((display)) && take_display
+
+  local id cpus want_cpus
+  id="$(date +%s)-$$"
+  want_cpus="${UNO_BOUNDED_CPUS:-$(($(cpu_count) / 2))}"
+  ((light)) && want_cpus="${UNO_BOUNDED_LIGHT_CPUS:-$(($(cpu_count) / 4))}"
+  cpus="$(cpu_list "${want_cpus}")"
+  local dir="${STATE}/runs/${id}"
+  mkdir -p "${dir}/tmp"
+  printf 'pid=%s\nslot=%s\ndisplay=%s\ncwd=%s\ncommand=%s\n' \
+    "$$" "${slot}" "${display}" "${PWD}" "$*" >"${dir}/meta"
+
+  trap 'cleanup_run "${id}"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM HUP
+  setsid bash "${BASH_SOURCE[0]}" __guard "${id}" "$$" "${timeout}" \
+    </dev/null >/dev/null 2>&1 8>&- 9>&- &
+
+  local -a wrap=(env "${MARKER}=${id}" "TMPDIR=${dir}/tmp"
+    "ELECTRON_OVERRIDE_DIST_PATH=${HEADLESS_ELECTRON}"
+    "DISPLAY=${DISPLAY:-${UNUSED_DISPLAY}}"
+    nice -n "${NICENESS}")
+  [[ -n "${cpus}" ]] && command -v taskset >/dev/null \
+    && wrap+=(taskset -c "${cpus}")
+  if have_systemd; then
+    # The slice's cap is every run's share together, whatever this run gets,
+    # so a light run beside a heavy one takes nothing from it.
+    local cpu_count_used
+    cpu_count_used="$(expand_list "$(cpu_list "${UNO_BOUNDED_CPUS:-$(($(cpu_count) / 2))}")" | wc -l)"
+    systemctl --user set-property --runtime "${SLICE}" \
+      "CPUQuota=$((cpu_count_used * 100))%" \
+      "MemoryMax=${UNO_BOUNDED_MEMORY:-$(half_memory)}" MemorySwapMax=0 \
+      "TasksMax=${TASKS}"
+    systemd-run --user --scope --quiet --slice="${SLICE}" \
+      --unit="uno-bounded-${id}.scope" \
+      --property="TimeoutStopSec=${STOP_SECONDS}s" \
+      --property="RuntimeMaxSec=$((timeout + BACKSTOP_SECONDS))s" \
+      -- "${wrap[@]}" "$@" 8>&- 9>&- &
+  else
+    setsid "${wrap[@]}" "$@" 8>&- 9>&- &
+  fi
+  local status=0
+  wait "$!" || status=$?
+  if [[ -e "${dir}/deadline" ]]; then
+    say "stopped at its deadline of ${timeout}s: $*"
+    exit "${TIMED_OUT_STATUS}"
+  fi
+  exit "${status}"
+}
+
+#######################################
+# Prints each run, who holds the slots and the display, and anything a run
+# that is gone left running.
+#######################################
+status() {
+  mkdir -p "${STATE}/runs"
+  local dir id pid
+  for dir in "${STATE}"/runs/*/; do
+    [[ -e "${dir}meta" ]] || continue
+    id="$(basename "${dir}")"
+    pid="$(sed -n 's/^pid=//p' "${dir}meta")"
+    local state="running"
+    kill -0 "${pid}" 2>/dev/null || state="gone (reap stops what it left)"
+    printf '%s  %s  slot %s  display %s  %ss  %s\n    in %s\n    processes: %s\n' \
+      "${id}" "${state}" "$(sed -n 's/^slot=//p' "${dir}meta")" \
+      "$(sed -n 's/^display=//p' "${dir}meta")" \
+      "$(($(date +%s) - ${id%%-*}))" \
+      "$(sed -n 's/^command=//p' "${dir}meta")" \
+      "$(sed -n 's/^cwd=//p' "${dir}meta")" \
+      "$(marked_pids "${id}" | wc -l)"
+  done
+  if have_systemd; then
+    systemctl --user show "${SLICE}" -p MemoryCurrent -p TasksCurrent \
+      -p CPUQuotaPerSecUSec -p MemoryMax 2>/dev/null || true
+  fi
+}
+
+#######################################
+# Stops what runs that are gone left behind. With --orphans, also stops
+# processes that were started in a worktree of the repository it runs in
+# without the script, and outlived whatever started them.
+#######################################
+reap() {
+  mkdir -p "${STATE}/runs"
+  local dir id pid
+  for dir in "${STATE}"/runs/*/; do
+    [[ -e "${dir}meta" ]] || continue
+    id="$(basename "${dir}")"
+    pid="$(sed -n 's/^pid=//p' "${dir}meta")"
+    kill -0 "${pid}" 2>/dev/null || cleanup_run "${id}"
+  done
+  [[ "${1:-}" == --orphans ]] || return 0
+
+  local -a roots
+  mapfile -t roots < <(git worktree list --porcelain | sed -n 's/^worktree //p')
+  local reapers
+  reapers=" 1 $(pgrep -u "${UID}" -x systemd | tr '\n' ' ')"
+  local ppid comm cwd root
+  while read -r pid ppid comm; do
+    [[ "${reapers}" == *" ${ppid} "* ]] || continue
+    [[ "${comm}" =~ ${ORPHAN_COMMANDS} ]] || continue
+    cwd="$(readlink "/proc/${pid}/cwd" 2>/dev/null)" || continue
+    for root in "${roots[@]}"; do
+      if [[ "${cwd}/" == "${root}/"* ]]; then
+        say "stopping orphan ${pid} ${comm} in ${cwd}"
+        kill -TERM "${pid}" 2>/dev/null || true
+        break
+      fi
+    done
+  done < <(ps -u "${UID}" -o pid=,ppid=,comm=)
+}
+
+main() {
+  case "${1:-}" in
+    status) status ;;
+    reap) shift; reap "$@" ;;
+    __guard) shift; guard "$@" ;;
+    *) run "$@" ;;
+  esac
+}
+
+main "$@"
