@@ -14,7 +14,7 @@ import type { Chart, ChartColumn, Plot } from "@document";
 import type { SourceRef } from "@engine";
 import { LEVEL_BATCH } from "@tally";
 import type { Drawn } from "@renderer/chart/kind";
-import { REGION, ROWS, UNITS } from "@main/smoke/fixture";
+import { REGION, REP, ROWS, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
 import { ADS, BARS, MOVED, SALES, unoOf } from "./charted.ts";
@@ -328,6 +328,24 @@ test("a reopened chart gets a complete tally", async () => {
       expect(complete).toMatchObject({ t: "groups", plot: made.plot });
       expect(back.charts.heard(made.id)?.latest).toBe(complete);
     });
+  });
+});
+
+test("a stacked chart's series keep their slots from one tally to the next", async () => {
+  const [by, split] = [
+    { col: REGION, header: "region" },
+    { col: REP, header: "rep" },
+  ];
+  const stack: Chart = { ...BARS, plot: { t: "stack", by, split } };
+  await opened(uno(unoOf([stack])), async (w) => {
+    const first = await completeOf(w);
+    if (first.t !== "stack") throw new Error("a stack tallies as a stack");
+    // The engine sends the same series ranked the other way round.
+    const ranks = [...first.series].reverse();
+    const values = first.values.map((v) => ({ ...v, cells: [...v.cells].reverse() }));
+    w.active.source.onTally(stack.id, { ...first, series: ranks, values });
+    const heard = w.charts.heard(stack.id)?.complete;
+    expect(heard).toStrictEqual(first);
   });
 });
 

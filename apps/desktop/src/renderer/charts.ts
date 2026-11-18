@@ -12,6 +12,7 @@ import { isPlace } from "@document";
 import type { Chart, ChartColumn, ChartPlace, Plot, TimePlot } from "@document";
 import { Refusal } from "@engine";
 import type { Drawn } from "./chart/kind.ts";
+import { inSlots, slotted } from "./chart/slots.ts";
 import type { Added, CarriedPlace, Engine, Place, Tally } from "@engine";
 import type { Per, TimeLevel } from "@tally";
 
@@ -27,6 +28,8 @@ interface Tallied {
   complete: Drawn | undefined;
   /** Whether the source is being read again, with no tally of it heard yet. */
   rereading?: boolean;
+  /** A stacked chart's series in the slots they wear, as slots.ts keeps them. */
+  slots?: readonly string[];
 }
 
 /** A chart's source, as its window says it when it has nothing of it to draw. */
@@ -234,11 +237,19 @@ export class Charts {
 
   /** Takes a tally of chart `id` from `source`. The last complete tally stays
    * until the next, while the plot and the source are the same. */
-  hear(source: string, id: string, tally: Tally): void {
+  hear(source: string, id: string, heard: Tally): void {
     const was = this.tallied.get(id);
-    const kept = reads(was, source, tally.plot) ? was.complete : undefined;
+    const same = reads(was, source, heard.plot);
+    // A stack's series keep their slots while the plot and the source stay.
+    let slots = same ? was.slots : undefined;
+    let tally = heard;
+    if (heard.t === "stack") {
+      slots = slotted(slots ?? [], heard.series);
+      tally = inSlots(heard, slots);
+    }
+    const kept = same ? was.complete : undefined;
     const complete = tally.t !== "unread" && tally.coverage.complete ? tally : kept;
-    this.tallied.set(id, { source, latest: tally, complete });
+    this.tallied.set(id, { source, latest: tally, complete, ...(slots && { slots }) });
   }
 
   /** What chart `id`'s window draws from, or undefined for a chart that has
