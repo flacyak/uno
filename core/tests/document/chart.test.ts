@@ -128,10 +128,14 @@ describe('parseStacked', () => {
     );
   });
 
-  test('a stacked plot is one this build carries until it draws one', () => {
-    const plot = { t: 'stack', by: REGION, split: CHANNEL };
-    expect(() => parsePlot(PLOT, plot)).toThrow(
-      new Error(`${PLOT}: this build cannot draw "stack"`),
+  test('a stacked plot is one parsePlot reads, and refuses a key it does not know', () => {
+    const plot: StackPlot = { t: 'stack', by: REGION, split: CHANNEL };
+    expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
+    expect(() => parsePlot(PLOT, { ...plot, per: 'day' })).toThrow(
+      new Error(`${PLOT}: this build does not read "per"`),
+    );
+    expect(() => parsePlot(PLOT, { ...plot, split: REGION })).toThrow(
+      new Error(`${PLOT}: split names the column by names`),
     );
   });
 });

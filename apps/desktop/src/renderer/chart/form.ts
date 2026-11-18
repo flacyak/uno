@@ -284,7 +284,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    this.kind.value = plot.t;
+    // The form makes no stacked chart yet, so it opens one as bars of its values.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time") {
       this.per.value = plot.per;

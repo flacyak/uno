@@ -204,6 +204,7 @@ test("adding, removing, and changing a chart's source, kind, columns, title, sch
   const scatter: Chart = { ...BARS, id: "c2", plot: { t: "scatter", x: by, y: units } };
   const at: ChartColumn = { col: 0, header: "date" };
   const time: Chart = { ...BARS, id: "c3", plot: { t: "time", at, per: "day", order: "day" } };
+  const stack: Chart = { ...BARS, id: "c4", plot: { t: "stack", by, split: units } };
   const changes: ReadonlyArray<readonly [Chart, Partial<Shown>]> = [
     [BARS, { title: "Rows" }],
     [BARS, { refresh: 5 }],
@@ -216,8 +217,10 @@ test("adding, removing, and changing a chart's source, kind, columns, title, sch
     [time, { plot: { t: "time", at, per: "week", order: "day" } }],
     [time, { plot: { t: "time", at, per: "day", order: "month" } }],
     [time, { plot: { t: "time", at, per: "day", unit: "s" } }],
+    [stack, { plot: { t: "stack", by, split: at } }],
+    [stack, { plot: { t: "stack", by, split: units, sum: units } }],
   ];
-  await opened(uno(unoOf([BARS, scatter, time])), async (w) => {
+  await opened(uno(unoOf([BARS, scatter, time, stack])), async (w) => {
     for (const [chart, shown] of changes) {
       await w.charts.change(chart.id, shown);
       expect(w.dirty, JSON.stringify(shown)).toBe(true);

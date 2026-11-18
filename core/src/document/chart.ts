@@ -71,7 +71,8 @@ export type Plot =
   | { t: 'pie'; by: ChartColumn; sum?: ChartColumn }
   /** One point per row, x against y, both number columns. */
   | { t: 'scatter'; x: ChartColumn; y: ChartColumn }
-  | TimePlot;
+  | TimePlot
+  | StackPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are
