@@ -7,20 +7,26 @@
  * pointed at with the same variables the AWS CLI reads. The app opens objects
  * in it with the real store, over the wire, with a real signature.
  *
- * Usage: node --import ../../paths.js scripts/smoke.js   (after node scripts/build.js)
+ * Usage: node --import ../../paths.js scripts/smoke.js [--affected <base>]
+ * (after node scripts/build.js). With --affected, only the groups the files
+ * changed since <base> touch are run, by smoke-groups.json; see
+ * src/main/smoke/affected.ts. UNO_SMOKE_ONLY set by hand wins over it.
  */
 
 import { newManifest, readContainer, writeDocument } from "@uno/core/document";
 import { parseConnection } from "@uno/core/library";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 import { HOME_REGION } from "@core-tests/store/regions";
 import { BUCKET, KEYS, bucket, etagOf, standinEnv } from "@core-tests/store/standin";
+import { affected } from "@main/smoke/affected";
 import { GROUPS, ONLY_VARIABLE, SCHEDULE, selected } from "@main/smoke/groups";
+import SMOKE_MAP from "../smoke-groups.json" with { type: "json" };
 import { CHECK_TIMEOUT_MS, MINUTE_MS } from "@renderer/timing";
 import {
   DRIVEN_LANGUAGE_ENV,
@@ -34,6 +40,40 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "..");
+const root = join(pkg, "../..");
+
+// --affected <base>: the files changed since the merge base with <base>,
+// committed or not, decide the groups, unless UNO_SMOKE_ONLY already has.
+// `vp run smoke -- --affected main` hands the script the `--` as well, which
+// would end the options before the first one.
+const argv = process.argv.slice(2);
+if (argv[0] === "--") argv.shift();
+const { values: flags } = parseArgs({ args: argv, options: { affected: { type: "string" } } });
+if (flags.affected !== undefined && (process.env[ONLY_VARIABLE] ?? "") === "") {
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" })
+      .split("\n")
+      .filter((p) => p !== "");
+  const [base] = git("merge-base", flags.affected, "HEAD");
+  const changed = [
+    ...git("diff", "--name-only", base),
+    ...git("ls-files", "--others", "--exclude-standard"),
+  ];
+  const { groups, unmapped } = affected(SMOKE_MAP, changed);
+  for (const path of unmapped)
+    console.log(`smoke: ${path} is in no entry of smoke-groups.json, so every group runs`);
+  if (groups !== "all" && groups.length === 0) {
+    console.log(
+      `smoke: nothing changed since ${flags.affected} touches the app, so nothing to smoke`,
+    );
+    console.log("smoke: ok");
+    process.exit(0);
+  }
+  if (groups !== "all") process.env[ONLY_VARIABLE] = groups.join(",");
+  console.log(
+    `smoke: ${changed.length} files changed since ${flags.affected} run ${groups === "all" ? "every group" : groups.join(", ")}`,
+  );
+}
 const fixture = join(pkg, "../../core/tests/testdata/sales-q3.csv");
 // A second export, for the checks that a workspace holds several.
 const second = join(pkg, "../../core/tests/testdata/google-ads-sales.csv");
