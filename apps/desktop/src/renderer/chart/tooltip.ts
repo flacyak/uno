@@ -267,12 +267,17 @@ export function periodTargets(level: TimeLevel, summed: boolean, box: HTMLElemen
   return { all, under: among(all, ".chart-period") };
 }
 
+/** The keys a stack's targets step past STEPS': to the next value and the one before. */
+const ROWS_STEP = ["ArrowDown", "ArrowUp"] as const;
+
 /**
  * stackTargets gives the targets of `box`, as stack drew `tally` for `plot`:
  * each segment, value by value and in slot order within a value. Its box lists
  * the value's series in slot order, then Other and the total, the segment's
- * own line apart. The keys step through them in that order. A pointer over a
- * row's label or its value is over its nearest segment.
+ * own line apart. Right and Left step within a bar, Home and End to its first
+ * and last segment, and Down and Up to the next value and the one before,
+ * keeping the series, or the nearest a bar has where it lacks it. A pointer
+ * over a row's label or its value is over its nearest segment.
  */
 export function stackTargets(plot: StackPlot, tally: StackTally, box: HTMLElement): Targets {
   const measure = (m: { rows: number; sum: number }): number =>
@@ -308,6 +313,30 @@ export function stackTargets(plot: StackPlot, tally: StackTally, box: HTMLElemen
       said: said(r, slotOf(segment)),
     })),
   );
+  const firsts = rows.map((_, r) => rows.slice(0, r).reduce((n, row) => n + row.length, 0));
+  const rowOf = (at: number): number => firsts.findLastIndex((first) => first <= at);
+  const step = (key: string, at: number | undefined): number | undefined => {
+    if (all.length === 0) return undefined;
+    if (at === undefined) {
+      if (key === ROWS_STEP[0]) return 0;
+      return key === ROWS_STEP[1] ? firsts.at(-1) : undefined;
+    }
+    const r = rowOf(at);
+    const [first, last] = [firsts[r]!, firsts[r]! + rows[r]!.length - 1];
+    if (key === "ArrowRight") return Math.min(at + 1, last);
+    if (key === "ArrowLeft") return Math.max(at - 1, first);
+    if (key === "Home") return first;
+    if (key === "End") return last;
+    const to = key === ROWS_STEP[0] ? r + 1 : key === ROWS_STEP[1] ? r - 1 : undefined;
+    if (to === undefined || to < 0 || to >= rows.length) return to === undefined ? undefined : at;
+    const slot = slotOf(all[at]!.mark);
+    const near = rows[to]!.reduce(
+      (best, s, i) =>
+        Math.abs(slotOf(s) - slot) < Math.abs(slotOf(rows[to]![best]!) - slot) ? i : best,
+      0,
+    );
+    return firsts[to]! + near;
+  };
   const under = (hit: EventTarget | null, x: number): number | undefined => {
     const segment = hit instanceof Element ? hit.closest(".chart-segment") : null;
     const by = all.findIndex((target) => target.mark === segment);
@@ -320,9 +349,9 @@ export function stackTargets(plot: StackPlot, tally: StackTally, box: HTMLElemen
       return Math.max(left - x, x - right, 0);
     };
     const near = rows[r]!.reduce((best, s, i) => (apart(s) < apart(rows[r]![best]!) ? i : best), 0);
-    return all.findIndex((target) => target.mark === rows[r]![near]);
+    return firsts[r]! + near;
   };
-  return { all, under };
+  return { all, under, step, keys: ROWS_STEP };
 }
 
 /** A point in the page, or in the window's own px. */

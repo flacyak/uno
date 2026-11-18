@@ -6,7 +6,8 @@
  * with the value's total past the last. A part below zero stacks leftward
  * from the same zero. A legend over the bars keys the series in the same
  * colours and order, clear of the first bar and inside the plot. The pointer
- * on a segment lists its value's series in its box, its own apart.
+ * on a segment lists its value's series in its box, its own apart, and Down
+ * steps to the next value's bar, keeping the series.
  *
  * They open the workspace smoke.js wrote of a small export of four regions'
  * sales in eight channels: rows per region by channel in a new window, and
@@ -20,7 +21,7 @@ import { SEGMENT_GAP } from "@renderer/chart/stack";
 import { SERIES_AT_MOST } from "@tally";
 import { RECT_SLACK } from "./charts.ts";
 import { BARS_INSET } from "@renderer/chart/rows";
-import type { Check } from "./check.ts";
+import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote of two stacked charts. */
 const STACKED = process.env["UNO_SMOKE_STACKED"] ?? "";
@@ -42,6 +43,12 @@ const EAST_LINES = [
   "7 Other",
   "52 total",
 ];
+/** A real Down. */
+const DOWN_KEY: readonly Input[] = [
+  { type: "keyDown", keyCode: "Down" },
+  { type: "keyUp", keyCode: "Down" },
+];
+
 export const CHART_STACK: Check[] = [
   {
     name: "a stacked chart draws each value's bar as a segment per series in slot order, then Other, each in its colour, a gap from the one before, as thick as a bar, with its total at the tip",
@@ -165,6 +172,16 @@ export const CHART_STACK: Check[] = [
       if (style(segment).backgroundColor !== darker) return "the segment is " + style(segment).backgroundColor;
       const row = segment.closest(".chart-bar-row");
       return style(row).backgroundColor === computed("var(--accent-b)") ? "" : "the row is " + style(row).backgroundColor;
+    `,
+  },
+  {
+    name: "Down steps a stack's cursor to the next value's bar, keeping the series",
+    input: { events: DOWN_KEY, through: true },
+    script: `
+      const south = document.querySelector(".chart .chart-bar-row:nth-child(3) .chart-segment:nth-child(2)");
+      if (!(await until(() => south.classList.contains("cursor")))) return "South's direct wears no cursor";
+      const said = document.querySelector(".chart .chart-tip-line.own").textContent;
+      return said === "8 direct" ? "" : "the box's own line says " + said;
     `,
   },
 ];

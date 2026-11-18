@@ -562,17 +562,40 @@ test("a stack's segment says its value's every series in slot order, then Other 
   expect(keyed).toStrictEqual(["var(--chart-1)", "var(--chart-2)", "var(--ink-3)", ""]);
 });
 
-test("the keys step a stack's segments value by value in slot order, and a pointer on a row's label is over its nearest segment", () => {
+test("a pointer on a stack's row label is over its nearest segment", () => {
+  over(stack(STACKED, STACKS, TALL, { ...PLOT_ROOM, width: 2_000 }), (box) =>
+    stackTargets(STACKED, STACKS, box),
+  );
+  const segments = [...document.querySelectorAll(".chart-segment")];
+  const label = document.querySelectorAll(".chart-bar-label")[1]!;
+  label.dispatchEvent(new PointerEvent("pointermove", { clientX: 0, clientY: 0, bubbles: true }));
+  expect(segments.findIndex((s) => s.classList.contains("cursor"))).toBe(3);
+});
+
+test("Right and Left step within a bar, Home and End to its ends, and Down and Up keep the series, or its nearest", () => {
   const { tip } = over(stack(STACKED, STACKS, TALL, { ...PLOT_ROOM, width: 2_000 }), (box) =>
     stackTargets(STACKED, STACKS, box),
   );
   const segments = [...document.querySelectorAll(".chart-segment")];
   const worn = () => segments.findIndex((s) => s.classList.contains("cursor"));
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(0);
   tip.step(pressed("End"));
-  expect(worn()).toBe(3);
-  tip.step(pressed("ArrowLeft"));
   expect(worn()).toBe(2);
-  const label = document.querySelectorAll(".chart-bar-label")[1]!;
-  label.dispatchEvent(new PointerEvent("pointermove", { clientX: 0, clientY: 0, bubbles: true }));
+  tip.step(pressed("ArrowRight"));
+  expect(worn()).toBe(2);
+  tip.step(pressed("Home"));
+  tip.step(pressed("ArrowRight"));
+  expect(worn()).toBe(1);
+  // Down keeps direct, which South's bar has, and stays on the last bar.
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(3);
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(3);
+  tip.step(pressed("ArrowUp"));
+  expect(worn()).toBe(1);
+  // From web, South's bar has no web, so Down lands on its nearest, direct.
+  tip.step(pressed("Home"));
+  tip.step(pressed("ArrowDown"));
   expect(worn()).toBe(3);
 });
