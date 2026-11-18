@@ -9,6 +9,7 @@
   "core/.vscode/**": "none",
   "apps/www/**": "none",
   "core/scripts/**": "none",
+  "scripts/**": "none",
   "core/tests/lab/**": "none",
   "core/tests/efficiency/**": "none",
   "core/tests/performance/**": "none",
