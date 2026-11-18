@@ -1,5 +1,6 @@
 import { defineConfig } from "vite-plus";
 
+import { timingsReporter } from "../../core/tests/timings.ts";
 import { messagesPlugins } from "./scripts/messages.js";
 
 export default defineConfig({
@@ -20,6 +21,8 @@ export default defineConfig({
     // nothing in it unless a file is named, and it stands in front of the
     // one happy-dom gives the renderer. The shell reads its settings from that.
     execArgv: ["--no-experimental-webstorage"],
+    // Writes what each file cost when UNO_TIMINGS names a file.
+    reporters: ["default", timingsReporter()],
   },
   lint: {
     options: {
