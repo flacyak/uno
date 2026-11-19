@@ -287,3 +287,18 @@ test('unsent values at or below zero are read apart from the others', () => {
   expect(others).toEqual({ values: 1, rows: 1, sum: 0.5 });
   expect(below).toEqual({ values: 2, rows: 2, sum: -2 });
 });
+
+test('a split snapshot sends the values a person moved first, and the rest largest first', () => {
+  const rows: Row[] = [];
+  for (let i = 0; i < GROUPS_SENT + 1; i++) {
+    for (let r = 0; r <= i; r++) rows.push([`${i}`, 'web']);
+  }
+  const { values, others } = folded(rows).snapshot(['0', '3']);
+  expect(values.slice(0, 3).map((v) => v.value)).toStrictEqual([
+    '0',
+    '3',
+    `${GROUPS_SENT}`,
+  ]);
+  expect(values.length).toBe(GROUPS_SENT);
+  expect(others.values).toBe(1);
+});

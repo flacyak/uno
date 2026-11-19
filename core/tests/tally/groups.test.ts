@@ -162,3 +162,27 @@ test('a fold sums cells with the decimal mark of their column', () => {
   expect(groups[0]!.sum).toBe(1238.31);
   expect(skipped.unparsed).toBe(1);
 });
+
+test('a snapshot sends the values a person moved first, in their order, and the rest largest first', () => {
+  const fold = new GroupsFold();
+  // Value i has i + 1 rows, so the largest are sent and the first few are not.
+  const values = GROUPS_SENT + 2;
+  for (let i = 0; i < values; i++) {
+    for (let r = 0; r <= i; r++) fold.add(`${i}`);
+  }
+  const wide = WIDE.repeat(LABEL_AT_MOST + 1);
+  fold.add(wide);
+  const moved = ['0', 'gone', '5', WIDE.repeat(LABEL_AT_MOST)];
+  const { groups, others } = fold.snapshot(moved);
+  // A value the fold has no group of is passed over, and a cut label finds its value.
+  expect(groups.slice(0, 3).map((g) => g.value)).toStrictEqual([
+    '0',
+    '5',
+    WIDE.repeat(LABEL_AT_MOST),
+  ]);
+  expect(groups[3]!.value).toBe(`${values - 1}`);
+  expect(groups.length).toBe(GROUPS_SENT);
+  expect(others.values).toBe(values + 1 - GROUPS_SENT);
+  // With none moved, the snapshot is as it was.
+  expect(fold.snapshot([])).toStrictEqual(fold.snapshot());
+});

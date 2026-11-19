@@ -73,7 +73,7 @@ function splitted(
       t: 'stack',
       plot,
       coverage,
-      ...fold.snapshot(),
+      ...fold.snapshot(plot.t === 'stack' ? plot.order : []),
     }),
     mend: () => Promise.resolve(),
   };
