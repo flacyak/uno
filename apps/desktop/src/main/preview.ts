@@ -15,6 +15,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { BAR_THICK } from "@renderer/chart/rows";
 import type { BrowserWindow, Rectangle } from "electron";
 
 import { ask } from "./ask.ts";
@@ -283,6 +284,14 @@ const INSERT_CHART_KEYS = "CmdOrCtrl+Shift+G";
 const DATES = { column: 500, open: 2_400, order: 5_000, per: 7_600, enter: 10_200, end: 13_000 };
 /** How many Downs take Per from Automatic to Week, past Hour, which dates alone leave off. */
 const TO_WEEK = 2;
+
+/**
+ * The moving story's beats: the last of region's bars carried to the top by
+ * its label, the cursor put on the second bar, Alt+Down twice, and Alt+Up.
+ */
+const MOVING = { carry: 600, cursor: 4_000, down: 5_400, up: 8_000, end: 10_400 };
+/** How many places Alt+Down moves the bar in the moving story. */
+const MOVING_DOWNS = 2;
 
 /**
  * The stacked story's beats: region selected, the chart form opened on it by
@@ -913,6 +922,7 @@ const STORIES: Record<string, Story> = {
   kinds: { end: KINDS_END, script: playKinds },
   dates: { end: DATES.end, script: playDates },
   stacked: { end: STACKED.end, script: playStacked },
+  moving: { end: MOVING.end, script: playMoving },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
   reread: { end: REREAD.end, script: playReread },
@@ -1116,6 +1126,30 @@ async function playDates(win: BrowserWindow, at: Clock): Promise<void> {
   await at(DATES.enter);
   press(win, "Return");
   await at(DATES.end);
+}
+
+/**
+ * playMoving performs the moving story: the last bar carried by its label up
+ * past the three above it, a click on the second bar for the cursor, Alt+Down
+ * twice, and Alt+Up, each saying on the status line where the bar stands.
+ */
+async function playMoving(win: BrowserWindow, at: Clock): Promise<void> {
+  const { carryBy, pressOn } = await glider(win);
+  const rows = ".chart .chart-bar-row";
+  const first = await middle(win, `${rows}:first-child`);
+  const last = await middle(win, `${rows}:last-child .chart-bar-label`);
+  await at(MOVING.carry);
+  await carryBy(`${rows}:last-child .chart-bar-label`, {
+    x: 0,
+    y: first.y - last.y - BAR_THICK / 2,
+  });
+  await at(MOVING.cursor);
+  await pressOn(`${rows}:nth-child(2) .chart-bar-track`);
+  await at(MOVING.down);
+  await presses(win, "Down", MOVING_DOWNS, KIND_STEP_MS, ["alt"]);
+  await at(MOVING.up);
+  press(win, "Up", ["alt"]);
+  await at(MOVING.end);
 }
 
 /**
@@ -1669,7 +1703,7 @@ function press(win: BrowserWindow, keyCode: string, modifiers: Modifier[] = []):
   });
 }
 
-type Modifier = "control" | "shift";
+type Modifier = "control" | "shift" | "alt";
 
 /** presses presses keyCode `n` times, `gap` ms apart, with `modifiers` held. */
 async function presses(
