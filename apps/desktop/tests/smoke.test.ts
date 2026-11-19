@@ -233,7 +233,13 @@ test("a hung check is killed at its deadline, and named", async () => {
   expect(errors[0]).toMatch(/^smoke: timed out after \S+s in check "hangs", /);
 });
 
-test("a stop kills the app of every drive under way, as smoke.js runs two", () => {
+/**
+ * How long a killed app may take to be gone: SIGKILL lands at once, but the
+ * app lingers as a zombie until init reaps it, after its driver has exited.
+ */
+const REAPED_MS = 2000;
+
+test("a stop kills the app of every drive under way, as smoke.js runs two", async () => {
   // Each app prints its pid; then the script driving both stops itself.
   const app = `console.log("pid " + process.pid); setInterval(() => {}, ${STEP_MS});`;
   const script = `
@@ -255,7 +261,7 @@ test("a stop kills the app of every drive under way, as smoke.js runs two", () =
       return false;
     }
   };
-  expect(pids.filter(alive)).toEqual([]);
+  await expect.poll(() => pids.filter(alive), { timeout: REAPED_MS }).toEqual([]);
 });
 
 test("the stand-in S3 comes up before the app, holding the export the checks add", () => {
