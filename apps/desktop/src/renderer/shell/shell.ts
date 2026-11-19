@@ -672,6 +672,21 @@ export class Shell {
   }
 
   /**
+   * arrange stands chart `id`'s bars with the values of `order` first, as a
+   * person moved them: a change to save, which keeps the chart's fold.
+   */
+  private async arrange(id: string, order: string[]): Promise<void> {
+    const w = this.workspace;
+    const plot = w?.charts.all.find((c) => c.id === id)?.plot;
+    if (w === undefined || (plot?.t !== "bars" && plot?.t !== "stack")) return;
+    try {
+      await this.drawn(w.charts.change(id, { plot: { ...plot, order } }));
+    } catch (err) {
+      if (this.workspace === w) this.say(message(err), "error");
+    }
+  }
+
+  /**
    * told waits on what the chart form sent through `w`, and says a refusal on
    * the status line once the form that sent it has closed, as its note is gone.
    */
@@ -1030,6 +1045,7 @@ export class Shell {
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
           reorder: (id, order) => void this.reorder(id, order),
+          arrange: (id, order) => void this.arrange(id, order),
           notDates: (source, dated) =>
             this.withTab(source, (tab) => {
               this.select(tab);

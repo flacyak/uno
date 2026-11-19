@@ -69,6 +69,7 @@ const NO_LAYER: Stage = {
   notNumbers: () => undefined,
   notDates: () => undefined,
   reorder: () => undefined,
+  arrange: () => undefined,
   edit: () => undefined,
   refresh: () => undefined,
   batch: () => undefined,

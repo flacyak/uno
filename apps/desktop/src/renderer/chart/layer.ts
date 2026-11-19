@@ -53,6 +53,7 @@ export type Asks = Pick<
   | "notNumbers"
   | "notDates"
   | "reorder"
+  | "arrange"
   | "edit"
   | "refresh"
   | "remove"
@@ -260,6 +261,11 @@ export class ChartLayer implements Stage {
   /** reorder reads chart `id`'s dates in `order` from now on. */
   reorder(id: string, order: Order): void {
     this.asks.reorder(id, order);
+  }
+
+  /** arrange stands chart `id`'s bars with the values of `order` first. */
+  arrange(id: string, order: string[]): void {
+    this.asks.arrange(id, order);
   }
 
   /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */

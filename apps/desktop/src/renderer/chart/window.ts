@@ -162,6 +162,8 @@ export interface Stage {
   notDates(source: string, dated: Dated): void;
   /** Reads chart `id`'s dates in `order` from now on, folding them again. */
   reorder(id: string, order: Order): void;
+  /** Stands chart `id`'s bars with the values of `order` first, in its order, from now on. */
+  arrange(id: string, order: string[]): void;
   /** Opens the chart form on chart `id`, hung at `place`, with the keys on its field `on`. */
   edit(id: string, place: MenuPlace, on?: "refresh"): void;
   /** Asks for chart `id`'s periods at `per` from `offset`, and draws its window again once they come. */
