@@ -57,3 +57,24 @@ test("the clock is empty with no workspace, and for a tab with no file behind it
   expect(painted(undefined)).toBe("");
   expect(painted(workspace(tab(0, true, true)))).toBe("");
 });
+
+test("a message that needs the person to act is read out by a screen reader, and one that does not only shows", () => {
+  const heard = () => document.querySelector("#status-heard")!.textContent;
+  const shown = () => document.querySelector("#status-msg")!;
+  for (const kind of ["error", "warning", "prompt"] as const) {
+    bar.say(`${kind} said`, kind);
+    expect([shown().textContent, shown().className, heard()]).toStrictEqual([
+      `${kind} said`,
+      "err",
+      `${kind} said`,
+    ]);
+  }
+  for (const kind of ["done", "progress", "note"] as const) {
+    bar.say(`${kind} said`, kind);
+    expect([shown().textContent, shown().className, heard()]).toStrictEqual([
+      `${kind} said`,
+      "",
+      "",
+    ]);
+  }
+});

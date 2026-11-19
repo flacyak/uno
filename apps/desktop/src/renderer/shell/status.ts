@@ -49,6 +49,24 @@ function clockText(tab: Tab): string {
   return p.complete ? `${time} · ${m.rows_count({ count: p.rows })}` : time;
 }
 
+/** What the status line says a message is. */
+export type StatusKind =
+  /** Something failed, or was refused. */
+  | "error"
+  /** A second press, or a choice, confirms what the person asked for. */
+  | "warning"
+  /** The person is asked to type or pick something. */
+  | "prompt"
+  /** Something the app did: saved, inserted, moved. */
+  | "done"
+  /** Something under way, such as a search. */
+  | "progress"
+  /** A hint or a reason that asks nothing, or the line cleared. */
+  | "note";
+
+/** The kinds that need the person to act, which a screen reader reads out. */
+const ACTS: ReadonlySet<StatusKind> = new Set(["error", "warning", "prompt"]);
+
 /**
  * What the bar gives up, in order, while it is too narrow for its items once
  * the file and message lines are down to their least: the clock, which only
@@ -67,6 +85,7 @@ export class StatusBar {
   private readonly mode = must(document.querySelector<HTMLElement>("#status-mode"));
   private readonly file = must(document.querySelector<HTMLElement>("#status-file"));
   private readonly msg = must(document.querySelector<HTMLElement>("#status-msg"));
+  private readonly heard = must(document.querySelector<HTMLElement>("#status-heard"));
   private readonly waiting = must(document.querySelector<HTMLElement>("#status-keys"));
   private readonly cmd = must(document.querySelector<HTMLInputElement>("#status-cmd"));
   private readonly clock = must(document.querySelector<HTMLElement>("#status-clock"));
@@ -199,11 +218,16 @@ export class StatusBar {
     this.sources.setAttribute("aria-pressed", String(open.panel));
   }
 
-  /** say writes the message line. */
-  say(text: string, isError: boolean): void {
+  /**
+   * say writes the message line, in the error's ink where the message needs
+   * the person to act, which is also when a screen reader reads it out.
+   */
+  say(text: string, kind: StatusKind): void {
+    const acts = ACTS.has(kind);
     this.msg.textContent = text;
     this.msg.title = text;
-    this.msg.className = isError ? "err" : "";
+    this.msg.className = acts ? "err" : "";
+    this.heard.textContent = acts ? text : "";
     this.fit();
   }
 

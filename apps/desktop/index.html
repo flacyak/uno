@@ -72,6 +72,9 @@
         <span id="status-file"></span>
         <span class="sep">&middot;</span>
         <span id="status-msg"></span>
+        <!-- What the status line says that needs the person to act, which a
+             screen reader reads out; status.ts says which messages those are. -->
+        <span id="status-heard" class="heard" role="status"></span>
         <span class="grow"></span>
         <!-- Keys waiting for the rest of a command, where vim's showcmd puts them. -->
         <span id="status-keys" class="keys"></span>
