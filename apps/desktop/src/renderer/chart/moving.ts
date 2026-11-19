@@ -5,6 +5,28 @@
  */
 
 import { GROUPS_SENT } from "@engine";
+import type { Press } from "@renderer/keys";
+
+/**
+ * Where Alt with each key moves the bar under the cursor, from `at` among
+ * `count` bars: up and down one, and to the top and the bottom.
+ */
+const MOVES: ReadonlyMap<string, (at: number, count: number) => number> = new Map([
+  ["ArrowUp", (at: number) => at - 1],
+  ["ArrowDown", (at: number) => at + 1],
+  ["Home", () => 0],
+  ["End", (_at: number, count: number) => count - 1],
+]);
+
+/** The keys that move a bar, as a plot names them for a screen reader. */
+export const MOVE_KEYS = [...MOVES.keys()].map((key) => `Alt+${key}`);
+
+/** movedTo gives where `press` moves the bar at `at` among `count`, or none for another key. */
+export function movedTo(press: Press, at: number, count: number): number | undefined {
+  if (!press.alt || press.ctrl || press.meta || press.shift) return undefined;
+  const to = MOVES.get(press.key)?.(at, count);
+  return to === undefined ? undefined : Math.max(0, Math.min(to, count - 1));
+}
 
 /**
  * movedOrder gives a chart's `order` once the bar at `from` among `drawn`, the

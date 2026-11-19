@@ -615,6 +615,7 @@
   "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",
   "chart_table_rows": "linhas",
   "chart_stack_total": "total",
+  "chart_bar_moved": "{value} passa à posição {place} de {count}",
   "chart_summary_stack": "Dividido por {split} em {count} séries.",
   "chart_stack_unsplit": "as linhas além de {count} pares entram em Outros",
   "chart_table_share": "proporção",

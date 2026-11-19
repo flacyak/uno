@@ -34,6 +34,7 @@ import type { Chart, ChartColumn, ChartPlace, Plot } from "@document";
 import { m } from "@paraglide/messages";
 import type { Heard } from "@renderer/charts";
 import { wheelWay } from "@renderer/grid/metrics";
+import { num } from "@renderer/locale";
 import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import type { Checks } from "@renderer/refresh";
@@ -58,6 +59,7 @@ import {
 import { kindOf } from "./kind.ts";
 import type { Dated, Drawing, Drawn, Kind, Kinds, PlotRoom } from "./kind.ts";
 import { KINDS } from "./kinds/index.ts";
+import { movedOrder, movedTo } from "./moving.ts";
 import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
 import type { Corner, Rect, Room } from "./place.ts";
 import { summaryOf } from "./summary.ts";
@@ -96,6 +98,12 @@ const GRIP =
 
 /** A pointer's `button` for the left button, a finger or a pen's tip. */
 const PRIMARY_BUTTON = 0;
+
+/** valuesOf gives the values `tally`'s bars stand for, top to bottom, or none for another kind. */
+function valuesOf(tally: Drawn | undefined): string[] {
+  if (tally?.t === "groups") return tally.groups.map((g) => g.value);
+  return tally?.t === "stack" ? tally.values.map((v) => v.value) : [];
+}
 
 /** What names something that scrolls inside a window, for the wheel to find it. */
 const SCROLLS = ".chart-scrolls";
@@ -332,6 +340,10 @@ export class ChartWindow {
   private readonly words = new Words();
   /** The box that says what the mark under the pointer is worth. */
   private readonly tip: Tooltip;
+  /** The bar the keys moved, and where, which the cursor goes to once a drawing stands it there. */
+  private moving: { value: string; to: number; like: string | undefined } | undefined;
+  /** The values the bars drawn stand for, top to bottom, from the tally they were drawn from. */
+  private shown: string[] = [];
   /** The pointer that holds the window, while one does. */
   private hold: Hold | undefined;
   /** The frame the next draw of the plot waits for, or 0. */
@@ -505,6 +517,7 @@ export class ChartWindow {
     const heard = this.stage.heard(this.chart.id);
     const room = this.plotRoom();
     const drawn = drawable(heard, this.kind(), room);
+    this.shown = valuesOf(drawn?.tally);
     const latest = heard?.latest;
     const named = this.summarise(heard, room);
     if (drawn === undefined) this.fill(false, ...this.state(heard, room));
@@ -554,6 +567,39 @@ export class ChartWindow {
     const drawn = this.place(drawing.draw(this.plot.clientHeight), named);
     drawing.fit(drawn);
     this.tip.show(drawing.targets(drawn));
+    const moved = this.moving;
+    if (moved !== undefined && this.shown[moved.to] === moved.value) {
+      this.moving = undefined;
+      this.tip.follow(drawn.querySelectorAll(".chart-bar-row")[moved.to]!, moved.like);
+    }
+  }
+
+  /** moveBar moves the bar under the cursor where `press` says, and says where it stands. */
+  private moveBar(press: Press, at: EventTarget | null): boolean {
+    const { id, plot } = this.chart;
+    if (at !== this.plot || (plot.t !== "bars" && plot.t !== "stack")) return false;
+    const rows = [...this.plot.querySelectorAll(".chart-bar-row")];
+    const from = rows.findIndex((row) => row.matches(".cursor, :has(.cursor)"));
+    // A stack's cursor keeps its series, the segment of the same slot.
+    const slot = this.plot.querySelector<HTMLElement>(".chart-segment.cursor")?.dataset["slot"];
+    const to = from === -1 ? undefined : movedTo(press, from, rows.length);
+    if (to === undefined) return false;
+    const drawn = this.shown.slice(0, rows.length);
+    const value = drawn[from]!;
+    if (to === from) return true;
+    const like = slot === undefined ? undefined : `.chart-segment[data-slot="${slot}"]`;
+    this.moving = { value, to, like };
+    const order = movedOrder(drawn, plot.order ?? [], from, to);
+    // The window holds the order at once, as the model does, so a move before the layer shows it builds on this one.
+    this.chart = { ...this.chart, plot: { ...plot, order } };
+    this.stage.arrange(id, order);
+    const named = value === "" ? m.chart_blank_value() : value;
+    // A move is done, and asks nothing more, so the status line shows it and no screen reader reads it out.
+    this.stage.say(
+      m.chart_bar_moved({ value: named, place: num(to + 1), count: num(rows.length) }),
+      "done",
+    );
+    return true;
   }
 
   /** place puts `drawn` in the plot as an image, named by what `named` names, and gives it back. */
@@ -799,7 +845,7 @@ export class ChartWindow {
     else if (edits(press, e.target)) this.change();
     else if (deleteKey(press)) this.unchart();
     else if (undoKey(press)) this.stage.say(m.chart_undo_hint(), "note");
-    else if (!this.arrow(press, e.target)) return;
+    else if (!this.moveBar(press, e.target) && !this.arrow(press, e.target)) return;
     e.preventDefault();
     e.stopPropagation();
   }

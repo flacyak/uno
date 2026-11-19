@@ -719,3 +719,34 @@ test("Ctrl+Z on a window says on the status line, as a note no screen reader rea
   press(made.box, "z", { ctrlKey: true });
   expect(say).toHaveBeenCalledExactlyOnceWith(m.chart_undo_hint(), "note");
 });
+
+test("Alt with Up, Down, Home and End moves the bar under the cursor, asks the stage to stand the bars so, says where it stands, and the cursor follows it", async () => {
+  const read = tallyOf(["West", "East", "South"], true);
+  let heard = heardOf(read, read);
+  const arrange = vi.fn();
+  const say = vi.fn();
+  const made = hearing(() => heard, BARS, { arrange, say });
+  const plot = made.box.querySelector<HTMLElement>(".chart-plot")!;
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS + 1) });
+  await frame();
+  plot.focus();
+  press(plot, "ArrowRight");
+  press(plot, "ArrowRight");
+  const moved = press(plot, "ArrowUp", { altKey: true });
+  expect(moved.defaultPrevented).toBe(true);
+  expect(arrange).toHaveBeenLastCalledWith(BARS.id, ["East"]);
+  expect(say).toHaveBeenLastCalledWith("East moved to 1 of 3", "done");
+  // The bars stand so once the tally comes, and the cursor goes with East.
+  const after = tallyOf(["East", "West", "South"], true);
+  heard = heardOf(after, after);
+  made.redraw();
+  await frame();
+  const rows = [...made.box.querySelectorAll(".chart-bar-row")];
+  expect(made.box.querySelector(".cursor")).toBe(rows[0]);
+  press(plot, "End", { altKey: true });
+  expect(arrange).toHaveBeenLastCalledWith(BARS.id, ["West", "South", "East"]);
+  // At the top already, Alt+Up takes the key and asks nothing more.
+  arrange.mockClear();
+  expect(press(plot, "ArrowUp", { altKey: true }).defaultPrevented).toBe(true);
+  expect(arrange).not.toHaveBeenCalled();
+});
