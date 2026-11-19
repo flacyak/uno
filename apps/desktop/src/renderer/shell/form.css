@@ -31,7 +31,25 @@
   --label-column: round(up, calc(8px + max(48px, var(--label-width))), 1px);
   display: grid;
   grid-template-columns: minmax(var(--label-column), max-content) minmax(0, 1fr);
+  /* The title, the fields, the note and the buttons. A form form.ts caps to
+   * the page gives its fields what the others leave, and they scroll. */
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   column-gap: 8px;
+}
+
+/* The fields stand in the form's columns, and scroll where it is capped,
+ * under .themed-bar's bar (base.css). A capped form's fields keep their inset
+ * clear of the bar, which takes the right of the columns, so none runs under it. */
+.pop-form .fields {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-content: start;
+  overflow: hidden auto;
+}
+
+.pop-form.capped .field {
+  padding-right: calc(8px + var(--bar));
 }
 
 .pop-form .title,

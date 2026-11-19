@@ -13,8 +13,8 @@
  * app's language.
  */
 
-import type { ChartColumn, Plot } from "@document";
-import type { Groups, Sample } from "@engine";
+import type { ChartColumn, Plot, StackPlot } from "@document";
+import type { Groups, Sample, StackTally } from "@engine";
 import { m } from "@paraglide/messages";
 import type { Press } from "@renderer/keys";
 import { columnLabel, unnamed } from "@renderer/grid/rows";
@@ -24,6 +24,7 @@ import { el } from "@renderer/shell/util";
 import type { TimeLevel } from "@tally";
 import { fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
+import { keyOf } from "./stack.ts";
 import type { Room } from "./place.ts";
 
 /**
@@ -83,6 +84,10 @@ type Scatter = Extract<Plot, { t: "scatter" }>;
 export interface Reading {
   value: string;
   label: Node;
+  /** The colour of what it is of, where the box says each reading on a line. */
+  key?: string;
+  /** Whether it is the mark's own reading among its neighbours'. */
+  own?: boolean;
 }
 
 /** A mark a person can point at or step to. */
@@ -97,6 +102,8 @@ export interface Target {
   key: string;
   /** What the mark is worth, read when the box says it. */
   said: () => Reading[];
+  /** Whether the box says each reading on a line of its own, keyed, as a stack's bar. */
+  lines?: boolean;
 }
 
 /** The marks of a drawing, in the order the keys step through them. */
@@ -107,6 +114,13 @@ export interface Targets {
    * over, or none.
    */
   under: (hit: EventTarget | null, x: number, y: number) => number | undefined;
+  /**
+   * step gives where `key` takes the cursor from `at`, for marks laid out in
+   * rows and columns, or none for a key it leaves to STEPS.
+   */
+  step?: (key: string, at: number | undefined) => number | undefined;
+  /** The keys `step` takes past STEPS', which the plot names for a screen reader. */
+  keys?: readonly string[];
 }
 
 /** The marks of nothing a pointer can point at. */
@@ -253,6 +267,93 @@ export function periodTargets(level: TimeLevel, summed: boolean, box: HTMLElemen
   return { all, under: among(all, ".chart-period") };
 }
 
+/** The keys a stack's targets step past STEPS': to the next value and the one before. */
+const ROWS_STEP = ["ArrowDown", "ArrowUp"] as const;
+
+/**
+ * stackTargets gives the targets of `box`, as stack drew `tally` for `plot`:
+ * each segment, value by value and in slot order within a value. Its box lists
+ * the value's series in slot order, then Other and the total, the segment's
+ * own line apart. Right and Left step within a bar, Home and End to its first
+ * and last segment, and Down and Up to the next value and the one before,
+ * keeping the series, or the nearest a bar has where it lacks it. A pointer
+ * over a row's label or its value is over its nearest segment.
+ */
+export function stackTargets(plot: StackPlot, tally: StackTally, box: HTMLElement): Targets {
+  const measure = (m: { rows: number; sum: number }): number =>
+    plot.sum === undefined ? m.rows : m.sum;
+  const slotOf = (segment: Element): number => Number((segment as HTMLElement).dataset["slot"]);
+  const rows = [...box.querySelectorAll(".chart-bar-row")].map((row) =>
+    [...row.querySelectorAll(".chart-segment")].sort((a, b) => slotOf(a) - slotOf(b)),
+  );
+  const said = (r: number, own: number) => (): Reading[] => {
+    const v = tally.values[r]!;
+    const series = tally.series.length;
+    const parts = [...v.cells, v.other].map((cell, slot) => ({ cell, slot }));
+    const read = parts
+      .filter(({ cell }) => measure(cell) !== 0)
+      .map(({ cell, slot }) => ({
+        value: num(measure(cell)),
+        label: slot < series ? named(tally.series[slot]!) : el("span", "", m.chart_pie_other()),
+        key: keyOf(slot, series),
+        own: slot === own,
+      }));
+    return [
+      ...read,
+      { value: num(measure(v.total)), label: el("span", "", m.chart_stack_total()) },
+    ];
+  };
+  const all: Target[] = rows.flatMap((segments, r) =>
+    segments.map((segment) => ({
+      mark: segment,
+      at: segment,
+      front: false,
+      key: (segment as HTMLElement).style.getPropertyValue("--key"),
+      lines: true,
+      said: said(r, slotOf(segment)),
+    })),
+  );
+  const firsts = rows.map((_, r) => rows.slice(0, r).reduce((n, row) => n + row.length, 0));
+  const rowOf = (at: number): number => firsts.findLastIndex((first) => first <= at);
+  const step = (key: string, at: number | undefined): number | undefined => {
+    if (all.length === 0) return undefined;
+    if (at === undefined) {
+      if (key === ROWS_STEP[0]) return 0;
+      return key === ROWS_STEP[1] ? firsts.at(-1) : undefined;
+    }
+    const r = rowOf(at);
+    const [first, last] = [firsts[r]!, firsts[r]! + rows[r]!.length - 1];
+    if (key === "ArrowRight") return Math.min(at + 1, last);
+    if (key === "ArrowLeft") return Math.max(at - 1, first);
+    if (key === "Home") return first;
+    if (key === "End") return last;
+    const to = key === ROWS_STEP[0] ? r + 1 : key === ROWS_STEP[1] ? r - 1 : undefined;
+    if (to === undefined || to < 0 || to >= rows.length) return to === undefined ? undefined : at;
+    const slot = slotOf(all[at]!.mark);
+    const near = rows[to]!.reduce(
+      (best, s, i) =>
+        Math.abs(slotOf(s) - slot) < Math.abs(slotOf(rows[to]![best]!) - slot) ? i : best,
+      0,
+    );
+    return firsts[to]! + near;
+  };
+  const under = (hit: EventTarget | null, x: number): number | undefined => {
+    const segment = hit instanceof Element ? hit.closest(".chart-segment") : null;
+    const by = all.findIndex((target) => target.mark === segment);
+    if (by !== -1) return by;
+    const row = hit instanceof Element ? hit.closest(".chart-bar-row") : null;
+    const r = [...box.querySelectorAll(".chart-bar-row")].indexOf(row as Element);
+    if (r === -1 || rows[r]!.length === 0) return undefined;
+    const apart = (s: Element) => {
+      const { left, right } = s.getBoundingClientRect();
+      return Math.max(left - x, x - right, 0);
+    };
+    const near = rows[r]!.reduce((best, s, i) => (apart(s) < apart(rows[r]![best]!) ? i : best), 0);
+    return firsts[r]! + near;
+  };
+  return { all, under, step, keys: ROWS_STEP };
+}
+
 /** A point in the page, or in the window's own px. */
 export interface Point {
   x: number;
@@ -297,7 +398,7 @@ export class Tooltip {
   private cursor: { at: number; point?: Point } | undefined;
 
   constructor(
-    plot: HTMLElement,
+    private readonly plot: HTMLElement,
     private readonly within: HTMLElement,
     id: string,
   ) {
@@ -325,6 +426,10 @@ export class Tooltip {
    */
   show(targets: Targets): void {
     this.targets = targets;
+    this.plot.setAttribute(
+      "aria-keyshortcuts",
+      [...STEPS.keys(), ...(targets.keys ?? [])].join(" "),
+    );
     const count = targets.all.length;
     const point = this.cursor?.point;
     if (point !== undefined) this.hover(document.elementFromPoint(point.x, point.y), point);
@@ -338,7 +443,8 @@ export class Tooltip {
    */
   step(press: Press): boolean {
     const last = this.targets.all.length - 1;
-    const to = STEPS.get(press.key)?.(this.cursor?.at, last);
+    const at = this.cursor?.at;
+    const to = this.targets.step?.(press.key, at) ?? STEPS.get(press.key)?.(at, last);
     if (to === undefined || last < 0 || press.ctrl || press.alt || press.meta || press.shift) {
       return false;
     }
@@ -390,14 +496,24 @@ export class Tooltip {
     );
   }
 
-  /** say writes `target`'s key and its readings in the box, each value strong before its label. */
-  private say({ key, said }: Target): void {
+  /**
+   * say writes `target`'s key and its readings in the box, each value strong
+   * before its label, on one line, or each on a line of its own after its key.
+   */
+  private say({ key, said, lines = false }: Target): void {
     this.key.style.setProperty("--key", key);
+    this.box.classList.toggle("lines", lines);
     this.words.replaceChildren(
-      ...said().flatMap(({ value, label }, i) => {
+      ...said().flatMap(({ value, label, key: of, own = false }, i) => {
         const muted = el("span", "chart-tip-label");
         muted.append(label);
-        return [...(i > 0 ? [SEP] : []), el("strong", "chart-tip-value", value), " ", muted];
+        const read = [el("strong", "chart-tip-value", value), " ", muted];
+        if (!lines) return [...(i > 0 ? [SEP] : []), ...read];
+        const line = el("span", own ? "chart-tip-line own" : "chart-tip-line");
+        const swatch = el("span", "chart-tip-key");
+        if (of !== undefined) swatch.style.setProperty("--key", of);
+        line.append(swatch, ...read);
+        return [line];
       }),
     );
   }

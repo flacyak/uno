@@ -6,8 +6,8 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
-import type { Chart, Plot, TimePlot } from '@document';
-import { parseOverTime, parsePlot } from '@document/codec';
+import type { Chart, Plot, StackPlot, TimePlot } from '@document';
+import { parseOverTime, parsePlot, parseStacked } from '@document/codec';
 
 const WHERE = 'books.uno: view/charts.json: chart 1 of 1';
 const PLOT = `${WHERE} (c1): plot`;
@@ -96,6 +96,46 @@ describe('parseOverTime', () => {
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parseOverTime(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
+    );
+  });
+});
+
+const CHANNEL = { col: 2, header: 'channel' };
+
+describe('parseStacked', () => {
+  test.each<StackPlot>([
+    { t: 'stack', by: REGION, split: CHANNEL },
+    { t: 'stack', by: REGION, split: CHANNEL, sum: REVENUE },
+    { t: 'stack', by: NO_HEADER, split: REGION, sum: REGION },
+  ])('reads %j', (plot) => {
+    expect(parseStacked(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'stack', by: REGION }, 'split: col is not a column number'],
+    [{ t: 'stack', split: CHANNEL }, 'by: col is not a column number'],
+    [
+      { t: 'stack', by: REGION, split: CHANNEL, sum: { col: 4 } },
+      'sum: header is not text',
+    ],
+    [
+      { t: 'stack', by: REGION, split: { ...REGION, header: 'Region' } },
+      'split names the column by names',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseStacked(PLOT, plot)).toThrow(
+      new Error(`${PLOT}: ${said}`),
+    );
+  });
+
+  test('a stacked plot is one parsePlot reads, and refuses a key it does not know', () => {
+    const plot: StackPlot = { t: 'stack', by: REGION, split: CHANNEL };
+    expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
+    expect(() => parsePlot(PLOT, { ...plot, per: 'day' })).toThrow(
+      new Error(`${PLOT}: this build does not read "per"`),
+    );
+    expect(() => parsePlot(PLOT, { ...plot, split: REGION })).toThrow(
+      new Error(`${PLOT}: split names the column by names`),
     );
   });
 });

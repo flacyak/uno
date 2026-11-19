@@ -14,7 +14,7 @@ import type { Chart, ChartColumn, Plot } from "@document";
 import type { SourceRef } from "@engine";
 import { LEVEL_BATCH } from "@tally";
 import type { Drawn } from "@renderer/chart/kind";
-import { REGION, ROWS, UNITS } from "@main/smoke/fixture";
+import { REGION, REP, ROWS, UNITS } from "@main/smoke/fixture";
 import type { Shown } from "@renderer/charts";
 import { Workspace } from "@renderer/workspace";
 import { ADS, BARS, MOVED, SALES, unoOf } from "./charted.ts";
@@ -204,6 +204,7 @@ test("adding, removing, and changing a chart's source, kind, columns, title, sch
   const scatter: Chart = { ...BARS, id: "c2", plot: { t: "scatter", x: by, y: units } };
   const at: ChartColumn = { col: 0, header: "date" };
   const time: Chart = { ...BARS, id: "c3", plot: { t: "time", at, per: "day", order: "day" } };
+  const stack: Chart = { ...BARS, id: "c4", plot: { t: "stack", by, split: units } };
   const changes: ReadonlyArray<readonly [Chart, Partial<Shown>]> = [
     [BARS, { title: "Rows" }],
     [BARS, { refresh: 5 }],
@@ -216,8 +217,10 @@ test("adding, removing, and changing a chart's source, kind, columns, title, sch
     [time, { plot: { t: "time", at, per: "week", order: "day" } }],
     [time, { plot: { t: "time", at, per: "day", order: "month" } }],
     [time, { plot: { t: "time", at, per: "day", unit: "s" } }],
+    [stack, { plot: { t: "stack", by, split: at } }],
+    [stack, { plot: { t: "stack", by, split: units, sum: units } }],
   ];
-  await opened(uno(unoOf([BARS, scatter, time])), async (w) => {
+  await opened(uno(unoOf([BARS, scatter, time, stack])), async (w) => {
     for (const [chart, shown] of changes) {
       await w.charts.change(chart.id, shown);
       expect(w.dirty, JSON.stringify(shown)).toBe(true);
@@ -325,6 +328,24 @@ test("a reopened chart gets a complete tally", async () => {
       expect(complete).toMatchObject({ t: "groups", plot: made.plot });
       expect(back.charts.heard(made.id)?.latest).toBe(complete);
     });
+  });
+});
+
+test("a stacked chart's series keep their slots from one tally to the next", async () => {
+  const [by, split] = [
+    { col: REGION, header: "region" },
+    { col: REP, header: "rep" },
+  ];
+  const stack: Chart = { ...BARS, plot: { t: "stack", by, split } };
+  await opened(uno(unoOf([stack])), async (w) => {
+    const first = await completeOf(w);
+    if (first.t !== "stack") throw new Error("a stack tallies as a stack");
+    // The engine sends the same series ranked the other way round.
+    const ranks = [...first.series].reverse();
+    const values = first.values.map((v) => ({ ...v, cells: [...v.cells].reverse() }));
+    w.active.source.onTally(stack.id, { ...first, series: ranks, values });
+    const heard = w.charts.heard(stack.id)?.complete;
+    expect(heard).toStrictEqual(first);
   });
 });
 

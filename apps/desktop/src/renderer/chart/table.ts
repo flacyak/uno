@@ -10,9 +10,9 @@
  * file's text, set as text alone, and a number is in the app's language.
  */
 
-import type { Plot, TimePlot } from "@document";
+import type { Plot, StackPlot, TimePlot } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { Groups, Sample, TimeTally } from "@engine";
+import type { Groups, Sample, StackTally, TimeTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
@@ -120,6 +120,46 @@ export function points(
     header(columnLabel(name, col), true, true),
   );
   return [heads, sample.x.map((x, i) => row(digits(x), digits(sample.y[i]!)))];
+}
+
+/**
+ * stacked gives a stacked chart's headers and rows: the value's column, a
+ * column per series sent in slot order, Other where a value has rows in it,
+ * and the total; a row per value sent, the largest first; one for the values
+ * a tally sent none of, with their total; and a line that says so where
+ * there are values past those a tally keeps apart.
+ */
+export function stacked(plot: StackPlot, tally: StackTally): [HTMLElement[], HTMLElement[]] {
+  const measure = (g: Measured): number => (plot.sum === undefined ? g.rows : g.sum);
+  const other = tally.values.some((v) => v.other.rows > 0);
+  const heads = [
+    header(columnLabel(plot.by.header, plot.by.col), true),
+    ...tally.series.map((s) =>
+      s === "" ? header(m.chart_blank_value(), false, true) : header(s, true, true),
+    ),
+    ...(other ? [header(m.chart_pie_other(), false, true)] : []),
+    header(m.chart_stack_total(), false, true),
+  ];
+  const rows = tally.values.map((v) =>
+    row(
+      rowHead(v.value),
+      ...[...v.cells, ...(other ? [v.other] : []), v.total].map((c) => digits(measure(c))),
+    ),
+  );
+  const { others, below, rest } = tally;
+  const left = others.values + below.values;
+  if (left > 0) {
+    const more = rowNamed(m.chart_bars_more({ count: num(left) }));
+    const gap = el("td");
+    gap.colSpan = heads.length - 2;
+    rows.push(row(more, gap, digits(measure(others) + measure(below) + measure(rest))));
+  }
+  if (rest.rows > 0) {
+    const line = el("td", "chart-table-line", m.chart_bars_past({ count: num(DISTINCT_AT_MOST) }));
+    line.colSpan = heads.length;
+    rows.push(row(line));
+  }
+  return [heads, rows];
 }
 
 /** rowNamed gives a row's header of the app's words `text`. */

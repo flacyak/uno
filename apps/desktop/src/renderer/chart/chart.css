@@ -424,6 +424,79 @@
   left: auto;
 }
 
+/* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it
+ * starts `--from` of the span past zero and runs `--part` of it rightward, and
+ * under zero the same leftward. Each after the first gives --segment-gap of
+ * its length to a clear border, so what lies under the row shows between two
+ * segments, and the last on each side is round at the data's end, as a bar. */
+.chart-segment {
+  position: absolute;
+  inset-block: 0;
+  left: calc(var(--at) + var(--from) * var(--span));
+  box-sizing: border-box;
+  width: calc(var(--part) * var(--span));
+  border: 0 solid transparent;
+  background: var(--key) padding-box;
+}
+
+.chart-segment.under {
+  left: calc(var(--at) - (var(--from) + var(--part)) * var(--span));
+}
+
+.chart-segment.above.after {
+  border-left-width: var(--segment-gap);
+}
+
+.chart-segment.under.after {
+  border-right-width: var(--segment-gap);
+}
+
+.chart-segment.above.end {
+  border-radius: 0 4px 4px 0;
+}
+
+.chart-segment.under.end {
+  border-radius: 4px 0 0 4px;
+}
+
+/* A stack's legend over its bars, from legend.ts: its keys in lines that wrap
+ * as legend.ts counted them, each a pie's key and a name in the value's ink,
+ * cut with an ellipsis past --name-most, inset as the bars are above them. */
+.chart-key-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--entry-gap);
+  margin: 0;
+  padding: var(--bars-inset) var(--bars-inset) 0;
+  font-size: 11px;
+  line-height: var(--legend-line);
+  list-style: none;
+}
+
+.chart-key-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--key-gap);
+  min-width: 0;
+}
+
+.chart-key-list .chart-legend-key {
+  flex: none;
+  width: var(--key-size);
+}
+
+.chart-key-name {
+  max-width: var(--name-most);
+  overflow: hidden;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-key-more {
+  color: var(--ink-3);
+}
+
 /* The characters window.ts measures a tick's character by, written as a tick
  * is, out of sight and out of the window's flow. */
 .chart-gauged {
@@ -693,6 +766,17 @@
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
+/* A stack's segment under the cursor moves the same fifth of the way from
+ * its own colour to the ink, over the same wash across its row. */
+.chart-bar-row:has(.chart-segment.cursor) {
+  border-radius: 4px;
+  background: var(--accent-b);
+}
+
+.chart-segment.cursor {
+  background: color-mix(in srgb, var(--key) 80%, var(--ink)) padding-box;
+}
+
 .chart-period.cursor {
   border-radius: 4px;
   background: var(--accent-b);
@@ -764,6 +848,35 @@
   color: var(--ink-3);
 }
 
+/* A box that says each reading on a line of its own, as a stack's bar's
+ * series, keys each line in its colour instead of the box, and says the
+ * mark's own line in the value's ink. */
+.chart-tip.lines > .chart-tip-key {
+  display: none;
+}
+
+.chart-tip.lines .chart-tip-words {
+  display: grid;
+  grid-template-columns: var(--key-length) auto minmax(0, 1fr);
+  gap: 4px 6px;
+  align-items: center;
+}
+
+.chart-tip-line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.chart-tip-line .chart-tip-value {
+  text-align: right;
+}
+
+.chart-tip-line.own .chart-tip-label {
+  color: var(--ink);
+}
+
 /* A forced palette would take the marks' colour away, so they wear the text's,
  * and a pie's slices, its thinnest too, stand apart by the page's. */
 @media (forced-colors: active) {
@@ -780,6 +893,12 @@
     forced-color-adjust: none;
   }
 
+  .chart-segment,
+  .chart-key-list .chart-legend-key {
+    background: CanvasText padding-box;
+    forced-color-adjust: none;
+  }
+
   .chart-slice-gap {
     stroke: Canvas;
     forced-color-adjust: none;
@@ -787,6 +906,10 @@
 
   .chart-slice-gap.covers {
     visibility: visible;
+  }
+
+  .chart-segment.cursor {
+    background: Highlight padding-box;
   }
 
   .chart-bar-row.cursor .chart-bar,

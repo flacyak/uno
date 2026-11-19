@@ -57,12 +57,15 @@
  * - `dates`: selects a date of the fixture written day first, opens the
  *   chart form on it by Ctrl+Shift+G, reads its dates day first, sets it per
  *   week and presses Enter for a window of its weeks. Goes to out/dates.gif.
+ * - `stacked`: selects region, opens the chart form on it by Ctrl+Shift+G,
+ *   splits its bars by channel, sums revenue, and presses Enter for a window
+ *   of stacked bars. Goes to out/stacked.gif.
  * - `chord`, `command` and `menu`: select region, open the chart form under its
  *   header by Ctrl+Shift+G, :chart at the vim-style prompt or the View menu's
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -121,6 +124,7 @@ const CHARTED = [
   "focus",
   "aside",
   "dates",
+  "stacked",
 ];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
@@ -437,6 +441,7 @@ const staged = {
   command: () => stageCharts("command", []),
   menu: () => stageCharts("menu", []),
   dates: stageDates,
+  stacked: () => stageCharts("stacked", []),
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 
@@ -545,12 +550,16 @@ if (shots.length > 0) text += `file ${join(frames, shots[shots.length - 1].file)
 await writeFile(list, text);
 
 // The palette is generated from the frames themselves, in the same pass that
-// uses it. stats_mode=diff spends the palette on what changes between frames,
-// and diff_mode=rectangle rewrites only the rectangle that changed. Each
-// pixel takes its nearest palette colour (dither=none).
+// uses it. A story that films a chart counts every pixel of every frame
+// (stats_mode=full), so a chart's six colours that show in a few frames keep
+// their hues; any other spends the palette on what changes between frames
+// (stats_mode=diff). diff_mode=rectangle rewrites only the rectangle that
+// changed, and each pixel takes its nearest palette colour (dither=none).
+const CHART_STORIES = [...CHARTED, ...KEYED, "chart"];
+const stats = CHART_STORIES.includes(story) ? "full" : "diff";
 const filter =
   `fps=${FPS},scale=w=min(${WIDTH}\\,iw):h=-1:flags=lanczos,split[a][b];` +
-  `[a]palettegen=stats_mode=diff[p];` +
+  `[a]palettegen=stats_mode=${stats}[p];` +
   `[b][p]paletteuse=dither=none:diff_mode=rectangle`;
 
 const ff = spawn(

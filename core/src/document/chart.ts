@@ -52,6 +52,17 @@ export type TimePlot = {
   per: Per | 'auto';
 } & ({ order: Order } | { unit: UnixUnit });
 
+/**
+ * A stacked bar chart: rows, or the sum of `sum`, per value of `by`, each
+ * bar split by the value of `split` in the same row.
+ */
+export interface StackPlot {
+  t: 'stack';
+  by: ChartColumn;
+  split: ChartColumn;
+  sum?: ChartColumn;
+}
+
 /** What a chart draws. This is all the engine needs to tally it. */
 export type Plot =
   /** No `sum`: count rows per value. */
@@ -60,7 +71,8 @@ export type Plot =
   | { t: 'pie'; by: ChartColumn; sum?: ChartColumn }
   /** One point per row, x against y, both number columns. */
   | { t: 'scatter'; x: ChartColumn; y: ChartColumn }
-  | TimePlot;
+  | TimePlot
+  | StackPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

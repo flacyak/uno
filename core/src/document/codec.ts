@@ -26,6 +26,7 @@ import type {
   ChartColumn,
   ChartPlace,
   Plot,
+  StackPlot,
   TimePlot,
 } from './chart.ts';
 import {
@@ -1097,6 +1098,7 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   pie: ['t', 'by', 'sum'],
   scatter: ['t', 'x', 'y'],
   time: ['t', 'at', 'sum', 'per', 'order', 'unit'],
+  stack: ['t', 'by', 'split', 'sum'],
 };
 
 /** The sizes an over-time chart may draw per, and how its dates may read. */
@@ -1121,8 +1123,8 @@ function isPlotKind(t: string): t is Plot['t'] {
 /**
  * parsePlot reads what a chart draws. Bars and pie name the `by` column whose
  * values they show, and may name a `sum` column to add up per value. Scatter
- * names its `x` and `y`, and an over-time chart is as parseOverTime reads
- * it. It refuses a kind or a key it does not know, so a
+ * names its `x` and `y`, an over-time chart is as parseOverTime reads it,
+ * and a stacked bar chart as parseStacked reads it. It refuses a kind or a key it does not know, so a
  * later build's plot is carried whole and never drawn or saved without what
  * it added.
  */
@@ -1139,6 +1141,7 @@ export function parsePlot(where: string, value: unknown): Plot {
     );
   if (t === 'scatter') return { t, x: column('x'), y: column('y') };
   if (t === 'time') return parseOverTime(where, p);
+  if (t === 'stack') return parseStacked(where, p);
   if (p['sum'] === undefined) return { t, by: column('by') };
   return { t, by: column('by'), sum: column('sum') };
 }
@@ -1174,6 +1177,21 @@ export function parseOverTime(where: string, value: unknown): TimePlot {
   throw new Error(
     `${where}: order or unit, one of the two, says how dates read`,
   );
+}
+
+/**
+ * parseStacked reads a stacked bar chart's plot: the `by` column whose
+ * values it shows, the `split` column whose values split each bar, and a
+ * `sum` it may name. It refuses a split of a value by itself.
+ */
+export function parseStacked(where: string, value: unknown): StackPlot {
+  const p = asRecord(value);
+  const by = columnOf(where, p, 'by');
+  const split = columnOf(where, p, 'split');
+  if (split.col === by.col)
+    throw new Error(`${where}: split names the column by names`);
+  if (p['sum'] === undefined) return { t: 'stack', by, split };
+  return { t: 'stack', by, split, sum: columnOf(where, p, 'sum') };
 }
 
 /** parsePlace reads where a chart's window sits. */

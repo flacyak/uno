@@ -12,7 +12,7 @@ import type { MenuPlace } from "./menu.ts";
 import { button, clickAway, el, hang, walk } from "./util.ts";
 
 /** The minimum gap between a form and the window's edge, in pixels. */
-const EDGE = 8;
+export const EDGE = 8;
 
 /** Every pop-up form's worded labels. Each form's label column is as wide as
  * the longest of them in the language spoken, so the forms' controls line up. */
@@ -25,6 +25,7 @@ export const LABELS: ReadonlyArray<() => string> = [
   m.chart_form_per,
   m.chart_form_by,
   m.chart_form_sum,
+  m.chart_form_split,
   m.chart_form_x,
   m.chart_form_y,
   m.chart_form_title_field,
@@ -44,12 +45,17 @@ export interface Held {
   closed(): void;
 }
 
+/** What a form wears while the page holds it only in part, its fields scrolling. */
+const CAPPED = "capped";
+
 export class PopForm {
   private readonly box: HTMLFormElement;
   /** The title line. */
   readonly heading = el("div", "title");
   readonly submit: HTMLButtonElement;
   private readonly note = el("div", "note");
+  /** The fields, which scroll where the page holds the form only in part. */
+  private readonly fields = el("div", "fields themed-bar");
   private disarm: () => void = () => {};
 
   constructor(
@@ -98,12 +104,13 @@ export class PopForm {
     const cancel = button("", m.action_cancel(), () => this.close());
     const buttons = el("div", "buttons");
     buttons.append(cancel, this.submit);
-    this.box.append(...fields, this.note, buttons);
+    this.fields.append(...fields);
+    this.box.append(this.fields, this.note, buttons);
     // The forms are set in a monospaced font, so a label of n letters is n ch wide.
     const longest = Math.max(...LABELS.map((label) => [...LETTERS.segment(label())].length));
     this.box.style.setProperty("--label-width", `${longest}ch`);
     document.body.append(this.box);
-    hang(this.box, place, EDGE);
+    this.hangAt(place);
     this.disarm = clickAway(this.box, () => this.close());
   }
 
@@ -119,7 +126,27 @@ export class PopForm {
     this.note.title = text;
     this.note.className = isError ? "note err" : "note";
     // A note of more lines makes the form taller, so it is hung again inside the window.
-    if (this.box.isConnected) hang(this.box, this.box.getBoundingClientRect(), EDGE);
+    if (this.box.isConnected) this.hangAt(this.box.getBoundingClientRect());
+  }
+
+  /**
+   * hangAt hangs the form at `place`. Where the page under `place` is too short
+   * for the whole form but holds its title, its first field, its note and its
+   * buttons, the form keeps its top there and ends EDGE inside the page, and
+   * its fields scroll; where it holds less, the form rises as hang() lifts it.
+   */
+  private hangAt(place: MenuPlace): void {
+    this.box.style.maxHeight = "";
+    this.box.classList.remove(CAPPED);
+    const room = window.innerHeight - EDGE - place.top;
+    const whole = this.box.getBoundingClientRect().height;
+    const first = this.fields.querySelector(".field:not([hidden])");
+    const least = whole - this.fields.scrollHeight + (first?.getBoundingClientRect().height ?? 0);
+    if (whole > room && room >= least) {
+      this.box.style.maxHeight = `${room}px`;
+      this.box.classList.add(CAPPED);
+    }
+    hang(this.box, place, EDGE);
   }
 
   /** Every focusable control outside a hidden field, in document order. */

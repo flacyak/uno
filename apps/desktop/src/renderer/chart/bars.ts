@@ -38,9 +38,22 @@ type Bars = Extract<Plot, { t: "bars" }>;
  * room gives what the values on one side of zero take, as CSS: the longest one's
  * characters and the gap before it, or nothing for a side with none.
  */
-function room(side: ReadonlyArray<{ tip: string }>): string {
+export function room(side: ReadonlyArray<{ tip: string }>): string {
   const widest = Math.max(0, ...side.map(({ tip }) => tip.length));
   return widest === 0 ? "0px" : `calc(${widest}ch + var(--tip-gap))`;
+}
+
+/**
+ * barsBox gives a box of bar rows, of the `kinds` named past a bar chart's,
+ * with the sizes chart.css lays bar rows out by.
+ */
+export function barsBox(...kinds: string[]): HTMLElement {
+  const box = el("div", ["chart-bars", ...kinds].join(" "));
+  box.style.setProperty("--bar-thick", `${BAR_THICK}px`);
+  box.style.setProperty("--bar-gap", `${BAR_GAP}px`);
+  box.style.setProperty("--bars-inset", `${BARS_INSET}px`);
+  box.style.setProperty("--tip-gap", `${TIP_GAP}px`);
+  return box;
 }
 
 /**
@@ -60,11 +73,7 @@ export function bars(plot: Bars, groups: Groups, height: number): HTMLElement {
   const low = Math.min(0, ...lengths);
   const span = Math.max(0, ...lengths) - low;
 
-  const box = el("div", "chart-bars");
-  box.style.setProperty("--bar-thick", `${BAR_THICK}px`);
-  box.style.setProperty("--bar-gap", `${BAR_GAP}px`);
-  box.style.setProperty("--bars-inset", `${BARS_INSET}px`);
-  box.style.setProperty("--tip-gap", `${TIP_GAP}px`);
+  const box = barsBox();
   box.style.setProperty("--zero", `${span === 0 ? 0 : -low / span}`);
   box.style.setProperty("--room-above", room(drawn.filter(({ size }) => size >= 0)));
   box.style.setProperty("--room-below", room(drawn.filter(({ size }) => size < 0)));

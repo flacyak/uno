@@ -694,3 +694,60 @@ test("a chart opened to change keeps the order it reads in, whatever the sample 
   await settle();
   expect(asked[0]).toBe(inserting(plot, "", BOOKINGS.id));
 });
+
+/** The sales export's channel, which splits each region's bar. */
+const CHANNEL = 3;
+
+test("picking a split column makes stacked bars, titled by both columns, and none makes bars again", async () => {
+  const { asked, box } = form();
+  expect(shown(box)).toContain(m.chart_form_split());
+  expect(select("split").value).toBe("");
+  pick("split", String(CHANNEL));
+  pick("sum", String(REVENUE));
+  const stack: Plot = {
+    t: "stack",
+    by: { col: REGION, header: "region" },
+    split: { col: CHANNEL, header: "channel" },
+    sum: { col: REVENUE, header: "revenue" },
+  };
+  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(stack));
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(stack), "closed"]);
+  // Split back to none, the same choice makes bars.
+  form();
+  pick("split", String(CHANNEL));
+  pick("split", "");
+  expect(document.querySelector("input")!.placeholder).toBe(madeTitle(REGION_BARS));
+});
+
+test("a value splits by any column but its own, and a pie or a scatter asks for no split", () => {
+  const { box } = form();
+  const own = [...select("split").options].find((o) => o.value === String(REGION))!;
+  expect(own.disabled).toBe(true);
+  pick("split", String(CHANNEL));
+  pick("by", String(CHANNEL));
+  expect(select("split").value).toBe("");
+  for (const kind of ["pie", "scatter", "time"]) {
+    pick("kind", kind);
+    expect(shown(box)).not.toContain(m.chart_form_split());
+  }
+});
+
+test("a stacked chart's form opens on bars of its column, split as it is, and Apply keeps it stacked", async () => {
+  const stack: Plot = {
+    t: "stack",
+    by: { col: REGION, header: "region" },
+    split: { col: CHANNEL, header: "channel" },
+  };
+  const { asked } = changing(stack, "Mix");
+  expect(chosen("kind", "by", "split", "sum")).toStrictEqual([
+    "bars",
+    String(REGION),
+    String(CHANNEL),
+    "",
+  ]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(stack, "Mix"), "closed"]);
+});

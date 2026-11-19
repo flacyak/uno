@@ -14,6 +14,15 @@ export type { Group, Groups, Measure, SavedGroups } from './groups.ts';
 export { SCATTER_POINTS_AT_MOST, SampleFold } from './sample.ts';
 export type { Marks, SavedSample } from './sample.ts';
 export type { Point, Sample } from './sample.ts';
+export { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from './split.ts';
+export type {
+  Measured,
+  SavedCell,
+  SavedSplit,
+  SavedTally,
+  Split,
+  SplitValue,
+} from './split.ts';
 export { TALLY_VERSION, isCount, isRecord } from './saved.ts';
 export {
   HELD,

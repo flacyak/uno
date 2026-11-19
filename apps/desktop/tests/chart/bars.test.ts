@@ -13,7 +13,8 @@ import { DISTINCT_AT_MOST } from "@engine";
 import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
-import { SPAN_LEAST, TIP_GAP, bars, fitTips } from "@renderer/chart/bars";
+import { SPAN_LEAST, TIP_GAP, bars, barsBox, fitTips } from "@renderer/chart/bars";
+import { BARS_INSET, BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
 import { num } from "@renderer/locale";
 import { holding } from "../charted.ts";
 
@@ -229,4 +230,14 @@ test("the values and the lines are written in the app's language", () => {
     "+9999 más · 21.613 filas",
     "más de 10.000 valores · los demás se cuentan en el resto",
   ]);
+});
+
+test("a box of bar rows of another kind wears its name, and the sizes a bar chart's does", () => {
+  const box = barsBox("chart-stack");
+  expect([...box.classList]).toStrictEqual(["chart-bars", "chart-stack"]);
+  const names = ["--bar-thick", "--bar-gap", "--bars-inset", "--tip-gap"];
+  const sizes = (at: HTMLElement) => names.map((name) => property(at, name));
+  const px = [BAR_THICK, BAR_GAP, BARS_INSET, TIP_GAP].map((n) => `${n}px`);
+  expect(sizes(box)).toStrictEqual(px);
+  expect(sizes(bars(ROWS, REGIONS, TALL))).toStrictEqual(px);
 });

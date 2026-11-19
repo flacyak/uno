@@ -26,6 +26,7 @@ import { groupsFolder } from '@engine/fold/groups';
 import { FOLDERS } from '@engine/fold/index';
 import type { Folder, Folders, MakeFolder } from '@engine/fold/index';
 import { sampleFolder } from '@engine/fold/sample';
+import { splitFolder } from '@engine/fold/split';
 import { Tallies } from '@engine/tally';
 import type { Block } from '@engine/tally';
 import { parse } from '@formula';
@@ -37,7 +38,13 @@ import { NO_ROW, Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { blobProvider, multiProvider } from '@store';
 import { diskProvider } from '@store/node';
-import { GroupsFold, LEVEL_BATCH, SampleFold, TimeFold } from '@tally';
+import {
+  GroupsFold,
+  LEVEL_BATCH,
+  SampleFold,
+  SplitFold,
+  TimeFold,
+} from '@tally';
 import {
   CHANNEL,
   COLS,
@@ -133,6 +140,23 @@ const REVENUE_WEEKLY: Chart = {
     order: 'day',
   },
 };
+/** The fixture's rows per region by channel, and its revenue the same way. */
+const STACKED: Chart = {
+  ...REGION_ROWS,
+  id: 'c6',
+  plot: { t: 'stack', by: column(REGION), split: column(CHANNEL) },
+};
+const REVENUE_STACKED: Chart = {
+  ...REGION_ROWS,
+  id: 'c7',
+  plot: {
+    t: 'stack',
+    by: column(REGION),
+    split: column(CHANNEL),
+    sum: column(REVENUE),
+  },
+};
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -146,6 +170,15 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
     return { t: 'sample', plot, coverage, ...fold.snapshot() };
+  }
+  if (plot.t === 'stack') {
+    const { by, split, sum } = plot;
+    const fold = new SplitFold(sum === undefined ? undefined : 'point');
+    for (let r = 0; r < rows; r++) {
+      const cells = sum === undefined ? '' : cell(r, sum);
+      fold.add(cell(r, by), cell(r, split), cells);
+    }
+    return { t: 'stack', plot, coverage, ...fold.snapshot() };
   }
   if (plot.t === 'time') {
     const reading = 'order' in plot ? plot.order : plot.unit;
@@ -474,6 +507,70 @@ test("a scatter's folder keeps the key a save names it by, saves nothing an edit
   expect(folder.tally(plot, WHOLE)).toStrictEqual(pure(plot, sheet));
 });
 
+test("a stacked chart's folder counts or sums by both its columns, moves by the one row an edit changed, and reads back from its save", async () => {
+  const marks = HEADERS.map(() => 'point' as const);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, CHANNEL, 'mail');
+  for (const sum of [undefined, column(REVENUE)]) {
+    const plot = {
+      t: 'stack',
+      by: column(REGION),
+      split: column(CHANNEL),
+      ...(sum && { sum }),
+    } as const;
+    const folder = splitFolder(plot, HEADERS, marks);
+    if (typeof folder === 'string') throw new Error(`no column ${folder}`);
+    const cols =
+      sum === undefined ? [REGION, CHANNEL] : [REGION, CHANNEL, REVENUE];
+    expect(folder.key).toBe(`split ${cols.join(' ')}`);
+    expect(folder.cols).toStrictEqual(cols);
+    const whole = blocks(sales);
+    for (let block = 0; block * TINY.blockRows < ROWS; block++) {
+      folder.fold(block, await whole(block));
+    }
+    const block = Math.floor(EDITED / TINY.blockRows);
+    folder.move(block, EDITED, before, shownRow(sheet, EDITED));
+    // The pure fold of the edited sheet, row by row.
+    const fold = new SplitFold(sum === undefined ? undefined : 'point');
+    for (let r = 0; r < ROWS; r++) {
+      const cell = sum === undefined ? '' : sheet.display(r, REVENUE);
+      fold.add(sheet.display(r, REGION), sheet.display(r, CHANNEL), cell);
+    }
+    // A stack is no Plot yet, so the tally names the plot of a bar chart.
+    const heard = REGION_ROWS.plot;
+    const tally = { t: 'stack', plot: heard, coverage: WHOLE };
+    expect(folder.tally(heard, WHOLE)).toStrictEqual({
+      ...tally,
+      ...fold.snapshot(),
+    });
+    const back = folder.restored(JSON.parse(JSON.stringify(folder.saved())));
+    expect(back?.tally(heard, WHOLE)).toStrictEqual(folder.tally(heard, WHOLE));
+    expect(folder.readsWith(marks)).toBe(true);
+    const comma = marks.map(() => 'comma' as const);
+    expect(folder.readsWith(comma)).toBe(sum === undefined);
+  }
+});
+
+test('a stacked chart folded a block at a time reads as the pure fold of its rows by both columns, and reads back from a save with no pass', () => {
+  const tallies = folded([STACKED, REVENUE_STACKED]);
+  const both = [
+    [STACKED.id, pure(STACKED.plot)],
+    [REVENUE_STACKED.id, pure(REVENUE_STACKED.plot)],
+  ];
+  expect(tallies.read(ROWS, true)).toStrictEqual(both);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  for (const chart of [STACKED, REVENUE_STACKED])
+    reopened.attach(chart, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(both);
+  // Bars of the same column hold a fold of another key, so they fold anew.
+  const bars: Chart = { ...STACKED, plot: { t: 'bars', by: column(REGION) } };
+  reopened.attach(bars, HEADERS);
+  expect(reopened.from()).toBe(0);
+});
+
 test('an over-time chart folded a block at a time reads as the pure fold of its dates, and a change of size alone keeps its fold', () => {
   const tallies = folded([PER_MONTH, REVENUE_WEEKLY]);
   expect(tallies.read(ROWS, true)).toStrictEqual([
@@ -711,7 +808,13 @@ test('a scatter whose block cannot be read again is the one told its source coul
 test('each chart of a .uno hears its fold of every row, as the pure fold reads it', async () => {
   const { engine, done } = connect(TINY);
   try {
-    const charts = [REGION_ROWS, REGION_REVENUE, UNITS_REVENUE, PER_MONTH];
+    const charts = [
+      REGION_ROWS,
+      REGION_REVENUE,
+      UNITS_REVENUE,
+      PER_MONTH,
+      REVENUE_STACKED,
+    ];
     const heard = new Heard(await opened(engine, charts));
     const lasts = charts.map((chart) => heard.of(chart.id));
     for (const [i, chart] of charts.entries()) {

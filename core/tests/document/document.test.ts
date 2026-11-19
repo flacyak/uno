@@ -973,6 +973,27 @@ describe("a workspace's charts", () => {
     expect(charts).toStrictEqual([JSON.parse(carried)]);
   });
 
+  // A build before the stacked chart carried it as its text, which this one
+  // reads as a chart, and writes back as it was.
+  test('read a stacked chart an older build carried, and write back what it held', () => {
+    const plot = {
+      t: 'stack',
+      by: { col: 1, header: 'region' },
+      split: { col: 2, header: 'channel' },
+      sum: { col: 4, header: 'revenue' },
+    };
+    const carried = JSON.stringify({ ...SAVED, id: 'c2', plot });
+    const entries = unzipSync(writeDocument(charted()));
+    const text = `{"version":${CHARTS_VERSION},"charts":[${carried}]}`;
+    entries[CHARTS_ENTRY] = encoder.encode(text);
+    const back = readContainer('sales.uno', zipSync(entries));
+    expect(back.carriedCharts).toStrictEqual([]);
+    expect(back.charts?.map((c) => c.plot)).toStrictEqual([plot]);
+    const written = unzipSync(writeDocument(back))[CHARTS_ENTRY]!;
+    const { charts } = JSON.parse(strFromU8(written)) as { charts: unknown[] };
+    expect(charts).toStrictEqual([JSON.parse(carried)]);
+  });
+
   // A key a later build adds to a kind this one draws is carried whole, so
   // this build neither draws the chart without it nor saves it back without it.
   test('carry one whose plot has a key this build does not read', () => {

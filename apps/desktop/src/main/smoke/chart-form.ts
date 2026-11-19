@@ -12,6 +12,7 @@
 
 import { m } from "@paraglide/messages";
 import { offered } from "@renderer/language";
+import { EDGE } from "@renderer/shell/form";
 import { DEFAULT_THEME } from "@renderer/theme";
 import { pressing } from "./chart-moves.ts";
 import { DOUBLE_ZOOM, NARROW_WIDTH } from "./charts.ts";
@@ -84,6 +85,8 @@ const KEYED = `
   const by = form.querySelector('select[name="by"]');
   const cell = document.querySelector("thead tr").children[Number(by.value) + GUTTER];
   const [box, head, chosen] = [form.getBoundingClientRect(), cell.getBoundingClientRect(), by.selectedOptions[0].textContent];
+  const fields = form.querySelector(".fields");
+  const scrolls = fields !== null && fields.scrollHeight > fields.clientHeight;
   form.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   if (chosen !== text("#status-cell").split(" · ")[0]) return "the form opened on " + chosen;
   const rule = (at, side) => parseFloat(getComputedStyle(at).getPropertyValue("border-" + side + "-width"));
@@ -226,9 +229,13 @@ export const CHART_FORM: Check[] = [
       ${KEYED}
       const sheet = document.querySelector(".grid-scroll").getBoundingClientRect();
       if (head.left < sheet.left || head.right > sheet.right) return "the header stands at " + head.left + " to " + head.right;
-      // The zoomed page leaves the form too little room to stand at the header's left.
+      // The zoomed page leaves the form too little room to stand at the header's left,
+      // and too little under the header for all its fields, so it keeps its top on the
+      // header's rule, ends EDGE inside the page, and its fields scroll.
       const over = box.left < head.right && head.left < box.right;
-      return over && Math.round(box.top) === under[1] ? "" : "the form stands at " + box.left + "," + box.top + ", away from " + under;
+      if (!over || Math.round(box.top) !== under[1]) return "the form stands at " + box.left + "," + box.top + ", away from " + under;
+      if (Math.round(box.bottom) !== innerHeight - ${EDGE}) return "the form ends at " + box.bottom + " in a page " + innerHeight + " high";
+      return scrolls ? "" : "the form's fields do not scroll";
     `,
   },
   {

@@ -285,6 +285,17 @@ const DATES = { column: 500, open: 2_400, order: 5_000, per: 7_600, enter: 10_20
 const TO_WEEK = 2;
 
 /**
+ * The stacked story's beats: region selected, the chart form opened on it by
+ * Ctrl+Shift+G, Split by stepped to channel, Sum of to revenue, and Enter for
+ * a window of revenue per region by channel.
+ */
+const STACKED = { column: 500, open: 2_400, split: 4_800, sum: 7_400, enter: 9_800, end: 12_600 };
+/** How many Downs take Split by from none to channel, past date and rep; region, By's own, is off. */
+const TO_CHANNEL = 3;
+/** How many Downs take Sum of from none to revenue, past units. */
+const TO_REVENUE = 2;
+
+/**
  * The kinds story's beats: the insert story's, once for a pie of region and
  * once for a scatter of units, with the kind chosen in the form before Enter.
  * Each Down chooses the next kind after bars, KIND_STEP_MS apart. The gutter
@@ -901,6 +912,7 @@ const STORIES: Record<string, Story> = {
   insert: { end: INSERT.end, script: playInsert },
   kinds: { end: KINDS_END, script: playKinds },
   dates: { end: DATES.end, script: playDates },
+  stacked: { end: STACKED.end, script: playStacked },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
   reread: { end: REREAD.end, script: playReread },
@@ -1104,6 +1116,35 @@ async function playDates(win: BrowserWindow, at: Clock): Promise<void> {
   await at(DATES.enter);
   press(win, "Return");
   await at(DATES.end);
+}
+
+/**
+ * playStacked performs the stacked story: region selected, the chart form
+ * opened by its keys, Down to channel in Split by and to revenue in Sum of,
+ * and Enter.
+ */
+async function playStacked(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(STACKED.column);
+  // The gutter comes first, so region is a row's third cell.
+  await pressOn("tbody tr:nth-child(3) td:nth-child(3)");
+  await glideTo(KEYED_REST);
+  await at(STACKED.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo('.chart-form select[name="split"]');
+  await at(STACKED.split);
+  // The keys open in By, and Sum of and Split by come after it.
+  press(win, "Tab");
+  press(win, "Tab");
+  await presses(win, "Down", TO_CHANNEL, KIND_STEP_MS);
+  await glideTo('.chart-form select[name="sum"]');
+  await at(STACKED.sum);
+  press(win, "Tab", ["shift"]);
+  await presses(win, "Down", TO_REVENUE, KIND_STEP_MS);
+  await at(STACKED.enter);
+  press(win, "Return");
+  await at(STACKED.end);
 }
 
 /**

@@ -10,12 +10,13 @@
 
 import { afterEach, expect, test } from "vite-plus/test";
 
-import type { Group, Groups, GroupsTally, Sample, SampleTally } from "@engine";
+import type { Group, Groups, GroupsTally, Sample, SampleTally, StackTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { bars } from "@renderer/chart/bars";
 import { pie } from "@renderer/chart/pie";
 import { scatter } from "@renderer/chart/scatter";
+import { stack } from "@renderer/chart/stack";
 import {
   HIT_RADIUS,
   NONE,
@@ -24,6 +25,7 @@ import {
   Tooltip,
   barTargets,
   pointTargets,
+  stackTargets,
   sliceTargets,
   stood,
 } from "@renderer/chart/tooltip";
@@ -427,4 +429,173 @@ test("a tap puts the cursor on a mark, and a finger lifting off leaves it there,
   expect([shown(tip)[0], ...cursors()]).toStrictEqual([true, true, false, false]);
   plot.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
   expect([shown(tip)[0], ...cursors()]).toStrictEqual([false, false, false, false]);
+});
+
+/** Four marks in two rows of two, keyed, whose box says each reading on a line, as a stack's bar's. */
+function grid(): { tip: Tooltip; plot: HTMLElement; marks: HTMLElement[] } {
+  const drawn = el("div");
+  const marks = [0, 1, 2, 3].map((i) => {
+    const mark = el("div", "mark");
+    laidOut(mark, new DOMRect(BAR.left, BAR.top + i * BAR_PITCH, BAR.width, BAR.height));
+    drawn.append(mark);
+    return mark;
+  });
+  const keys = ["var(--chart-1)", "var(--chart-2)"];
+  const all = marks.map((mark, i) => ({
+    mark,
+    at: mark,
+    front: false,
+    key: keys[i % 2]!,
+    lines: true,
+    said: () =>
+      keys.map((key, j) => ({
+        value: `${i}${j}`,
+        label: el("span", "", `s${j}`),
+        key,
+        own: j === i % 2,
+      })),
+  }));
+  // Down and Up step a row, keeping the column.
+  const step = (key: string, at: number | undefined) => {
+    if (key === "ArrowDown") return at === undefined ? 0 : Math.min(at + 2, 3);
+    if (key === "ArrowUp") return at === undefined ? 3 : Math.max(at - 2, 0);
+    return undefined;
+  };
+  const laid = over(drawn, () => ({
+    all,
+    under: () => undefined,
+    step,
+    keys: ["ArrowDown", "ArrowUp"],
+  }));
+  return { ...laid, marks };
+}
+
+test("a mark whose box says its readings on lines keys each line in its colour, its own line apart, and hides the box's key", () => {
+  const { tip } = grid();
+  tip.step(pressed("ArrowRight"));
+  expect(tip.box.classList.contains("lines")).toBe(true);
+  const lines = [...tip.box.querySelectorAll(".chart-tip-line")];
+  expect(lines.map((line) => line.textContent)).toStrictEqual(["00 s0", "01 s1"]);
+  expect(lines.map((line) => line.classList.contains("own"))).toStrictEqual([true, false]);
+  const keyed = lines.map((line) =>
+    line.querySelector<HTMLElement>(".chart-tip-key")!.style.getPropertyValue("--key"),
+  );
+  expect(keyed).toStrictEqual(["var(--chart-1)", "var(--chart-2)"]);
+});
+
+test("the keys a drawing steps itself go where it says, and the rest where STEPS says, and the plot names them all", () => {
+  const { tip, plot, marks } = grid();
+  const worn = () => marks.findIndex((mark) => mark.classList.contains("cursor"));
+  expect(tip.step(pressed("ArrowDown"))).toBe(true);
+  expect(worn()).toBe(0);
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(2);
+  tip.step(pressed("ArrowRight"));
+  expect(worn()).toBe(3);
+  tip.step(pressed("ArrowUp"));
+  expect(worn()).toBe(1);
+  expect(plot.getAttribute("aria-keyshortcuts")).toBe(
+    "ArrowRight ArrowLeft Home End ArrowDown ArrowUp",
+  );
+});
+
+/** Rows per region by channel: North in web, direct and Other, South in direct alone. */
+const STACKED = {
+  t: "stack",
+  by: { col: 1, header: "region" },
+  split: { col: 3, header: "channel" },
+} as const;
+const STACKS: StackTally = {
+  t: "stack",
+  plot: STACKED,
+  coverage: { rows: 12, total: 12, complete: true },
+  series: ["web", "direct"],
+  values: [
+    {
+      value: "North",
+      cells: [
+        { rows: 4, sum: 0 },
+        { rows: 3, sum: 0 },
+      ],
+      other: { rows: 2, sum: 0 },
+      total: { rows: 9, sum: 0 },
+    },
+    {
+      value: "South",
+      cells: [
+        { rows: 0, sum: 0 },
+        { rows: 3, sum: 0 },
+      ],
+      other: { rows: 0, sum: 0 },
+      total: { rows: 3, sum: 0 },
+    },
+  ],
+  others: { values: 0, rows: 0, sum: 0 },
+  below: { values: 0, rows: 0, sum: 0 },
+  rest: { rows: 0, sum: 0 },
+  unsplit: 0,
+  skipped: { blank: 0, unparsed: 0 },
+};
+
+test("a stack's segment says its value's every series in slot order, then Other and the total, its own line apart", () => {
+  const { tip } = over(stack(STACKED, STACKS, TALL, { ...PLOT_ROOM, width: 2_000 }), (box) =>
+    stackTargets(STACKED, STACKS, box),
+  );
+  tip.step(pressed("ArrowRight"));
+  tip.step(pressed("ArrowRight"));
+  const lines = [...tip.box.querySelectorAll(".chart-tip-line")];
+  expect(lines.map((line) => line.textContent)).toStrictEqual([
+    "4 web",
+    "3 direct",
+    "2 Other",
+    "9 total",
+  ]);
+  expect(lines.map((line) => line.classList.contains("own"))).toStrictEqual([
+    false,
+    true,
+    false,
+    false,
+  ]);
+  const keyed = lines.map((line) =>
+    line.querySelector<HTMLElement>(".chart-tip-key")!.style.getPropertyValue("--key"),
+  );
+  expect(keyed).toStrictEqual(["var(--chart-1)", "var(--chart-2)", "var(--ink-3)", ""]);
+});
+
+test("a pointer on a stack's row label is over its nearest segment", () => {
+  over(stack(STACKED, STACKS, TALL, { ...PLOT_ROOM, width: 2_000 }), (box) =>
+    stackTargets(STACKED, STACKS, box),
+  );
+  const segments = [...document.querySelectorAll(".chart-segment")];
+  const label = document.querySelectorAll(".chart-bar-label")[1]!;
+  label.dispatchEvent(new PointerEvent("pointermove", { clientX: 0, clientY: 0, bubbles: true }));
+  expect(segments.findIndex((s) => s.classList.contains("cursor"))).toBe(3);
+});
+
+test("Right and Left step within a bar, Home and End to its ends, and Down and Up keep the series, or its nearest", () => {
+  const { tip } = over(stack(STACKED, STACKS, TALL, { ...PLOT_ROOM, width: 2_000 }), (box) =>
+    stackTargets(STACKED, STACKS, box),
+  );
+  const segments = [...document.querySelectorAll(".chart-segment")];
+  const worn = () => segments.findIndex((s) => s.classList.contains("cursor"));
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(0);
+  tip.step(pressed("End"));
+  expect(worn()).toBe(2);
+  tip.step(pressed("ArrowRight"));
+  expect(worn()).toBe(2);
+  tip.step(pressed("Home"));
+  tip.step(pressed("ArrowRight"));
+  expect(worn()).toBe(1);
+  // Down keeps direct, which South's bar has, and stays on the last bar.
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(3);
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(3);
+  tip.step(pressed("ArrowUp"));
+  expect(worn()).toBe(1);
+  // From web, South's bar has no web, so Down lands on its nearest, direct.
+  tip.step(pressed("Home"));
+  tip.step(pressed("ArrowDown"));
+  expect(worn()).toBe(3);
 });
