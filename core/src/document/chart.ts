@@ -61,12 +61,17 @@ export interface StackPlot {
   by: ChartColumn;
   split: ChartColumn;
   sum?: ChartColumn;
+  /** The values a person moved, in the order they stand before the rest. */
+  order?: string[];
 }
 
 /** What a chart draws. This is all the engine needs to tally it. */
 export type Plot =
-  /** No `sum`: count rows per value. */
-  | { t: 'bars'; by: ChartColumn; sum?: ChartColumn }
+  /**
+   * No `sum`: count rows per value. `order` holds the values a person moved,
+   * in the order they stand before the rest, which stand largest first.
+   */
+  | { t: 'bars'; by: ChartColumn; sum?: ChartColumn; order?: string[] }
   /** Each value's share of the rows, or of the sum of `sum`. */
   | { t: 'pie'; by: ChartColumn; sum?: ChartColumn }
   /** One point per row, x against y, both number columns. */

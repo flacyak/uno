@@ -18,7 +18,7 @@ import type { Order, UnixUnit } from '@date';
 import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
-import { PER } from '@tally';
+import { GROUPS_SENT, PER } from '@tally';
 import type { Per } from '@tally';
 import type {
   CarriedChart,
@@ -1094,12 +1094,34 @@ export function parseChart(where: string, value: unknown): Chart {
 
 /** The keys each kind of plot reads. */
 const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
-  bars: ['t', 'by', 'sum'],
+  bars: ['t', 'by', 'sum', 'order'],
   pie: ['t', 'by', 'sum'],
   scatter: ['t', 'x', 'y'],
   time: ['t', 'at', 'sum', 'per', 'order', 'unit'],
-  stack: ['t', 'by', 'split', 'sum'],
+  stack: ['t', 'by', 'split', 'sum', 'order'],
 };
+
+/**
+ * The values a person moved in a chart of bars: text, each once, and no more
+ * than a snapshot sends, since the moved values are sent first.
+ */
+const MOVED: Expects<string[]> = {
+  is: (v): v is string[] =>
+    Array.isArray(v) &&
+    v.length <= GROUPS_SENT &&
+    v.every(isText) &&
+    new Set(v).size === v.length,
+  not: `is not at most ${GROUPS_SENT} values of text, each once`,
+};
+
+/** movedOf reads the values `p` says a person moved, as a plot spreads them. */
+function movedOf(
+  where: string,
+  p: Record<string, unknown>,
+): { order?: string[] } {
+  const order = optional(p, 'order', MOVED, where);
+  return order === undefined ? {} : { order };
+}
 
 /** The sizes an over-time chart may draw per, and how its dates may read. */
 const PERS: readonly string[] = [...PER, 'auto'];
@@ -1142,8 +1164,9 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'scatter') return { t, x: column('x'), y: column('y') };
   if (t === 'time') return parseOverTime(where, p);
   if (t === 'stack') return parseStacked(where, p);
-  if (p['sum'] === undefined) return { t, by: column('by') };
-  return { t, by: column('by'), sum: column('sum') };
+  const sum = p['sum'] === undefined ? {} : { sum: column('sum') };
+  if (t === 'pie') return { t, by: column('by'), ...sum };
+  return { t, by: column('by'), ...sum, ...movedOf(where, p) };
 }
 
 /** columnOf reads the column `p` names at `key`. */
@@ -1190,8 +1213,8 @@ export function parseStacked(where: string, value: unknown): StackPlot {
   const split = columnOf(where, p, 'split');
   if (split.col === by.col)
     throw new Error(`${where}: split names the column by names`);
-  if (p['sum'] === undefined) return { t: 'stack', by, split };
-  return { t: 'stack', by, split, sum: columnOf(where, p, 'sum') };
+  const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  return { t: 'stack', by, split, ...sum, ...movedOf(where, p) };
 }
 
 /** parsePlace reads where a chart's window sits. */
