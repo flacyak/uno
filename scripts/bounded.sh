@@ -29,9 +29,9 @@
 # UNO_BOUNDED_RUN, which is how the run finds it to stop it.
 #
 # A small run, a check or the tests related to a change, is one that ends in
-# seconds and never starts Electron. With UNO_BOUNDED_LIGHT_SLOTS set, it
-# takes a light slot and a quarter of the CPUs instead of waiting behind a
-# smoke, under the same slice and so the same cap on the machine. A command
+# seconds and never starts Electron. It takes a light slot and a quarter of
+# the CPUs instead of waiting behind a smoke, under the same slice and so the
+# same cap on the machine. A command
 # that names check, lint, fmt, or test with a file or --changed is small;
 # --light says so for any other.
 #
@@ -52,7 +52,7 @@
 #   UNO_BOUNDED_SLOTS    runs at once on the machine (1)
 #   UNO_BOUNDED_CPUS     logical CPUs all runs share (half the machine's)
 #   UNO_BOUNDED_LIGHT_SLOTS  small runs at once beside those, each on a quarter
-#                        of the CPUs (0: a small run takes an ordinary slot)
+#                        of the CPUs (1; 0: a small run takes an ordinary slot)
 #   UNO_BOUNDED_LIGHT_CPUS   logical CPUs a small run gets (a quarter)
 #   UNO_BOUNDED_MEMORY   memory all runs share, as systemd takes it (half)
 #   UNO_BOUNDED_TASKS    processes and threads all runs share (4096)
@@ -64,7 +64,7 @@ readonly STATE="${XDG_CACHE_HOME:-${HOME}/.cache}/uno-bounded"
 readonly SLICE="uno-bounded.slice"
 readonly MARKER="UNO_BOUNDED_RUN"
 readonly SLOTS="${UNO_BOUNDED_SLOTS:-1}"
-readonly LIGHT_SLOTS="${UNO_BOUNDED_LIGHT_SLOTS:-0}"
+readonly LIGHT_SLOTS="${UNO_BOUNDED_LIGHT_SLOTS:-1}"
 readonly TASKS="${UNO_BOUNDED_TASKS:-4096}"
 readonly DEFAULT_TIMEOUT_SECONDS="${UNO_BOUNDED_TIMEOUT:-1800}"
 # How often a waiting run looks for a free slot, and the guard for its run.
