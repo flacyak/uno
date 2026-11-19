@@ -4,11 +4,15 @@
  * once, the cursor goes with the bar, and the status line says where it
  * stands, though no screen reader reads it out, as it asks nothing more.
  *
+ * A real pointer carries a bar by its label to the top, and the bars stand
+ * so, without the window moving.
+ *
  * They open a copy smoke.js wrote of the stacked workspace chart-stack.ts
  * reads, whose rows window draws its regions largest first, so the stacked
  * one is never open while they move bars.
  */
 
+import { BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
 import { pressing } from "./chart-moves.ts";
 import { STACKED_REGIONS } from "./chart-stack.ts";
 import type { Check } from "./check.ts";
@@ -23,6 +27,13 @@ const EAST = ".chart .chart-bar-row:nth-child(2) .chart-segment:nth-child(2)";
 const DIRECT_SLOT = 1;
 /** The regions once Alt+Up moves East to the top. */
 const MOVED_UP = ["East", "West", "South", "North"];
+
+/** North's label in the rows window, the last of four. */
+const NORTH = ".chart .chart-bar-row:nth-child(4) .chart-bar-label";
+/** Up past the three rows above it, to above the first's middle. */
+const TO_TOP = { x: 0, y: -(3 * (BAR_THICK + BAR_GAP) + BAR_THICK / 2) };
+/** The regions once North is carried to the top. */
+const CARRIED_UP = ["North", "East", "West", "South"];
 
 export const CHART_MOVE: Check[] = [
   {
@@ -60,7 +71,25 @@ export const CHART_MOVE: Check[] = [
       const said = document.querySelector("#status-msg");
       // A move asks nothing more of the person, so the live region holds none of it.
       if (document.querySelector("#status-heard").textContent !== "") return "a screen reader hears " + document.querySelector("#status-heard").textContent;
+      // Where the window stands, which carrying a bar must leave as it is.
+      const { left, top } = win.getBoundingClientRect();
+      window.stood = left + "," + top;
       return said.textContent === "East moved to 1 of ${STACKED_REGIONS.length}" ? "" : "the status line says " + said.textContent;
+    `,
+  },
+  {
+    name: "a pointer carries a bar by its label to the top, the bars stand so, the window stays where it stood, and the status line says where it stands",
+    drag: { selector: NORTH, by: TO_TOP },
+    shot: "chart-move-drag",
+    script: `
+      const win = document.querySelector(".chart");
+      const labels = () => [...win.querySelectorAll(".chart-bar-label")].map((label) => label.textContent).join();
+      if (!(await arrives(() => labels() === "${CARRIED_UP.join()}"))) return "the bars stand " + labels();
+      if (win.querySelector(".chart-landing") !== null) return "the landing line stays";
+      const { left, top } = win.getBoundingClientRect();
+      if (left + "," + top !== window.stood) return "the window went from " + window.stood + " to " + left + "," + top;
+      const said = document.querySelector("#status-msg").textContent;
+      return said === "North moved to 1 of ${STACKED_REGIONS.length}" ? "" : "the status line says " + said;
     `,
   },
   {

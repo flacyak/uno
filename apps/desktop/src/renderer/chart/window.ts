@@ -59,6 +59,7 @@ import {
 import { kindOf } from "./kind.ts";
 import type { Dated, Drawing, Drawn, Kind, Kinds, PlotRoom } from "./kind.ts";
 import { KINDS } from "./kinds/index.ts";
+import { BarDrag } from "./dragging.ts";
 import { movedOrder, movedTo } from "./moving.ts";
 import { dragged, nudged, placeOf, shown, stretched, tucks } from "./place.ts";
 import type { Corner, Rect, Room } from "./place.ts";
@@ -104,6 +105,9 @@ function valuesOf(tally: Drawn | undefined): string[] {
   if (tally?.t === "groups") return tally.groups.map((g) => g.value);
   return tally?.t === "stack" ? tally.values.map((v) => v.value) : [];
 }
+
+/** What a plot whose bars a pointer can carry by their labels wears. */
+const MOVABLE = "movable";
 
 /** What names something that scrolls inside a window, for the wheel to find it. */
 const SCROLLS = ".chart-scrolls";
@@ -368,6 +372,12 @@ export class ChartWindow {
     this.summary.hidden = true;
     this.gauge.setAttribute("aria-hidden", "true");
     this.tip = new Tooltip(this.plot, this.box, `${id}-tip`);
+    // A bar moves by its label, never the window: that drag starts on the head.
+    new BarDrag(
+      this.plot,
+      () => this.plot.classList.contains(MOVABLE),
+      (from, to) => this.moveTo(from, to),
+    );
     this.summary.append(this.told.said, " ", this.told.values, " ", this.told.more);
 
     this.cross.innerHTML = CROSS;
@@ -567,6 +577,8 @@ export class ChartWindow {
     const drawn = this.place(drawing.draw(this.plot.clientHeight), named);
     drawing.fit(drawn);
     this.tip.show(drawing.targets(drawn));
+    const { t } = this.chart.plot;
+    this.plot.classList.toggle(MOVABLE, t === "bars" || t === "stack");
     const moved = this.moving;
     if (moved !== undefined && this.shown[moved.to] === moved.value) {
       this.moving = undefined;
@@ -576,7 +588,7 @@ export class ChartWindow {
 
   /** moveBar moves the bar under the cursor where `press` says, and says where it stands. */
   private moveBar(press: Press, at: EventTarget | null): boolean {
-    const { id, plot } = this.chart;
+    const { plot } = this.chart;
     if (at !== this.plot || (plot.t !== "bars" && plot.t !== "stack")) return false;
     const rows = [...this.plot.querySelectorAll(".chart-bar-row")];
     const from = rows.findIndex((row) => row.matches(".cursor, :has(.cursor)"));
@@ -584,9 +596,21 @@ export class ChartWindow {
     const slot = this.plot.querySelector<HTMLElement>(".chart-segment.cursor")?.dataset["slot"];
     const to = from === -1 ? undefined : movedTo(press, from, rows.length);
     if (to === undefined) return false;
-    const drawn = this.shown.slice(0, rows.length);
+    this.moveTo(from, to, slot);
+    return true;
+  }
+
+  /**
+   * moveTo moves the bar at `from` among the plot's rows to `to`, the cursor
+   * going with it on the segment of `slot` where it has one, and says where it
+   * stands on the status line, which a screen reader hears.
+   */
+  private moveTo(from: number, to: number, slot?: string): void {
+    const { id, plot } = this.chart;
+    if (to === from || (plot.t !== "bars" && plot.t !== "stack")) return;
+    const count = this.plot.querySelectorAll(".chart-bar-row").length;
+    const drawn = this.shown.slice(0, count);
     const value = drawn[from]!;
-    if (to === from) return true;
     const like = slot === undefined ? undefined : `.chart-segment[data-slot="${slot}"]`;
     this.moving = { value, to, like };
     const order = movedOrder(drawn, plot.order ?? [], from, to);
@@ -596,10 +620,9 @@ export class ChartWindow {
     const named = value === "" ? m.chart_blank_value() : value;
     // A move is done, and asks nothing more, so the status line shows it and no screen reader reads it out.
     this.stage.say(
-      m.chart_bar_moved({ value: named, place: num(to + 1), count: num(rows.length) }),
+      m.chart_bar_moved({ value: named, place: num(to + 1), count: num(count) }),
       "done",
     );
-    return true;
   }
 
   /** place puts `drawn` in the plot as an image, named by what `named` names, and gives it back. */
