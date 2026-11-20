@@ -9,7 +9,7 @@ import { expect, test } from "vite-plus/test";
 
 import type { DotsPlot } from "@document";
 import type { GroupsTally, MeanTally } from "@engine";
-import { dots } from "@renderer/chart/dots";
+import { dotTargets, dots } from "@renderer/chart/dots";
 import { BAR_GAP, BAR_THICK, rowsIn } from "@renderer/chart/rows";
 
 const CARRIER = { col: 0, header: "carrier" };
@@ -115,4 +115,43 @@ test("dots of rows or a sum stand at them, and one value's axis runs from zero p
   expect(summed.querySelector(".chart-dot-tip")?.textContent).toBe("12");
   // 12 reaches to 24, which ticks of 10 take in by 30.
   expect(shares(summed)).toStrictEqual([0.4]);
+});
+
+test("a row is worth its mean, named by its value, with its numbers and rows, a row of no number says so, and Down and Up step the rows", () => {
+  const tally = means([
+    ["Acme", 6.8, 2],
+    ["", 0, 0],
+  ]);
+  const drawn = dots(MEANS, tally, HEIGHT);
+  const targets = dotTargets(MEANS, tally, drawn);
+  const said = (i: number) =>
+    targets.all[i]!.said().map((r) => `${r.value} ${r.label.textContent}`);
+  expect(said(0)).toStrictEqual(["3.4 Acme", "2 numbers", "3 rows"]);
+  expect(said(1)).toStrictEqual(["no numbers (blank)", "0 numbers", "1 row"]);
+  expect(targets.all[0]!.at.classList.contains("chart-dot")).toBe(true);
+  expect([
+    targets.step!("ArrowDown", undefined),
+    targets.step!("ArrowDown", 1),
+    targets.step!("ArrowUp", undefined),
+    targets.step!("ArrowUp", 0),
+    targets.step!("ArrowRight", 0),
+  ]).toStrictEqual([0, 1, 1, 0, undefined]);
+  expect(targets.under(drawn.querySelectorAll(".chart-bar-label")[1]!, 0, 0)).toBe(1);
+});
+
+test("a dot of a sum is worth it with its rows, and one of rows its rows alone", () => {
+  const tally: GroupsTally = {
+    ...means([]),
+    t: "groups",
+    groups: [{ value: "Acme", rows: 4, sum: 12 }],
+  };
+  const said = (plot: DotsPlot) =>
+    dotTargets(plot, tally, dots(plot, tally, HEIGHT))
+      .all[0]!.said()
+      .map((r) => `${r.value} ${r.label.textContent}`);
+  expect(said({ t: "dots", by: CARRIER, of: DAYS, measure: "sum" })).toStrictEqual([
+    "12 Acme",
+    "4 rows",
+  ]);
+  expect(said({ t: "dots", by: CARRIER })).toStrictEqual(["4 Acme"]);
 });

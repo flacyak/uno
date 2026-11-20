@@ -8,6 +8,7 @@
  * They open the workspace smoke.js wrote of five carriers' delivery days.
  */
 
+import { pressing } from "./chart-moves.ts";
 import { RECT_SLACK } from "./charts.ts";
 import type { Check } from "./check.ts";
 
@@ -77,6 +78,29 @@ export const CHART_DOTS: Check[] = [
         if (Math.abs(guide.left - rect(track).left) > ${PX_SLACK} || Math.abs(guide.right - (dot.left + dot.width / 2)) > ${PX_SLACK}) return "a hairline runs from " + guide.left + " to " + guide.right;
       }
       return "";
+    `,
+  },
+  {
+    name: "the pointer on a carrier's row says its mean, numbers and rows, and its row wears the cursor",
+    click: { selector: ".chart:first-child .chart-bar-row:nth-child(2) .chart-bar-label" },
+    shot: "chart-dots-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      const rows = win.querySelectorAll(".chart-bar-row");
+      if (!(await until(() => rows[1].classList.contains("cursor")))) return "Crane's row wears no cursor";
+      const said = win.querySelector(".chart-tip-words").textContent;
+      return /^3.25 Crane.*2 numbers.*2 rows$/.test(said) ? "" : "the box says " + said;
+    `,
+  },
+  {
+    name: "Down steps the cursor to the next carrier's row",
+    input: { events: pressing("Down"), through: true },
+    script: `
+      const win = document.querySelector(".chart");
+      const rows = win.querySelectorAll(".chart-bar-row");
+      if (!(await until(() => rows[2].classList.contains("cursor")))) return "Down leaves the cursor off Bolt's row";
+      const said = win.querySelector(".chart-tip-words").textContent;
+      return /^3.1 Bolt/.test(said) ? "" : "the box says " + said;
     `,
   },
 ];

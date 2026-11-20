@@ -538,6 +538,26 @@
   "chart_inserted": "inserted {title}",
   "chart_bars_more": "+{count} more",
   "chart_dots_none": "no numbers",
+  "chart_dots_rows": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "row",
+        "plural=other": "rows"
+      }
+    }
+  ],
+  "chart_dots_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "number",
+        "plural=other": "numbers"
+      }
+    }
+  ],
   "chart_bars_past": "more than {count} values · later ones are counted in the rest",
   "chart_points": [
     {

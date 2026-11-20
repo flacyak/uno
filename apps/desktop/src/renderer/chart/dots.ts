@@ -12,7 +12,9 @@ import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { axis, tickLabels } from "./axes.ts";
 import { SPAN_LEAST, TIP_GAP, barsBox, room } from "./bars.ts";
-import { BAR_GAP, BAR_THICK, ranked, row } from "./rows.ts";
+import { BAR_GAP, BAR_THICK, ranked, row, rowSteps } from "./rows.ts";
+import { ACCENT, among, named } from "./tooltip.ts";
+import type { Reading, Targets } from "./tooltip.ts";
 
 /** A tally a dot plot draws: rows or a sum per value, or a mean. */
 export type DotsTally = GroupsTally | MeanTally;
@@ -91,4 +93,34 @@ export function fitDots(box: HTMLElement): void {
   if (width === 0 || tips.length === 0 || width - widest - TIP_GAP >= SPAN_LEAST) return;
   for (const tip of tips) tip.remove();
   box.style.setProperty("--tips-room", "0px");
+}
+
+/**
+ * dotTargets gives the rows of `drawn`, as dots drew `tally` for `plot`: each
+ * worth what its dot stands at, named by its value, with its numbers of a mean
+ * and its rows of a mean or a sum. Down and Up step the rows.
+ */
+export function dotTargets(plot: DotsPlot, tally: DotsTally, drawn: HTMLElement): Targets {
+  const sizes = measuresOf(plot, tally);
+  const rows = [...drawn.querySelectorAll(".chart-bar-row:has(.chart-dot-track)")];
+  const all = rows.map((mark, i) => {
+    const [g, size] = [tally.groups[i]!, sizes[i]];
+    const counted = (count: number, word: string): Reading => ({
+      value: num(count),
+      label: el("span", "", word),
+    });
+    const said = (): Reading[] => {
+      const own = {
+        value: size === undefined ? m.chart_dots_none() : num(size),
+        label: named(g.value),
+      };
+      const rowed = counted(g.rows, m.chart_dots_rows({ count: g.rows }));
+      if (tally.t !== "mean") return plot.of === undefined ? [own] : [own, rowed];
+      const { numbers } = tally.groups[i]!;
+      return [own, counted(numbers, m.chart_dots_numbers({ count: numbers })), rowed];
+    };
+    const at = mark.querySelector(".chart-dot, .chart-dots-none")!;
+    return { mark, at, front: false, key: ACCENT, said };
+  });
+  return { all, under: among(all, ".chart-bar-row"), ...rowSteps(all.length) };
 }

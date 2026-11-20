@@ -554,6 +554,28 @@
   "chart_inserted": "insertado: {title}",
   "chart_bars_more": "+{count} más",
   "chart_dots_none": "sin números",
+  "chart_dots_rows": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "fila",
+        "plural=many": "filas",
+        "plural=other": "filas"
+      }
+    }
+  ],
+  "chart_dots_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "número",
+        "plural=many": "números",
+        "plural=other": "números"
+      }
+    }
+  ],
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",
   "chart_points": [
     {
