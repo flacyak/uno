@@ -14,8 +14,8 @@ export type { Group, Groups, Measure, SavedGroups } from './groups.ts';
 export { SCATTER_POINTS_AT_MOST, SampleFold } from './sample.ts';
 export type { Marks, SavedSample } from './sample.ts';
 export type { Point, Sample } from './sample.ts';
-export { SpreadFold } from './spread.ts';
-export type { Bucket, Spreading } from './spread.ts';
+export { FIGURES_AT_MOST, SPREAD_AT_MOST, SpreadFold } from './spread.ts';
+export type { Bucket, Figures, Spreading } from './spread.ts';
 export { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from './split.ts';
 export type {
   Measured,
