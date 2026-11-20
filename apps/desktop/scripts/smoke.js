@@ -414,6 +414,55 @@ await writeFile(
   }),
 );
 
+// A workspace of two box plots of an export of four regions' amounts, each
+// spread its own way, East's with two far past its whiskers: one box per
+// region in a new window's size at the sheet's foot, and one box of every
+// amount in a window of the least width at its top.
+const boxedFile = join(scratch, "sent", "boxed.csv");
+const boxedHeader = "region,amount";
+const boxedRegions = { North: [10, 90], South: [50, 250], East: [5, 55], West: [100, 50] };
+const boxedRows = Object.entries(boxedRegions).flatMap(([region, [base, range]]) =>
+  Array.from({ length: spreadRows / 10 }, (_, i) => `${region},${base + ((i * 37) % range)}`),
+);
+boxedRows.push("East,600", "East,900");
+await writeFile(boxedFile, `${[boxedHeader, ...boxedRows].join("\n")}\n`);
+const boxed = join(scratch, "sent", "boxed.uno");
+const boxedSource = {
+  ...spreadSource,
+  id: "boxed",
+  name: "boxed.csv",
+  path: boxedFile,
+  rows: boxedRows.length,
+  cols: 2,
+};
+const amountOf = { col: 1, header: "amount" };
+const boxedChart = { source: boxedSource.id, title: "", refresh: 0 };
+await writeFile(
+  boxed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [boxedSource],
+    active: boxedSource.id,
+    log: [],
+    charts: [
+      {
+        ...boxedChart,
+        id: "c1",
+        plot: { t: "box", of: amountOf, by: { col: 0, header: "region" }, span: "most" },
+        place: { ...chartSize, x: 0, y: 1 },
+      },
+      {
+        ...boxedChart,
+        id: "c2",
+        plot: { t: "box", of: amountOf, span: "most" },
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: boxed,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -772,6 +821,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_TIMED: timed,
       UNO_SMOKE_STACKED: stacked,
       UNO_SMOKE_SPREAD: spread,
+      UNO_SMOKE_BOXED: boxed,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,

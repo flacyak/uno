@@ -59,6 +59,7 @@ export const GROUPS: readonly Group[] = [
   { name: "chart-time", starts: true },
   { name: "chart-stack", starts: true },
   { name: "chart-histogram", starts: true },
+  { name: "chart-box", starts: true },
   { name: "chart-move", starts: true },
   { name: "chart-blank", starts: true },
   { name: "chart-states", starts: true },

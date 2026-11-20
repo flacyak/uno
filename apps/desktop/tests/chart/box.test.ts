@@ -9,7 +9,8 @@ import { expect, test } from "vite-plus/test";
 
 import type { BoxTally } from "@engine";
 import { m } from "@paraglide/messages";
-import { boxedRows } from "@renderer/chart/box";
+import { boxedRows, boxes } from "@renderer/chart/box";
+import { rowsIn } from "@renderer/chart/rows";
 import type { Box, Spread } from "@tally";
 
 /** A box whose numbers all stand at `at`. */
@@ -35,6 +36,9 @@ const spreadOf = (at?: number): Omit<Spread, "levels"> => ({
   ...(at === undefined ? {} : { box: boxAt(at) }),
   skipped: { blank: at === undefined ? 1 : 0, unparsed: 0 },
 });
+
+/** A plot's height in px, of more rows than a few boxes take. */
+const TALL = 300;
 
 const TALLY: BoxTally = {
   t: "box",
@@ -67,4 +71,56 @@ test("a box plot of no values is its column's one box, or no row where it has no
   expect(boxedRows(whole, "amount").map(({ label }) => label)).toStrictEqual(["amount"]);
   expect(boxedRows({ ...whole, rest: spreadOf() }, "amount")).toStrictEqual([]);
   expect(boxedRows({ ...TALLY, rest: undefined }, "amount")).toHaveLength(2);
+});
+
+/** The marks of each row `boxes` draws, as each's kind and its --from and --to. */
+const marks = (box: HTMLElement): string[][] =>
+  [...box.querySelectorAll(".chart-box-track")].map((track) =>
+    [...track.children].map(
+      (at) =>
+        `${at.className} ${(at as HTMLElement).style.getPropertyValue("--from")} ${(at as HTMLElement).style.getPropertyValue("--to")}`,
+    ),
+  );
+
+test("a box stands from hinge to hinge, its median across it and its whiskers to their ends, on one axis", () => {
+  const spread: Box = {
+    ...boxAt(0),
+    five: [
+      [0, 0],
+      [20, 20],
+      [30, 30],
+      [60, 60],
+      [100, 100],
+    ],
+    whiskers: [
+      [10, 10],
+      [80, 80],
+    ],
+    span: [
+      [0, 0],
+      [100, 100],
+    ],
+  };
+  const box = boxes([{ label: "West", box: spread }], false, TALL);
+  expect(marks(box)).toStrictEqual([
+    ["chart-whisker 0.1 0.8", "chart-box 0.2 0.6", "chart-median 0.3 0.3"],
+  ]);
+  expect(box.querySelector(".chart-bar-label")!.textContent).toBe("West");
+});
+
+test("a mark past the span stands at its edge, and the rows a plot cannot hold are left out", () => {
+  const wide: Box = {
+    ...boxAt(50),
+    whiskers: [
+      [-500, -500],
+      [900, 900],
+    ],
+    span: [
+      [0, 0],
+      [100, 100],
+    ],
+  };
+  expect(marks(boxes([{ label: "a", box: wide }], false, TALL))[0]![0]).toBe("chart-whisker 0 1");
+  const many = Array.from({ length: 40 }, (_, i) => ({ label: `${i}`, box: boxAt(i) }));
+  expect(boxes(many, false, TALL).querySelectorAll(".chart-box-track").length).toBe(rowsIn(TALL));
 });

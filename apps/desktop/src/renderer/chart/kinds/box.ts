@@ -1,7 +1,8 @@
-/** @fileoverview A box plot's kind, whose window says it is not drawn yet. */
+/** @fileoverview A box plot's kind: a box of a number column, or one per value of another. */
 
 import type { Plot } from "@document";
 import { m } from "@paraglide/messages";
+import { boxedRows, boxes } from "../box.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -14,5 +15,10 @@ export const box: ChartKind<Extract<Plot, { t: "box" }>> = (plot) => ({
       : m.chart_title_per({ of: named(plot.of), by: named(plot.by) }),
   numbered: [plot.of],
   valued: plot.by === undefined ? [plot.of] : [plot.by],
-  drawing: () => undrawn,
+  drawing: (tally) => {
+    if (tally.t !== "box") return undefined;
+    const rows = boxedRows(tally, named(plot.of));
+    if (rows.length === 0) return { ...undrawn, empty: true };
+    return { ...undrawn, draw: (height) => boxes(rows, plot.span === "all", height) };
+  },
 });

@@ -454,6 +454,41 @@
   left: auto;
 }
 
+/* A box plot's marks, from box.ts, from --from to --to of their track: the
+ * whiskers a 2 px accent line with 8 px caps centred on its ends, the box
+ * hinge to hinge with 2 px corners, and a median of the window's ground. */
+.chart-box-track {
+  position: relative;
+  align-self: stretch;
+}
+
+.chart-box-track > * {
+  position: absolute;
+  inset-block: 0;
+  left: calc(var(--from) * 100%);
+  width: calc((var(--to) - var(--from)) * 100%);
+}
+
+.chart-whisker {
+  inset-block: calc(50% - 4px);
+  width: calc((var(--to) - var(--from)) * 100% + 2px);
+  margin-left: -1px;
+  border-inline: 2px solid var(--accent);
+  background: linear-gradient(var(--accent) 0 0) center / 100% 2px no-repeat;
+}
+
+.chart-box {
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.chart-median {
+  width: 2px;
+  translate: -1px 0;
+  background: var(--surface);
+}
+
 /* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it
  * starts `--from` of the span past zero and runs `--part` of it rightward, and
  * under zero the same leftward. Each after the first gives --segment-gap of

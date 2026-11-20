@@ -30,7 +30,7 @@ export interface Ranked {
 }
 
 /** rowsIn gives how many rows of values or words a plot `height` px high holds. */
-function rowsIn(height: number): number {
+export function rowsIn(height: number): number {
   return Math.max(Math.floor((height - 2 * BARS_INSET + BAR_GAP) / (BAR_THICK + BAR_GAP)), 0);
 }
 
