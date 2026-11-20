@@ -10,6 +10,7 @@
  */
 
 import { BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
+import { TICK_GAP } from "@renderer/chart/scatter";
 import { RECT_SLACK } from "./charts.ts";
 import type { Check, Input } from "./check.ts";
 
@@ -61,7 +62,7 @@ export const CHART_HISTOGRAM: Check[] = [
         // The span's first bin starts at the scroller's left edge, and its last ends at its right.
         const box = win.querySelector(".chart-histogram");
         const slots = [...win.querySelectorAll(".chart-period")];
-        const spans = slots.length * 100 / parseFloat(win.querySelector(".chart-periods").style.width);
+        const spans = slots.length * 100 / parseFloat(win.querySelector(".chart-bins").style.width);
         const at = Math.round(parseFloat(box.style.getPropertyValue("--span-at")) * spans);
         const [first, last] = [rect(slots[at]), rect(slots[at + Math.round(spans) - 1])];
         const room = rect(along);
@@ -69,6 +70,27 @@ export const CHART_HISTOGRAM: Check[] = [
         // The y axis's 0 stands on the zero gridline, over the scroller's bar.
         const foot = rect(win.querySelector(".chart-ticks.y .chart-tick:first-child"));
         if (Math.abs((foot.top + foot.bottom) / 2 - base) > ${PX_SLACK}) return "the y axis's 0 centres at " + (foot.top + foot.bottom) / 2 + " off the baseline at " + base;
+      }
+      return "";
+    `,
+  },
+  {
+    name: "a histogram labels round edges under its bins, a gap apart and under the y axis's 0, each under its edge or kept inside the bins",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      for (const win of document.querySelectorAll(".chart")) {
+        const ticks = [...win.querySelectorAll(".chart-ticks.x .chart-tick")];
+        if (ticks.length < 2) return "a histogram labels " + ticks.length + " edges";
+        const bins = rect(win.querySelector(".chart-bins"));
+        const foot = rect(win.querySelector(".chart-ticks.y .chart-tick:first-child"));
+        for (const [i, tick] of ticks.entries()) {
+          const at = rect(tick);
+          const edge = bins.left + parseFloat(tick.style.getPropertyValue("--at")) * bins.width;
+          const kept = at.left <= bins.left + ${PX_SLACK} || at.right >= bins.right - ${PX_SLACK};
+          if (!kept && Math.abs((at.left + at.right) / 2 - edge) > ${PX_SLACK}) return tick.textContent + " centres at " + (at.left + at.right) / 2 + " off its edge at " + edge;
+          if (i > 0 && at.left - rect(ticks[i - 1]).right < ${TICK_GAP} - ${RECT_SLACK}) return tick.textContent + " stands " + (at.left - rect(ticks[i - 1]).right) + " px from the label before it";
+          if (at.top - foot.bottom < ${TICK_GAP} - ${RECT_SLACK}) return tick.textContent + " stands " + (at.top - foot.bottom) + " px under the y axis's 0";
+        }
       }
       return "";
     `,

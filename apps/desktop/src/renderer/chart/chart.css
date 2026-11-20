@@ -616,11 +616,43 @@
 }
 
 .chart-along {
+  --fade: 16px;
   overflow: auto hidden;
 }
 
-.chart-along .chart-periods {
+/* A side with bins past it fades out over --fade, as histogram.ts marks it. */
+.chart-along.more-before {
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+}
+
+.chart-along.more-after {
+  mask-image: linear-gradient(to left, transparent, #000 var(--fade));
+}
+
+.chart-along.more-before.more-after {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
+}
+
+.chart-bins {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
+}
+
+/* A label under the bins centres under its edge, kept inside them. */
+.chart-histogram .chart-ticks.x {
+  grid-column: 1;
+}
+
+.chart-histogram .chart-ticks.x .chart-tick {
+  left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
 }
 
 .chart-time .chart-ticks.x .chart-tick {

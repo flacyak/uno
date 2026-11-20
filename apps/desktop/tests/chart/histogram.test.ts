@@ -48,7 +48,7 @@ const flat = (spans: number, power: number): Level => ({
 });
 
 test("each bin has a slot, its column its rows' share of an axis from zero", () => {
-  const box = histogram({ level: TENS, fits: true });
+  const box = histogram({ level: TENS, fits: true }, ROOM);
   const slots = [...box.querySelectorAll<HTMLElement>(".chart-periods > .chart-period")];
   const shares = slots.map((slot) => slot.style.getPropertyValue("--share"));
   expect(shares).toStrictEqual([
@@ -67,13 +67,13 @@ test("each bin has a slot, its column its rows' share of an axis from zero", () 
 });
 
 test("the span fills the scroller's width, and the bins past it stand beyond its edges", () => {
-  const box = histogram({ level: TENS, fits: true });
+  const box = histogram({ level: TENS, fits: true }, ROOM);
   const along = box.querySelector<HTMLElement>(".chart-along")!;
   expect(along.classList.contains("chart-scrolls")).toBe(true);
   // A scroller takes no focus from the plot, which has the keys.
   expect(along.hasAttribute("tabindex")).toBe(false);
-  const periods = along.querySelector<HTMLElement>(".chart-periods")!;
-  expect(periods.style.width).toBe(`${(TENS.rows.length / TENS.spans) * 100}%`);
+  const bins = along.querySelector<HTMLElement>(".chart-bins")!;
+  expect(bins.style.width).toBe(`${(TENS.rows.length / TENS.spans) * 100}%`);
   expect(box.style.getPropertyValue("--span-at")).toBe(`${TENS.at / TENS.spans}`);
 });
 
@@ -88,7 +88,7 @@ test("a histogram draws the finest level whose span's bins each get their least 
 });
 
 test("a bin is worth its rows and their share, named by its edges to the decimals of its width", () => {
-  const box = histogram({ level: TENS, fits: true });
+  const box = histogram({ level: TENS, fits: true }, ROOM);
   const numbers = TENS.rows.reduce((a, b) => a + b, 0);
   const said = (i: number) =>
     binTargets(TENS, numbers, box)
@@ -96,14 +96,14 @@ test("a bin is worth its rows and their share, named by its edges to the decimal
       .map((r) => `${r.value} ${r.label.textContent}`)
       .join(" · ");
   expect(said(3)).toBe("8 30 to 40 · 30% share");
-  const tenths = histogram({ level: { ...TENS, power: -1 }, fits: true });
+  const tenths = histogram({ level: { ...TENS, power: -1 }, fits: true }, ROOM);
   expect(
     binTargets({ ...TENS, power: -1 }, numbers, tenths).all[0]!.said()[0]!.label.textContent,
   ).toBe("0.0 to 0.1");
 });
 
 test("the keys reveal the mark they step to, and a pointer leaves the scroll as it is", () => {
-  const box = histogram({ level: TENS, fits: true });
+  const box = histogram({ level: TENS, fits: true }, ROOM);
   const plot = el("div");
   plot.append(box);
   document.body.append(plot);
@@ -120,4 +120,27 @@ test("the keys reveal the mark they step to, and a pointer leaves the scroll as 
   slot.dispatchEvent(new PointerEvent("pointermove", { clientX: 1, clientY: 1, bubbles: true }));
   expect(revealed).toStrictEqual([TENS.rows.length - 1, TENS.rows.length - 2]);
   plot.remove();
+});
+
+test("the edges under the bins are labelled at the least round step whose labels stand apart", () => {
+  const labels = (level: Level) =>
+    [...histogram({ level, fits: true }, ROOM).querySelectorAll(".chart-ticks.x .chart-tick")].map(
+      (tick) => tick.textContent,
+    );
+  expect(labels(TENS)).toStrictEqual([
+    "0",
+    "10",
+    "20",
+    "30",
+    "40",
+    "50",
+    "60",
+    "70",
+    "80",
+    "90",
+    "100",
+  ]);
+  // 200 bins of 1 in about 380 px stand under 2 px apart, so every 20th edge is labelled.
+  const twenties = Array.from({ length: 11 }, (_, i) => `${i * 20}`);
+  expect(labels({ ...flat(200, 0), step: 1 })).toStrictEqual(twenties);
 });

@@ -9,9 +9,11 @@ import { num, percent, places } from "@renderer/locale";
 import { edgeOf } from "@tally";
 import type { Level } from "@tally";
 import { el } from "@renderer/shell/util";
+import type { Axis } from "./axes.ts";
 import { COLUMN_PITCH_LEAST, aside, sized, upOf, upward } from "./columns.ts";
 import type { PlotRoom } from "./kind.ts";
 import { BARS_INSET } from "./rows.ts";
+import { TICK_GAP } from "./scatter.ts";
 import { among } from "./tooltip.ts";
 import type { Reading, Targets } from "./tooltip.ts";
 
@@ -21,10 +23,45 @@ export interface Binned {
   fits: boolean;
 }
 
+/** The steps between labelled edges, times a power of ten, so every label is round. */
+const EVERY = [1, 2, 5] as const;
+const DIGITS = 10;
+/** How near its end a scroller counts as there, in px: a zoom leaves scrollLeft fractional. */
+const END_SLACK = 1;
+
+/** across gives the px `room` leaves the bins beside the y axis `up`'s labels. */
+function across(up: Axis, room: PlotRoom): number {
+  return room.width - 2 * BARS_INSET - aside(up, room);
+}
+
+/**
+ * edges labels every edge of `level` that is a whole number of the least
+ * round step whose labels stand TICK_GAP apart at its bins' pitch in `room`.
+ */
+function edges(level: Level, up: Axis, room: PlotRoom): HTMLElement {
+  const ticks = el("div", "chart-ticks x");
+  const words = (i: number) => places(edgeOf(level, i), -level.power);
+  const count = level.rows.length;
+  const widest = Math.max(words(0).length, words(count).length) * room.ch + TICK_GAP;
+  const pitch = across(up, room) / level.spans;
+  let every = 1;
+  for (let ten = 1; every * pitch < widest; ten *= DIGITS) {
+    every = (EVERY.find((d) => d * ten * pitch >= widest) ?? DIGITS) * ten;
+  }
+  for (let i = 0; i <= count; i++) {
+    if ((level.first + i) % every !== 0) continue;
+    const tick = el("span", "chart-tick", words(i));
+    tick.style.setProperty("--at", `${i / count}`);
+    tick.style.setProperty("--wide", `${words(i).length}ch`);
+    ticks.append(tick);
+  }
+  return ticks;
+}
+
 /** binnedIn gives the finest of `levels` whose span's bins each get COLUMN_PITCH_LEAST px of `room`, or else the coarsest. */
 export function binnedIn(levels: readonly Level[], room: PlotRoom): Binned | undefined {
   const fits = (level: Level): boolean =>
-    level.spans * COLUMN_PITCH_LEAST <= room.width - 2 * BARS_INSET - aside(upOf(level.rows), room);
+    level.spans * COLUMN_PITCH_LEAST <= across(upOf(level.rows), room);
   const level = levels.find(fits) ?? levels.at(-1);
   return level === undefined ? undefined : { level, fits: fits(level) };
 }
@@ -34,12 +71,13 @@ export function binnedIn(levels: readonly Level[], room: PlotRoom): Binned | und
  * as much wider than their scroller as they are more than the span's, and
  * --span-at says where the span starts, in scroller widths, for fitHistogram.
  */
-export function histogram({ level, fits }: Binned): HTMLElement {
+export function histogram({ level, fits }: Binned, room: PlotRoom): HTMLElement {
   const box = el("div", "chart-histogram");
   const up = upOf(level.rows);
   const { span, grid, labels } = upward(up);
+  const bins = el("div", "chart-bins");
+  bins.style.width = `${(level.rows.length / level.spans) * 100}%`;
   const periods = el("div", "chart-periods");
-  periods.style.width = `${(level.rows.length / level.spans) * 100}%`;
   periods.append(grid);
   for (const rows of level.rows) {
     const slot = el("div", "chart-period");
@@ -48,7 +86,8 @@ export function histogram({ level, fits }: Binned): HTMLElement {
     periods.append(slot);
   }
   const along = el("div", "chart-along chart-scrolls themed-bar");
-  along.append(periods);
+  bins.append(periods, edges(level, up, room));
+  along.append(bins);
   sized(box, up, fits);
   box.style.setProperty("--span-at", `${level.at / level.spans}`);
   box.append(labels, along);
@@ -58,10 +97,18 @@ export function histogram({ level, fits }: Binned): HTMLElement {
 /** fitHistogram scrolls a drawn histogram to its span, and ends its y axis where its bins do, over the bar. */
 export function fitHistogram(drawn: HTMLElement): void {
   const along = drawn.querySelector<HTMLElement>(".chart-along");
-  const periods = along?.firstElementChild;
+  const periods = along?.querySelector(".chart-periods");
   if (!along || !periods) return;
   const at = Number(drawn.style.getPropertyValue("--span-at"));
   along.scrollLeft = at * along.clientWidth;
+  // Each side with bins past it fades, so a bin or a label cut there reads as more to come.
+  const ends = () => {
+    const most = along.scrollWidth - along.clientWidth - END_SLACK;
+    along.classList.toggle("more-before", along.scrollLeft > END_SLACK);
+    along.classList.toggle("more-after", along.scrollLeft < most);
+  };
+  ends();
+  along.addEventListener("scroll", ends);
   const below = along.getBoundingClientRect().bottom - periods.getBoundingClientRect().bottom;
   drawn.style.setProperty("--below", `${below}px`);
 }

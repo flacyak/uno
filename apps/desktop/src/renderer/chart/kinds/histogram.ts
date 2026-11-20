@@ -18,7 +18,7 @@ export const histogram: ChartKind<Extract<Plot, { t: "histogram" }>> = (plot) =>
     if (binned === undefined) return { ...undrawn, empty: true };
     return {
       ...undrawn,
-      draw: () => drawn(binned),
+      draw: () => drawn(binned, room),
       fit: fitHistogram,
       targets: (box) => binTargets(binned.level, tally.numbers, box),
     };
