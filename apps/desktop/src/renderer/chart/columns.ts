@@ -34,12 +34,12 @@ function lengths(level: TimeLevel, summed: boolean): number[] {
 }
 
 /** upOf gives the y axis of columns `lengths` long: from zero, or under it, to the longest. */
-function upOf(lengths: readonly number[]): Axis {
+export function upOf(lengths: readonly number[]): Axis {
   return axis(Math.min(0, ...lengths), Math.max(0, ...lengths));
 }
 
 /** aside gives the room `up`'s labels and their gap take left of the periods, as chart.css lays them out. */
-function aside(up: Axis, room: PlotRoom): number {
+export function aside(up: Axis, room: PlotRoom): number {
   return Math.ceil(gutter(up) * room.ch) + TICK_GAP;
 }
 
@@ -71,19 +71,7 @@ export function columns({ level, fits }: Fitted, summed: boolean, room: PlotRoom
   const box = el("div", "chart-time");
   const sent = lengths(level, summed);
   const up = upOf(sent);
-  const low = up.ticks[0]!;
-  const span = up.ticks.at(-1)! - low;
-  const share = (value: number): number => (value - low) / span;
-  const grid = mark("svg", "chart-gridlines");
-  grid.setAttribute("aria-hidden", "true");
-  const labels = el("div", "chart-ticks y");
-  // SVG counts down from the top, and an axis up from its first tick.
-  for (const [i, label] of tickLabels(up).entries()) {
-    const at = percent(1 - share(up.ticks[i]!));
-    grid.append(gridline("y", "0", at, "100%", at));
-    label.style.top = at;
-    labels.append(label);
-  }
+  const { span, grid, labels } = upward(up);
   const periods = el("div", "chart-periods");
   periods.append(grid);
   for (let i = 0; i < level.span; i++) {
@@ -104,13 +92,40 @@ export function columns({ level, fits }: Fitted, summed: boolean, room: PlotRoom
     tick.style.setProperty("--wide", `${words.length}ch`);
     along.append(tick);
   }
+  sized(box, up, fits);
+  box.append(labels, periods, along);
+  return box;
+}
+
+/**
+ * upward gives the y axis `up` as columns stand on it: each value's share of
+ * it, how far it spans, a gridline at each tick and the tick's label.
+ */
+export function upward(up: Axis) {
+  const low = up.ticks[0]!;
+  const span = up.ticks.at(-1)! - low;
+  const share = (value: number): number => (value - low) / span;
+  const grid = mark("svg", "chart-gridlines");
+  grid.setAttribute("aria-hidden", "true");
+  const labels = el("div", "chart-ticks y");
+  // SVG counts down from the top, and an axis up from its first tick.
+  for (const [i, label] of tickLabels(up).entries()) {
+    const at = percent(1 - share(up.ticks[i]!));
+    grid.append(gridline("y", "0", at, "100%", at));
+    label.style.top = at;
+    labels.append(label);
+  }
+  return { share, span, grid, labels };
+}
+
+/** sized gives `box` the sizes chart.css lays columns on `up` out by, crowded where they do not fit. */
+export function sized(box: HTMLElement, up: Axis, fits: boolean): void {
   box.classList.toggle("crowded", !fits);
-  box.style.setProperty("--zero", `${share(0)}`);
+  const [low, high] = [up.ticks[0]!, up.ticks.at(-1)!];
+  box.style.setProperty("--zero", `${-low / (high - low)}`);
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--gutter", `${gutter(up)}ch`);
   box.style.setProperty("--tick-gap", `${TICK_GAP}px`);
   box.style.setProperty("--bar-thick", `${BAR_THICK}px`);
   box.style.setProperty("--bar-gap", `${BAR_GAP}px`);
-  box.append(labels, periods, along);
-  return box;
 }
