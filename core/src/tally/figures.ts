@@ -25,7 +25,7 @@ const DIGITS = 10;
  * scaled is `x` times 10^`k`, rounded once where 10^`k` is exact, and
  * otherwise twice, or four times past the powers a double reaches.
  */
-function scaled(x: number, k: number): number {
+export function scaled(x: number, k: number): number {
   if (Math.abs(k) <= EXACT_POWER_AT_MOST) {
     return k >= 0 ? x * DIGITS ** k : x / DIGITS ** -k;
   }
@@ -35,7 +35,7 @@ function scaled(x: number, k: number): number {
 }
 
 /** snapped is `s`, or the whole number within SNAP of it, so 0.29 scaled by 100 reads 29 as written. */
-function snapped(s: number): number {
+export function snapped(s: number): number {
   const whole = Math.round(s);
   return Math.abs(s - whole) <= Math.abs(s) * SNAP ? whole : s;
 }
