@@ -21,6 +21,7 @@ import { CHART_FORM } from "./chart-form.ts";
 import { CHART_KEYS } from "./chart-keys.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
 import { CHART_MOVE } from "./chart-move.ts";
+import { CHART_HISTOGRAM } from "./chart-histogram.ts";
 import { CHART_STACK } from "./chart-stack.ts";
 import { CHART_TIP } from "./chart-tip.ts";
 import { CHART_TABLE, CHART_WHEEL } from "./chart-wheel.ts";
@@ -99,6 +100,7 @@ const CHECKS: Record<string, Check[]> = {
   "chart-pie": CHART_PIE,
   "chart-time": CHART_TIME,
   "chart-stack": CHART_STACK,
+  "chart-histogram": CHART_HISTOGRAM,
   "chart-move": CHART_MOVE,
   "chart-blank": CHART_BLANK,
   "chart-states": CHART_STATES,

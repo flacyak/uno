@@ -556,7 +556,8 @@
  * SVG paints from the whole px nearest its start, so the points start on one,
  * and a gridline lands where its label centres. */
 .chart-scatter,
-.chart-time {
+.chart-time,
+.chart-histogram {
   display: grid;
   grid-template: minmax(0, 1fr) auto / round(up, var(--gutter), 1px) minmax(0, 1fr);
   column-gap: var(--tick-gap);
@@ -602,9 +603,24 @@
 /* An over-time chart's plot, from columns.ts, laid out as a scatter's. A label
  * under the periods centres under its column, kept from the gutter's start to
  * the periods' right edge, which timeAxis.ts reckons with in thinning them. */
-.chart-time {
+.chart-time,
+.chart-histogram {
   --x-first: 0px;
   --x-last: 0px;
+}
+
+/* A histogram's plot, from histogram.ts: its periods scroll sideways alone, so
+ * a wheel turned up or down goes on, and the y axis ends where they do. */
+.chart-histogram .chart-ticks.y {
+  margin-bottom: var(--below, 0px);
+}
+
+.chart-along {
+  overflow: auto hidden;
+}
+
+.chart-along .chart-periods {
+  height: 100%;
 }
 
 .chart-time .chart-ticks.x .chart-tick {
@@ -654,7 +670,8 @@
   border-radius: 0 0 4px 4px;
 }
 
-.chart-time.crowded .chart-column {
+.chart-time.crowded .chart-column,
+.chart-histogram.crowded .chart-column {
   width: max(1px, 100%);
 }
 

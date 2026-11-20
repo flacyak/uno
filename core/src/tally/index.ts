@@ -17,6 +17,7 @@ export type { Point, Sample } from './sample.ts';
 export { FIGURES_AT_MOST, SPREAD_AT_MOST, SpreadFold } from './spread.ts';
 export type { Bucket, Figures, SavedSpread, Spreading } from './spread.ts';
 export type { Span, Spread } from './spread.ts';
+export type { Level } from './levels.ts';
 export { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from './split.ts';
 export type {
   Measured,
