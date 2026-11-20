@@ -24,6 +24,7 @@ import { el } from "@renderer/shell/util";
 import type { TimeLevel } from "@tally";
 import { fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
+import { MOVE_KEYS } from "./moving.ts";
 import { keyOf } from "./stack.ts";
 import type { Room } from "./place.ts";
 
@@ -172,7 +173,7 @@ export function barTargets(plot: Bars, groups: Groups, box: HTMLElement): Target
       said: () => [{ value: num(measure(g)), label: named(g.value) }],
     };
   });
-  return { all, under: among(all, ".chart-bar-row") };
+  return { all, under: among(all, ".chart-bar-row"), keys: MOVE_KEYS };
 }
 
 /**
@@ -351,7 +352,7 @@ export function stackTargets(plot: StackPlot, tally: StackTally, box: HTMLElemen
     const near = rows[r]!.reduce((best, s, i) => (apart(s) < apart(rows[r]![best]!) ? i : best), 0);
     return firsts[r]! + near;
   };
-  return { all, under, step, keys: ROWS_STEP };
+  return { all, under, step, keys: [...ROWS_STEP, ...MOVE_KEYS] };
 }
 
 /** A point in the page, or in the window's own px. */
@@ -450,6 +451,18 @@ export class Tooltip {
     }
     this.place(to);
     return true;
+  }
+
+  /**
+   * follow puts the cursor on the mark in `row` that `like` picks, or else its
+   * first, as the keys put it there.
+   */
+  follow(row: Element, like: string | undefined): void {
+    const within = (mark: Element | null) =>
+      this.targets.all.findIndex((target) => mark?.contains(target.mark) === true);
+    const liked = like === undefined ? -1 : within(row.querySelector(like));
+    const at = liked === -1 ? within(row) : liked;
+    if (at !== -1) this.place(at);
   }
 
   /** clear takes the cursor off its mark and hides the box, emptied, so the plot describes no mark. */

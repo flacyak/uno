@@ -82,6 +82,13 @@ function sameReading(a: Plot, b: Plot): boolean {
   return a.per === b.per && reading(a) === reading(b);
 }
 
+/** Returns whether two plots stand the same bars first, as a person moved them. */
+function sameOrder(a: Plot, b: Plot): boolean {
+  const moved = (plot: Plot): string =>
+    JSON.stringify("order" in plot && plot.t !== "time" ? plot.order : []);
+  return moved(a) === moved(b);
+}
+
 /** Returns whether two records show the same. Neither's place counts. */
 function sameShown(a: Chart, b: Chart): boolean {
   return (
@@ -89,7 +96,8 @@ function sameShown(a: Chart, b: Chart): boolean {
     a.title === b.title &&
     a.refresh === b.refresh &&
     samePlot(a.plot, b.plot) &&
-    sameReading(a.plot, b.plot)
+    sameReading(a.plot, b.plot) &&
+    sameOrder(a.plot, b.plot)
   );
 }
 

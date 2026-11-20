@@ -43,7 +43,7 @@ function grouped(
       t: 'groups',
       plot,
       coverage,
-      ...groups.snapshot(),
+      ...groups.snapshot(plot.t === 'bars' ? plot.order : []),
     }),
   });
 }

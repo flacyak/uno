@@ -29,7 +29,7 @@ import type { Check, Input } from "./check.ts";
 const STACKED = process.env["UNO_SMOKE_STACKED"] ?? "";
 
 /** Its regions, the largest first, and its channels, of which two are Other. */
-const STACKED_REGIONS = ["West", "East", "South", "North"];
+export const STACKED_REGIONS = ["West", "East", "South", "North"];
 const STACKED_SEGMENTS = SERIES_AT_MOST + 1;
 
 /** The rows window's East bar's second segment, direct, under the pointer. */

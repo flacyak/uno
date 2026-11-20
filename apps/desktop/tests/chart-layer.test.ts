@@ -145,6 +145,7 @@ const repoint = vi.fn();
 const notNumbers = vi.fn();
 const notDates = vi.fn();
 const reorder = vi.fn();
+const arrange = vi.fn();
 
 /** What the layer calls to open the chart form on a window's chart. */
 const edit = vi.fn();
@@ -182,6 +183,7 @@ const asks = {
   notNumbers,
   notDates,
   reorder,
+  arrange,
   edit,
   refresh,
   remove,

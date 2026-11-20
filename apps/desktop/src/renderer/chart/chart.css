@@ -258,6 +258,36 @@
   outline-offset: -2px;
 }
 
+/* A bar a pointer can carry by its label, from dragging.ts, shows the hand
+ * that takes it, and the closed hand while it is carried, the label's words
+ * never selected. The line where it will land runs across the rows, 2 px of
+ * the accent centred on the gap `--at` px down the plot, as wide as a row. */
+.chart-plot.movable {
+  position: relative;
+}
+
+.chart-plot.movable .chart-bar-label {
+  cursor: grab;
+  user-select: none;
+}
+
+.chart-plot.carrying,
+.chart-plot.carrying .chart-bar-label {
+  cursor: grabbing;
+}
+
+.chart-landing {
+  --landing-thick: 2px;
+  position: absolute;
+  top: calc(var(--at) - var(--landing-thick) / 2);
+  left: var(--left);
+  width: var(--width);
+  height: var(--landing-thick);
+  border-radius: calc(var(--landing-thick) / 2);
+  background: var(--accent);
+  pointer-events: none;
+}
+
 /* How far the chart has read its source, from window.ts: the arriving bar
  * (arriving.css), as high as it and round at both ends, filled `--read` of its
  * length in the accent. It stands under the head, as far from the sides as the

@@ -218,6 +218,8 @@ test("adding, removing, and changing a chart's source, kind, columns, title, sch
     [time, { plot: { t: "time", at, per: "day", order: "month" } }],
     [time, { plot: { t: "time", at, per: "day", unit: "s" } }],
     [stack, { plot: { t: "stack", by, split: at } }],
+    [stack, { plot: { t: "stack", by, split: units, order: ["West"] } }],
+    [BARS, { plot: { t: "bars", by, order: ["North"] } }],
     [stack, { plot: { t: "stack", by, split: units, sum: units } }],
   ];
   await opened(uno(unoOf([BARS, scatter, time, stack])), async (w) => {

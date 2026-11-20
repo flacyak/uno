@@ -127,7 +127,7 @@ export class Grid {
 
   /** Shows `why` as an error when it is non-empty. Returns whether it was. */
   private refused(why: string): boolean {
-    if (why !== "") this.events.onSay(why, true);
+    if (why !== "") this.events.onSay(why, "error");
     return why !== "";
   }
 
@@ -260,7 +260,7 @@ export class Grid {
     mark: (a) => this.marks.named.set(a.name, { row: this.selRow, col: this.selCol }),
     "to-mark": (a) => {
       const mark = this.marks.named.get(a.name);
-      if (mark === undefined) this.events.onSay(m.mark_not_set({ name: a.name }), true);
+      if (mark === undefined) this.events.onSay(m.mark_not_set({ name: a.name }), "error");
       else this.jump(mark.row, mark.col);
     },
     back: () => {
@@ -270,7 +270,7 @@ export class Grid {
     clear: () => this.write({ t: "set", value: "" }),
     yank: () => this.yank(),
     put: () => {
-      if (this.register === undefined) this.events.onSay(m.nothing_yanked(), true);
+      if (this.register === undefined) this.events.onSay(m.nothing_yanked(), "error");
       else this.write({ t: "set", value: this.register });
     },
     repeat: () => {
@@ -282,7 +282,7 @@ export class Grid {
       if (a.transform) this.events.onMode("transform");
       this.beginEdit(a.caret, a.text);
     },
-    say: (a) => this.events.onSay(a.text, false),
+    say: (a) => this.events.onSay(a.text, "note"),
   };
 
   /** Moves the selection by a motion. */
@@ -324,7 +324,7 @@ export class Grid {
 
     // View mode answers with the locked message.
     if (!this.editable) {
-      this.events.onSay(this.input.locked, false);
+      this.events.onSay(this.input.locked, "note");
       return;
     }
     if (this.refused(this.refusal(source))) return;
@@ -428,7 +428,7 @@ export class Grid {
     this.register = value;
     // The clipboard write can be refused by the browser.
     void navigator.clipboard.writeText(value).catch(() => {
-      this.events.onSay(m.yank_clipboard_refused(), true);
+      this.events.onSay(m.yank_clipboard_refused(), "error");
     });
   }
 
@@ -450,7 +450,7 @@ export class Grid {
     // hold another record. Nothing is written: the new rows show under the
     // editor, which keeps the keys unless focus moved to a control.
     if (this.waiting !== undefined) {
-      this.events.onSay(m.typed_before_reread(), true);
+      this.events.onSay(m.typed_before_reread(), "error");
       this.putWaiting();
       if (refocus) input.focus();
       else this.cancelEdit();

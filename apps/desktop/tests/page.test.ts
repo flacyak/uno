@@ -35,6 +35,11 @@ test("the markup ships the chart layer empty and hidden, after the grid", () => 
   expect(layer.nextElementSibling).toBeNull();
 });
 
+test("the status line has a polite live region of its own, out of sight, for what needs the person to act", () => {
+  expect(document.querySelector("#status-heard")?.getAttribute("role")).toBe("status");
+  expect(document.querySelector("#status-msg")?.hasAttribute("role")).toBe(false);
+});
+
 test("labelPage writes the heads, the empty state and the switch", () => {
   labelPage();
   expect(text(".sidebar-head")).toBe(m.workspaces_title());

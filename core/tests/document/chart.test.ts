@@ -8,6 +8,7 @@ import { describe, expect, test } from 'vite-plus/test';
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
 import type { Chart, Plot, StackPlot, TimePlot } from '@document';
 import { parseOverTime, parsePlot, parseStacked } from '@document/codec';
+import { GROUPS_SENT } from '@tally';
 
 const WHERE = 'books.uno: view/charts.json: chart 1 of 1';
 const PLOT = `${WHERE} (c1): plot`;
@@ -65,6 +66,38 @@ describe('parsePlot', () => {
       'this build does not read "by"',
     ],
     [{ t: 'time', at: DATE, per: 'day' }, ONE_READING],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parsePlot(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
+  });
+});
+
+describe('a moved bar', () => {
+  const MOVED = `order is not at most ${GROUPS_SENT} values of text, each once`;
+
+  test.each<Plot>([
+    { t: 'bars', by: REGION, order: ['West', ''] },
+    { t: 'bars', by: REGION, sum: REVENUE, order: [] },
+    { t: 'stack', by: REGION, split: UNITS, order: ['North'] },
+  ])('reads %j', (plot) => {
+    expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'bars', by: REGION, order: 'West' }, MOVED],
+    [{ t: 'bars', by: REGION, order: ['West', 'West'] }, MOVED],
+    [{ t: 'bars', by: REGION, order: [1] }, MOVED],
+    [
+      {
+        t: 'bars',
+        by: REGION,
+        order: Array.from({ length: GROUPS_SENT + 1 }, (_, i) => `${i}`),
+      },
+      MOVED,
+    ],
+    [
+      { t: 'pie', by: REGION, order: ['West'] },
+      'this build does not read "order"',
+    ],
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parsePlot(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });

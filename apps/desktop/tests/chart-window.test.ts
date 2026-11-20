@@ -18,6 +18,7 @@ import { KINDS } from "@renderer/chart/kinds/index";
 import { undrawn } from "@renderer/chart/kinds/undrawn";
 import { ChartWindow, madeTitle } from "@renderer/chart/window";
 import { NO_CORNER } from "@renderer/chart/place";
+import { BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
 import type { Stage } from "@renderer/chart/window";
 import type { Heard } from "@renderer/charts";
 import { BARS, ROOM, SHORT_ROWS, holding, summaryFor } from "./charted.ts";
@@ -69,6 +70,7 @@ const NO_LAYER: Stage = {
   notNumbers: () => undefined,
   notDates: () => undefined,
   reorder: () => undefined,
+  arrange: () => undefined,
   edit: () => undefined,
   refresh: () => undefined,
   batch: () => undefined,
@@ -708,4 +710,73 @@ test("a pie's window hides each gap that would cover a slice too thin for it, as
   await frame();
   const shown = made.box.querySelectorAll(".chart-slice-gap:not(.covers)");
   expect([...shown].map((line) => line.getAttribute("d"))).toStrictEqual(["M0 0L0 -1"]);
+});
+
+test("Ctrl+Z on a window says on the status line, as a note no screen reader reads out, that it undoes edits in the grid", async () => {
+  const read = tallyOf(["West"], true);
+  const say = vi.fn();
+  const made = hearing(() => heardOf(read, read), BARS, { say });
+  await frame();
+  press(made.box, "z", { ctrlKey: true });
+  expect(say).toHaveBeenCalledExactlyOnceWith(m.chart_undo_hint(), "note");
+});
+
+test("Alt with Up, Down, Home and End moves the bar under the cursor, asks the stage to stand the bars so, says where it stands, and the cursor follows it", async () => {
+  const read = tallyOf(["West", "East", "South"], true);
+  let heard = heardOf(read, read);
+  const arrange = vi.fn();
+  const say = vi.fn();
+  const made = hearing(() => heard, BARS, { arrange, say });
+  const plot = made.box.querySelector<HTMLElement>(".chart-plot")!;
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS + 1) });
+  await frame();
+  plot.focus();
+  press(plot, "ArrowRight");
+  press(plot, "ArrowRight");
+  const moved = press(plot, "ArrowUp", { altKey: true });
+  expect(moved.defaultPrevented).toBe(true);
+  expect(arrange).toHaveBeenLastCalledWith(BARS.id, ["East"]);
+  expect(say).toHaveBeenLastCalledWith("East moved to 1 of 3", "done");
+  // The bars stand so once the tally comes, and the cursor goes with East.
+  const after = tallyOf(["East", "West", "South"], true);
+  heard = heardOf(after, after);
+  made.redraw();
+  await frame();
+  const rows = [...made.box.querySelectorAll(".chart-bar-row")];
+  expect(made.box.querySelector(".cursor")).toBe(rows[0]);
+  press(plot, "End", { altKey: true });
+  expect(arrange).toHaveBeenLastCalledWith(BARS.id, ["West", "South", "East"]);
+  // At the top already, Alt+Up takes the key and asks nothing more.
+  arrange.mockClear();
+  expect(press(plot, "ArrowUp", { altKey: true }).defaultPrevented).toBe(true);
+  expect(arrange).not.toHaveBeenCalled();
+});
+
+/** Rows laid out a bar's pitch apart, each as wide as ROW_WIDTH px. */
+const BAR_PITCH = BAR_THICK + BAR_GAP;
+const ROW_WIDTH = 200;
+
+test("a pointer carries a bar by its label to another place, which asks the stage to stand the bars so, and the window stays where it stood", async () => {
+  const read = tallyOf(["West", "East", "South"], true);
+  const arrange = vi.fn();
+  const move = vi.fn();
+  const made = hearing(() => heardOf(read, read), BARS, { arrange, move });
+  const plot = made.box.querySelector<HTMLElement>(".chart-plot")!;
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS + 1) });
+  plot.setPointerCapture = () => undefined;
+  await frame();
+  const rows = [...made.box.querySelectorAll<HTMLElement>(".chart-bar-row")];
+  rows.forEach((row, i) => {
+    row.getBoundingClientRect = () => new DOMRect(0, i * BAR_PITCH, ROW_WIDTH, BAR_THICK);
+  });
+  expect(plot.classList.contains("movable")).toBe(true);
+  const at = (type: string, on: Element, y: number) =>
+    on.dispatchEvent(
+      new PointerEvent(type, { pointerId: 1, button: 0, clientY: y, bubbles: true }),
+    );
+  at("pointerdown", rows[2]!.querySelector(".chart-bar-label")!, 2 * BAR_PITCH);
+  at("pointermove", plot, 0);
+  at("pointerup", plot, 0);
+  expect(arrange).toHaveBeenCalledExactlyOnceWith(BARS.id, ["South"]);
+  expect(move).not.toHaveBeenCalled();
 });

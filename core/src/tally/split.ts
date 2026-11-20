@@ -3,7 +3,7 @@
  * and per series.
  */
 
-import { compareStrings, runes } from '@go';
+import { compareStrings } from '@go';
 import type { Mark } from '@num';
 import { parse } from '@num';
 
@@ -11,7 +11,8 @@ import {
   Count,
   DISTINCT_AT_MOST,
   GROUPS_SENT,
-  LABEL_AT_MOST,
+  label,
+  movedFirst,
 } from './groups.ts';
 import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
@@ -234,8 +235,11 @@ export class SplitFold {
     return fold;
   }
 
-  /** snapshot reads the fold as plain numbers and strings. */
-  snapshot(): Split {
+  /**
+   * snapshot reads the fold as plain numbers and strings, the values in
+   * `moved` first, in its order, and the rest largest first.
+   */
+  snapshot(moved: readonly string[] = []): Split {
     const size = (m: Measured) => (this.mark === undefined ? m.rows : m.sum);
     const series = [...this.totals]
       .map(([name, total]) => ({ name, size: Math.abs(size(measured(total))) }))
@@ -244,17 +248,18 @@ export class SplitFold {
       .map(({ name }) => name);
     const sent = new Set(series);
     let unsplit = 0;
-    const values = [...this.groups].map(([value, group]) => {
+    const ranked = [...this.groups].map(([value, group]) => {
       unsplit += group.unsplit.rows;
       const cells = series.map((s) => measured(group.cells.get(s)));
       const apart = [...group.cells].filter(([s]) => !sent.has(s));
       const other = merged([...apart.map(([, c]) => c), group.unsplit]);
       return { value, cells, other, total: merged(held(group)) };
     });
-    values.sort(
+    ranked.sort(
       (a, b) =>
         size(b.total) - size(a.total) || compareStrings(a.value, b.value),
     );
+    const values = movedFirst(ranked, moved);
     // The unsent values read as one, their sums merged and read once.
     const unsent = (vs: SplitValue[]) => ({
       values: vs.length,
@@ -350,9 +355,4 @@ function taken(
   const cell = cells.get(key) ?? rest;
   tallied(cell, x, -1);
   return cell.rows === 0 && cell !== rest && cells.delete(key);
-}
-
-/** label cuts a value to the LABEL_AT_MOST code points a snapshot sends. */
-function label(value: string): string {
-  return runes(value).slice(0, LABEL_AT_MOST).join('');
 }

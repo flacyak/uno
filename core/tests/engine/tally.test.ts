@@ -178,7 +178,7 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       const cells = sum === undefined ? '' : cell(r, sum);
       fold.add(cell(r, by), cell(r, split), cells);
     }
-    return { t: 'stack', plot, coverage, ...fold.snapshot() };
+    return { t: 'stack', plot, coverage, ...fold.snapshot(plot.order) };
   }
   if (plot.t === 'time') {
     const reading = 'order' in plot ? plot.order : plot.unit;
@@ -195,7 +195,8 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   for (let r = 0; r < rows; r++) {
     fold.add(cell(r, by), sum === undefined ? '' : cell(r, sum));
   }
-  return { t: 'groups', plot, coverage, ...fold.snapshot() };
+  const moved = plot.t === 'bars' ? plot.order : [];
+  return { t: 'groups', plot, coverage, ...fold.snapshot(moved) };
 }
 
 /** folded attaches `charts` and folds the first `rows` of the sheet, a TINY block at a time, through `folders`. */
@@ -569,6 +570,29 @@ test('a stacked chart folded a block at a time reads as the pure fold of its row
   const bars: Chart = { ...STACKED, plot: { t: 'bars', by: column(REGION) } };
   reopened.attach(bars, HEADERS);
   expect(reopened.from()).toBe(0);
+});
+
+test('a chart of bars sends the values a person moved first, and a change of their order alone keeps its fold', () => {
+  const tallies = folded([REGION_ROWS]);
+  tallies.read(ROWS, true);
+  for (const order of [['South', 'West'], ['North']]) {
+    const plot: Plot = { t: 'bars', by: column(REGION), order };
+    const moved: Chart = { ...REGION_ROWS, plot };
+    tallies.attach(moved, HEADERS);
+    expect(tallies.from()).toBe(ROWS);
+    const tally = tallies.read(ROWS, true)[0]?.[1];
+    expect(tally).toStrictEqual(pure(moved.plot));
+    if (tally?.t !== 'groups') throw new Error('bars tally as groups');
+    expect(
+      tally.groups.slice(0, order.length).map((g) => g.value),
+    ).toStrictEqual(order);
+  }
+  const split = column(CHANNEL);
+  const plot: Plot = { t: 'stack', by: column(REGION), split, order: ['West'] };
+  const stacked: Chart = { ...STACKED, plot };
+  expect(folded([stacked]).read(ROWS, true)).toStrictEqual([
+    [stacked.id, pure(stacked.plot)],
+  ]);
 });
 
 test('an over-time chart folded a block at a time reads as the pure fold of its dates, and a change of size alone keeps its fold', () => {

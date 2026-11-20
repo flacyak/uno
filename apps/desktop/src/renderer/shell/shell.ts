@@ -58,6 +58,7 @@ import { Settings } from "./settings.ts";
 import { sidebarRows } from "./sidebar.ts";
 import type { SidebarActions } from "./sidebar.ts";
 import { StatusBar } from "./status.ts";
+import type { StatusKind } from "./status.ts";
 import { baseName, dispatch, found, message, must, settled } from "./util.ts";
 import type { Handlers } from "./util.ts";
 
@@ -185,7 +186,7 @@ export class Shell {
     );
     this.finder = new Finder(
       () => this.showing(),
-      (text, isError) => this.say(text, isError),
+      (text, kind) => this.say(text, kind),
     );
 
     this.sources = new Sources(
@@ -233,7 +234,7 @@ export class Shell {
         try {
           refs = files.map((file) => this.host.dropped(file));
         } catch (err) {
-          this.say(message(err), true);
+          this.say(message(err), "error");
           return;
         }
         // A single dropped .uno opens with an empty save path, so the first
@@ -244,7 +245,7 @@ export class Shell {
           if (this.drops(`path:${path}`)) void this.load(ref, "");
         } else void this.addSources(refs);
       },
-      (text) => this.say(text, true),
+      (text) => this.say(text, "error"),
     );
     // Settings wires itself to the control and runs on its own from there.
     new Settings(found<HTMLButtonElement>("#settings"), this.theming, this.language, {
@@ -341,10 +342,10 @@ export class Shell {
       const trouble = failed.map(say).join(" · ");
       if (trouble !== this.connectionTrouble) {
         this.connectionTrouble = trouble;
-        if (trouble !== "") this.say(trouble, true);
+        if (trouble !== "") this.say(trouble, "error");
       }
     } catch (err) {
-      this.say(message(err), true);
+      this.say(message(err), "error");
     }
   }
 
@@ -398,7 +399,7 @@ export class Shell {
     else if (what === "quit") warning = m.unsaved_edits_key_again({ key: "×" });
     else if (what.startsWith("path:")) warning = m.unsaved_edits_open_again();
     else warning = m.unsaved_edits_click_again();
-    this.say(warning, true);
+    this.say(warning, "warning");
     this.warned = what;
     return false;
   }
@@ -415,7 +416,7 @@ export class Shell {
       if (ref === undefined) return; // cancelled
       await this.load(ref, "path" in ref ? ref.path : "");
     } catch (err) {
-      this.say(message(err), true);
+      this.say(message(err), "error");
     }
   }
 
@@ -486,7 +487,7 @@ export class Shell {
       const refs = await this.host.add();
       if (refs.length > 0) await this.addSources(refs);
     } catch (err) {
-      this.say(message(err), true);
+      this.say(message(err), "error");
     }
   }
 
@@ -561,7 +562,7 @@ export class Shell {
     const { workspace: w, grid } = on;
     const tab = w.active;
     if (tab.missing) {
-      this.say(m.source_no_file_point_first({ name: tab.name }), true);
+      this.say(m.source_no_file_point_first({ name: tab.name }), "error");
       return;
     }
 
@@ -587,7 +588,7 @@ export class Shell {
     const { workspace: w, grid } = on;
     const tab = w.active;
     if (tab.missing) {
-      this.say(m.source_no_file_point_first({ name: tab.name }), true);
+      this.say(m.source_no_file_point_first({ name: tab.name }), "error");
       return;
     }
 
@@ -603,7 +604,7 @@ export class Shell {
       send: async (source, plot, title, refresh) => {
         const shown = { plot, title, refresh };
         made = (await this.chart(w, source, shown, grid.columnSpan(col))).id;
-        this.say(m.chart_inserted({ title: title === "" ? madeTitle(plot) : title }));
+        this.say(m.chart_inserted({ title: title === "" ? madeTitle(plot) : title }), "done");
       },
       closed: () => {
         this.chartForm = undefined;
@@ -638,7 +639,7 @@ export class Shell {
     const tab = w?.sources.find((t) => t.id === chart?.source);
     if (w === undefined || chart === undefined || tab === undefined) return;
     if (tab.missing) {
-      this.say(m.source_no_file_point_first({ name: tab.name }), true);
+      this.say(m.source_no_file_point_first({ name: tab.name }), "error");
       return;
     }
     const { ChartForm } = await import("@renderer/chart/form");
@@ -666,7 +667,22 @@ export class Shell {
     try {
       await this.drawn(w.charts.change(id, { plot: { ...plot, order } }));
     } catch (err) {
-      if (this.workspace === w) this.say(message(err), true);
+      if (this.workspace === w) this.say(message(err), "error");
+    }
+  }
+
+  /**
+   * arrange stands chart `id`'s bars with the values of `order` first, as a
+   * person moved them: a change to save, which keeps the chart's fold.
+   */
+  private async arrange(id: string, order: string[]): Promise<void> {
+    const w = this.workspace;
+    const plot = w?.charts.all.find((c) => c.id === id)?.plot;
+    if (w === undefined || (plot?.t !== "bars" && plot?.t !== "stack")) return;
+    try {
+      await this.drawn(w.charts.change(id, { plot: { ...plot, order } }));
+    } catch (err) {
+      if (this.workspace === w) this.say(message(err), "error");
     }
   }
 
@@ -679,7 +695,7 @@ export class Shell {
     try {
       await sent;
     } catch (err) {
-      if (this.chartForm !== sender && this.workspace === w) this.say(message(err), true);
+      if (this.chartForm !== sender && this.workspace === w) this.say(message(err), "error");
       throw err;
     }
   }
@@ -693,7 +709,7 @@ export class Shell {
     const w = this.workspace;
     if (w === undefined) return;
     if (this.armed !== id) {
-      this.say(m.chart_remove_armed({ title }), true);
+      this.say(m.chart_remove_armed({ title }), "warning");
       this.armed = id;
       this.layer?.arm(id);
       return;
@@ -702,10 +718,10 @@ export class Shell {
     this.grid?.focus();
     try {
       await removing;
-      this.say(m.removed_name({ name: title }));
+      this.say(m.removed_name({ name: title }), "done");
     } catch (err) {
       if (this.workspace !== w) return;
-      this.say(message(err), true);
+      this.say(message(err), "error");
       this.layer?.focus(id);
     }
   }
@@ -789,6 +805,7 @@ export class Shell {
         column: column === undefined ? m.the_column() : columnLabel(column.header, col),
         expr,
       }),
+      "done",
     );
   }
 
@@ -800,7 +817,7 @@ export class Shell {
   private async addSources(refs: SourceRef[]): Promise<boolean> {
     const uno = refs.find(isWorkspace);
     if (uno !== undefined) {
-      this.say(m.workspace_not_a_source({ name: uno.name }), true);
+      this.say(m.workspace_not_a_source({ name: uno.name }), "error");
       return false;
     }
 
@@ -829,7 +846,7 @@ export class Shell {
       cancel: () => {
         abort.abort();
         this.unlist(line);
-        this.say(m.stopped_opening({ name: ref.name }));
+        this.say(m.stopped_opening({ name: ref.name }), "done");
       },
     };
     return { ref, line, abort };
@@ -895,8 +912,8 @@ export class Shell {
     else this.paintTabs();
     // A chart's head names its source once there are several.
     this.layer?.draw();
-    if (failed.length > 0) this.say(failed.join(" · "), true);
-    else if (added.length > 0) this.say(m.added_names({ names: list(added) }));
+    if (failed.length > 0) this.say(failed.join(" · "), "error");
+    else if (added.length > 0) this.say(m.added_names({ names: list(added) }), "done");
     void this.sources.askGrown();
     return failed.length === 0 && !rest.some((c) => c.abort.signal.aborted);
   }
@@ -986,13 +1003,13 @@ export class Shell {
         this.restore(w, grid);
         grid.focus();
       }
-      this.say(w.chartsNote === undefined ? "" : say(w.chartsNote));
+      this.say(w.chartsNote === undefined ? "" : say(w.chartsNote), "note");
       this.plan();
       this.keep(w);
     } catch (err) {
       engine?.close();
       // A superseded or stopped open fails quietly.
-      if (!superseded()) this.say(message(err), true);
+      if (!superseded()) this.say(message(err), "error");
     }
     this.paintAll();
   }
@@ -1028,6 +1045,7 @@ export class Shell {
           notNumbers: (source, columns) =>
             this.withTab(source, (tab) => this.findNotNumbers(tab, columns)),
           reorder: (id, order) => void this.reorder(id, order),
+          arrange: (id, order) => void this.arrange(id, order),
           notDates: (source, dated) =>
             this.withTab(source, (tab) => {
               this.select(tab);
@@ -1036,7 +1054,7 @@ export class Shell {
           edit: (id, place, on) => void this.editChart(id, place, on),
           refresh: (source) => this.withTab(source, (tab) => void this.refresh(tab)),
           remove: (id, title) => void this.unchart(id, title),
-          say: (text) => this.say(text),
+          say: (text, kind) => this.say(text, kind),
           checks: (source) => this.refresher?.checks(source),
           selected: () => this.grid?.cellRect(),
         });
@@ -1055,7 +1073,7 @@ export class Shell {
       onSelect: () => this.paintStatus(),
       onDrawn: () => this.layer?.aside(),
       onEdit: (row, col, value) => this.edit(row, col, value),
-      onSay: (text, isError) => this.say(text, isError),
+      onSay: (text, kind) => this.say(text, kind),
       onMode: (to) => {
         if (this.workspace !== undefined && this.workspace.mode !== to) this.toggleMode();
       },
@@ -1068,6 +1086,8 @@ export class Shell {
           wanted === "end"
             ? m.indexing_g_again({ percent: w.indexed() })
             : m.row_not_indexed({ row: num(wanted + 1) }),
+          // G pressed again goes to the end once it is indexed; a row asked for is refused.
+          wanted === "end" ? "warning" : "error",
         );
       },
       onAction: (action) => dispatch(this.actions, action),
@@ -1081,7 +1101,7 @@ export class Shell {
     apply: () => {
       // The offer names its own column, so this works from any cell.
       const offer = this.offered();
-      if (offer === null) this.say(m.nothing_to_apply(), true);
+      if (offer === null) this.say(m.nothing_to_apply(), "error");
       else void this.apply(offer);
     },
     dismiss: () => {
@@ -1269,7 +1289,7 @@ export class Shell {
     if (w === undefined) return;
     const warning = removing(tab, w.charts.leaveWith(tab.id));
     if (warning !== undefined && this.warned !== tab) {
-      this.say(warning, true);
+      this.say(warning, "warning");
       this.warned = tab;
       return;
     }
@@ -1277,13 +1297,13 @@ export class Shell {
       // The workspace says whether the removed tab was showing.
       const showing = await w.remove(tab);
       if (this.workspace !== w) return;
-      this.say(m.removed_name({ name: tab.name }));
+      this.say(m.removed_name({ name: tab.name }), "done");
       // Removing the showing tab shows its neighbour.
       this.shown(showing);
     } catch (err) {
       // A removal whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
-      this.say(message(err), true);
+      this.say(message(err), "error");
     }
   }
 
@@ -1339,7 +1359,7 @@ export class Shell {
       await this.sources.askGrownOf(tab);
     } catch (err) {
       if (this.workspace !== w) return;
-      this.say(message(err), true);
+      this.say(message(err), "error");
       return this.refresher?.readEnded(tab.id, { t: "failed", error: err });
     }
     // A refresh whose workspace another open replaced ends quietly, and an
@@ -1348,7 +1368,7 @@ export class Shell {
     if (this.workspace !== w || now === undefined) return;
     const grown = this.sources.grown(now);
     if (grown !== undefined) return this.append(now, grown.files);
-    this.say(m.refresh_no_new_files({ name: now.name }));
+    this.say(m.refresh_no_new_files({ name: now.name }), "done");
     this.refresher?.readEnded(now.id, { t: "same" });
   }
 
@@ -1433,6 +1453,7 @@ export class Shell {
           ? ""
           : (said?.(fresh) ??
               m.source_reads_from({ name: fresh.name, from: "path" in ref ? ref.path : ref.name })),
+        "done",
       );
       // A tab whose file was missing showed no rows, so it comes back on its
       // own cell.
@@ -1440,7 +1461,7 @@ export class Shell {
     } catch (err) {
       // A relink whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
-      this.say(message(err), true);
+      this.say(message(err), "error");
       this.refresher?.readEnded(tab.id, { t: "failed", error: err });
     }
   }
@@ -1468,12 +1489,12 @@ export class Shell {
       const fresh = await w.append(tab, files);
       if (this.workspace !== w) return;
       this.refresher?.readEnded(tab.id, { t: "read" });
-      this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }));
+      this.say(m.appended_to({ files: list(files.map((f) => f.name)), name: fresh.name }), "done");
       this.shown(w.active === fresh, true);
     } catch (err) {
       // An append whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
-      this.say(message(err), true);
+      this.say(message(err), "error");
       this.refresher?.readEnded(tab.id, { t: "failed", error: err });
     }
     // Ask the folders again: what was offered is now appended or refused.
@@ -1523,11 +1544,11 @@ export class Shell {
     if (w === undefined) return;
     try {
       await change(w);
-      this.say("");
+      this.say("", "note");
     } catch (err) {
       // An edit whose workspace another open replaced fails quietly.
       if (this.workspace !== w) return;
-      this.say(message(err), true);
+      this.say(message(err), "error");
     }
     this.changed(w);
   }
@@ -1604,15 +1625,15 @@ export class Shell {
       if (at === undefined) return; // cancelled
       const over = w.readingFrom(at);
       if (over !== undefined) {
-        this.say(m.save_over_source({ name: over.name }), true);
+        this.say(m.save_over_source({ name: over.name }), "error");
         return;
       }
       await this.host.save(at, await w.bytes(grid.selection(), at));
       w.saved(at);
       this.recents.opened(at);
-      this.say(m.saved_path({ path: at }));
+      this.say(m.saved_path({ path: at }), "done");
     } catch (err) {
-      this.say(message(err), true);
+      this.say(message(err), "error");
     } finally {
       this.saving = undefined;
     }
@@ -1654,13 +1675,13 @@ export class Shell {
     "save-as": () => void this.saveAs(),
     open: (c) => {
       // :e over unsaved edits asks for :e! first.
-      if (!c.force && this.workspace?.dirty === true) this.say(m.unsaved_edits_command(), true);
+      if (!c.force && this.workspace?.dirty === true) this.say(m.unsaved_edits_command(), "prompt");
       else void this.open(true);
     },
     sources: () => this.showPanel(),
     chart: () => this.insertChartHere(),
     row: (c) => this.grid?.act({ t: "move", motion: "last-row", count: c.row }),
-    unknown: (c) => this.say(m.not_a_command({ text: c.text }), true),
+    unknown: (c) => this.say(m.not_a_command({ text: c.text }), "error"),
   };
 
   // -------------------------------------------------------------- painting
@@ -1682,7 +1703,7 @@ export class Shell {
     // An open menu or form was built in the old language.
     this.closePopups();
     // So was the last message.
-    this.say("");
+    this.say("", "note");
     this.panel.relabel();
     this.layer?.relabel();
     // The header's hints, which the grid draws once per file.
@@ -1704,7 +1725,7 @@ export class Shell {
    */
   private engineOn(port: MessagePortLike): Engine {
     const engine = new Engine(messagePort<Reply, Request>(port));
-    engine.onError = (heard) => this.say(say(heard), true);
+    engine.onError = (heard) => this.say(say(heard), "error");
     return engine;
   }
 
@@ -1786,13 +1807,13 @@ export class Shell {
    * say writes the status bar's message line. A message stays until the next
    * one.
    */
-  private say(text: string, isError = false): void {
+  private say(text: string, kind: StatusKind): void {
     // Any message replaces the unsaved-edits warning, so a second Ctrl+O
     // works only while the warning is on screen, and a chart's × the same.
     this.warned = undefined;
     this.armed = undefined;
     this.layer?.arm(undefined);
-    this.status.say(text, isError);
+    this.status.say(text, kind);
   }
 }
 

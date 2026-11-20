@@ -42,6 +42,7 @@ import {
 import type { Corner, Room } from "./place.ts";
 import { ChartWindow, standAt } from "./window.ts";
 import type { Stage } from "./window.ts";
+import type { StatusKind } from "@renderer/shell/status";
 
 /** What a window asks of the shell, which the layer hands on, and the selected cell's box. */
 export type Asks = Pick<
@@ -52,6 +53,7 @@ export type Asks = Pick<
   | "notNumbers"
   | "notDates"
   | "reorder"
+  | "arrange"
   | "edit"
   | "refresh"
   | "remove"
@@ -261,6 +263,11 @@ export class ChartLayer implements Stage {
     this.asks.reorder(id, order);
   }
 
+  /** arrange stands chart `id`'s bars with the values of `order` first. */
+  arrange(id: string, order: string[]): void {
+    this.asks.arrange(id, order);
+  }
+
   /** notNumbers shows `source`, and finds the cells of `columns` that were not numbers. */
   notNumbers(source: string, columns: readonly ChartColumn[]): void {
     this.asks.notNumbers(source, columns);
@@ -282,8 +289,8 @@ export class ChartLayer implements Stage {
   }
 
   /** say writes `text` on the status line. */
-  say(text: string): void {
-    this.asks.say(text);
+  say(text: string, kind: StatusKind): void {
+    this.asks.say(text, kind);
   }
 
   /** arm shows chart `id`'s × as the one whose next press removes it, and no other. */

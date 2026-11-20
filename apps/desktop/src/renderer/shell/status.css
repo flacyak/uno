@@ -30,6 +30,17 @@
   white-space: nowrap;
 }
 
+/* The live region a screen reader reads, out of sight, as the line above
+ * already shows its words. */
+.win-status .heard {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .win-status #status-file,
 .win-status #status-msg {
   min-width: calc-size(max-content, min(size, var(--line-least)));

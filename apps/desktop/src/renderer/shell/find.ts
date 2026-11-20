@@ -17,6 +17,7 @@ import type { Grid } from "@renderer/grid";
 import { num } from "@renderer/locale";
 import type { Workspace } from "@renderer/workspace";
 import { message } from "./util.ts";
+import type { StatusKind } from "./status.ts";
 
 /** How long a find may take before the status bar says "searching". */
 const SLOW_MS = 200;
@@ -48,7 +49,7 @@ export class Finder {
 
   constructor(
     private readonly showing: () => Showing | undefined,
-    private readonly say: (text: string, isError?: boolean) => void,
+    private readonly say: (text: string, kind: StatusKind) => void,
   ) {}
 
   /**
@@ -64,7 +65,7 @@ export class Finder {
 
     // Every cell of a plain text column parses.
     if (column.kind === "text" && !column.flagged) {
-      this.say(m.find_column_is_text({ column: columnLabel(column.header, col) }), true);
+      this.say(m.find_column_is_text({ column: columnLabel(column.header, col) }), "error");
       return;
     }
     const header = columnLabel(column.header, col);
@@ -129,7 +130,7 @@ export class Finder {
   search(typed: string, dir: 1 | -1): void {
     const text = typed === "" ? this.searched?.text : typed;
     if (text === undefined) {
-      this.say(m.nothing_searched(), true);
+      this.say(m.nothing_searched(), "error");
       return;
     }
     this.searched = { text, dir };
@@ -143,7 +144,7 @@ export class Finder {
   next(reverse: boolean): void {
     const last = this.searched;
     if (last === undefined) {
-      this.say(m.nothing_searched(), true);
+      this.say(m.nothing_searched(), "error");
       return;
     }
     this.searchFor(last.text, reverse === (last.dir === 1) ? -1 : 1);
@@ -186,7 +187,7 @@ export class Finder {
     let spoke = false;
     const slow = setTimeout(() => {
       spoke = true;
-      this.say(m.searching());
+      this.say(m.searching(), "progress");
     }, SLOW_MS);
     try {
       const found = await w.find({ col, from: row, dir, match });
@@ -194,27 +195,27 @@ export class Finder {
       if (asked !== this.finds) return "dropped";
       if (this.showing()?.workspace !== w || w.active !== tab) {
         // The tab or workspace changed. Clear what this find said.
-        if (spoke) this.say("");
+        if (spoke) this.say("", "note");
         return "dropped";
       }
       if (found.row !== null) {
         grid.moveTo(found.row, col);
-        this.say("");
+        this.say("", "note");
         return "found";
       } else if (found.complete) {
-        this.say(missing(), true);
+        this.say(missing(), "error");
       } else {
         const parts = [
           missing(),
           m.find_searched_rows({ count: found.searched }),
           m.indexing_percent({ percent: w.indexed() }),
         ];
-        this.say(parts.join(" · "), true);
+        this.say(parts.join(" · "), "error");
       }
       return "missed";
     } catch (err) {
       if (asked !== this.finds) return "dropped";
-      this.say(message(err), true);
+      this.say(message(err), "error");
       return "failed";
     } finally {
       clearTimeout(slow);

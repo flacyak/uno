@@ -26,6 +26,33 @@ export const GROUPS_SENT = 50;
  */
 export const LABEL_AT_MOST = 256;
 
+/** label cuts a value to the LABEL_AT_MOST code points a snapshot sends. */
+export function label(value: string): string {
+  return runes(value).slice(0, LABEL_AT_MOST).join('');
+}
+
+/**
+ * movedFirst gives `ranked` with the values a person moved first, in the
+ * order of `moved`, each found by the label a snapshot sends it under, and
+ * the rest after them as they ranked. A moved value the fold holds no group
+ * of is passed over.
+ */
+export function movedFirst<T extends { value: string }>(
+  ranked: readonly T[],
+  moved: readonly string[],
+): T[] {
+  const at = new Map(moved.map((value, i) => [value, i]));
+  const placed = ranked.map((g) => ({ g, at: at.get(label(g.value)) }));
+  const first = placed.flatMap(({ g, at }) =>
+    at === undefined ? [] : [{ g, at }],
+  );
+  first.sort((a, b) => a.at - b.at);
+  return [
+    ...first.map(({ g }) => g),
+    ...ranked.filter((g) => !at.has(label(g.value))),
+  ];
+}
+
 /** What a fold ranks its groups by: their rows, or the sum of their cells. */
 export type Measure = 'rows' | 'sum';
 
@@ -183,24 +210,25 @@ export class GroupsFold {
     return fold;
   }
 
-  /** snapshot reads the fold as plain numbers and strings. */
-  snapshot(): Groups {
-    const groups = [...this.groups].map(([value, { rows, sum }]) => ({
+  /**
+   * snapshot reads the fold as plain numbers and strings, the values in
+   * `moved` first, in its order, and the rest largest first.
+   */
+  snapshot(moved: readonly string[] = []): Groups {
+    const ranked = [...this.groups].map(([value, { rows, sum }]) => ({
       value,
       rows,
       sum: sum.value(),
     }));
     const size = (g: Group) => g[this.measure];
     // Two infinite sums differ by NaN, a tie, which goes to value order too.
-    groups.sort(
+    ranked.sort(
       (a, b) => size(b) - size(a) || compareStrings(a.value, b.value),
     );
+    const groups = movedFirst(ranked, moved);
     const unsent = groups.splice(GROUPS_SENT);
     return {
-      groups: groups.map((g) => ({
-        ...g,
-        value: runes(g.value).slice(0, LABEL_AT_MOST).join(''),
-      })),
+      groups: groups.map((g) => ({ ...g, value: label(g.value) })),
       others: this.merged(unsent.filter((g) => size(g) > 0)),
       below: this.merged(unsent.filter((g) => size(g) <= 0)),
       rest: { rows: this.rest.rows, sum: this.rest.sum.value() },

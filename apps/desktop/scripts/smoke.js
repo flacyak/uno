@@ -394,26 +394,31 @@ const perRegion = {
   split: { col: 1, header: "channel" },
 };
 const stackedChart = { source: stackedSource.id, title: "", refresh: 0 };
-await writeFile(
-  stacked,
-  writeDocument({
-    manifest: newManifest(),
-    sources: [stackedSource],
-    active: stackedSource.id,
-    log: [],
-    charts: [
-      { ...stackedChart, id: "c1", plot: perRegion, place: { ...chartSize, x: 0, y: 1 } },
-      {
-        ...stackedChart,
-        id: "c2",
-        plot: { ...perRegion, sum: { col: 2, header: "revenue" } },
-        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
-      },
-    ],
-    extra: new Map(),
-    at: stacked,
-  }),
-);
+// The same workspace again, whose bars the moving checks move and save, so
+// they open a workspace of their own and leave the stacked one as it was.
+const movable = join(scratch, "sent", "movable.uno");
+for (const at of [stacked, movable]) {
+  await writeFile(
+    at,
+    writeDocument({
+      manifest: newManifest(),
+      sources: [stackedSource],
+      active: stackedSource.id,
+      log: [],
+      charts: [
+        { ...stackedChart, id: "c1", plot: perRegion, place: { ...chartSize, x: 0, y: 1 } },
+        {
+          ...stackedChart,
+          id: "c2",
+          plot: { ...perRegion, sum: { col: 2, header: "revenue" } },
+          place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+        },
+      ],
+      extra: new Map(),
+      at,
+    }),
+  );
+}
 
 // A workspace of rows over the dates of a file whose last is a placeholder,
 // 9999-12-31, in a new window's size. Its 7,976 years are past the batch a
@@ -709,6 +714,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_PIES: pies,
       UNO_SMOKE_TIMED: timed,
       UNO_SMOKE_STACKED: stacked,
+      UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,
       UNO_SMOKE_STATES: states,
