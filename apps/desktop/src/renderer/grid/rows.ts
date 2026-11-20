@@ -10,6 +10,7 @@ import type { Kind } from "@sheet";
 
 import { m } from "@paraglide/messages";
 import type { Action, Mode } from "@renderer/keys";
+import type { StatusKind } from "@renderer/shell/status";
 
 /** Returns a column's display name. A blank header is named by its 1-based
  * position. */
@@ -62,7 +63,7 @@ export interface GridEvents {
   /** A cell value was committed. */
   onEdit(row: number, col: number, value: string): void;
   /** Show a message in the status line. Empty text clears it. */
-  onSay(text: string, isError: boolean): void;
+  onSay(text: string, kind: StatusKind): void;
   /** A key asked to switch mode. */
   onMode(to: Mode): void;
   /** The cell editor opened or closed. */

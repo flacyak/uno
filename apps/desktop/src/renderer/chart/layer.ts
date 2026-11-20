@@ -42,6 +42,7 @@ import {
 import type { Corner, Room } from "./place.ts";
 import { ChartWindow, standAt } from "./window.ts";
 import type { Stage } from "./window.ts";
+import type { StatusKind } from "@renderer/shell/status";
 
 /** What a window asks of the shell, which the layer hands on, and the selected cell's box. */
 export type Asks = Pick<
@@ -282,8 +283,8 @@ export class ChartLayer implements Stage {
   }
 
   /** say writes `text` on the status line. */
-  say(text: string): void {
-    this.asks.say(text);
+  say(text: string, kind: StatusKind): void {
+    this.asks.say(text, kind);
   }
 
   /** arm shows chart `id`'s × as the one whose next press removes it, and no other. */

@@ -709,3 +709,12 @@ test("a pie's window hides each gap that would cover a slice too thin for it, as
   const shown = made.box.querySelectorAll(".chart-slice-gap:not(.covers)");
   expect([...shown].map((line) => line.getAttribute("d"))).toStrictEqual(["M0 0L0 -1"]);
 });
+
+test("Ctrl+Z on a window says on the status line, as a note no screen reader reads out, that it undoes edits in the grid", async () => {
+  const read = tallyOf(["West"], true);
+  const say = vi.fn();
+  const made = hearing(() => heardOf(read, read), BARS, { say });
+  await frame();
+  press(made.box, "z", { ctrlKey: true });
+  expect(say).toHaveBeenCalledExactlyOnceWith(m.chart_undo_hint(), "note");
+});

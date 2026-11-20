@@ -186,7 +186,7 @@ export class Shell {
     );
     this.finder = new Finder(
       () => this.showing(),
-      (text, isError) => this.say(text, isError === true ? "error" : "note"),
+      (text, kind) => this.say(text, kind),
     );
 
     this.sources = new Sources(
@@ -1038,7 +1038,7 @@ export class Shell {
           edit: (id, place, on) => void this.editChart(id, place, on),
           refresh: (source) => this.withTab(source, (tab) => void this.refresh(tab)),
           remove: (id, title) => void this.unchart(id, title),
-          say: (text) => this.say(text, "note"),
+          say: (text, kind) => this.say(text, kind),
           checks: (source) => this.refresher?.checks(source),
           selected: () => this.grid?.cellRect(),
         });
@@ -1057,7 +1057,7 @@ export class Shell {
       onSelect: () => this.paintStatus(),
       onDrawn: () => this.layer?.aside(),
       onEdit: (row, col, value) => this.edit(row, col, value),
-      onSay: (text, isError) => this.say(text, isError ? "error" : "note"),
+      onSay: (text, kind) => this.say(text, kind),
       onMode: (to) => {
         if (this.workspace !== undefined && this.workspace.mode !== to) this.toggleMode();
       },

@@ -80,7 +80,8 @@ function finder(held: Held, moved: number[][], said: string[]): Finder {
   const showing: Showing = { workspace: workspaceOf(held), grid: grid(held, moved) };
   return new Finder(
     () => showing,
-    (text, isError) => said.push(isError === true ? `! ${text}` : text),
+    (text, kind) =>
+      said.push(kind === "error" ? `! ${text}` : kind === "progress" ? `… ${text}` : text),
   );
 }
 
@@ -211,7 +212,7 @@ test("a slow find says it is searching, and a newer one over it clears that with
 
   f.search("refund", 1);
   await vi.advanceTimersByTimeAsync(SLOW_MS);
-  expect(said).toEqual(["searching…"]);
+  expect(said).toEqual(["… searching…"]);
 
   f.search("credit", 1);
   held.answer(7);
@@ -219,7 +220,7 @@ test("a slow find says it is searching, and a newer one over it clears that with
   await vi.advanceTimersByTimeAsync(0);
 
   expect(moved).toEqual([[2, 0]]);
-  expect(said).toEqual(["searching…", ""]);
+  expect(said).toEqual(["… searching…", ""]);
 });
 
 test("a slow find dropped for a tab the person left takes its searching with it", async () => {
@@ -231,14 +232,14 @@ test("a slow find dropped for a tab the person left takes its searching with it"
 
   f.search("refund", 1);
   await vi.advanceTimersByTimeAsync(SLOW_MS);
-  expect(said).toEqual(["searching…"]);
+  expect(said).toEqual(["… searching…"]);
 
   held.active = held.tabs[1]!;
   held.answer(7);
   await vi.advanceTimersByTimeAsync(0);
 
   expect(moved).toEqual([]);
-  expect(said).toEqual(["searching…", ""]);
+  expect(said).toEqual(["… searching…", ""]);
 });
 
 /** A find down `col` from above its first row for the cells a tally could not read as numbers. */

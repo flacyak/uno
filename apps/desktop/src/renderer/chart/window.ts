@@ -38,6 +38,7 @@ import { pressOf } from "@renderer/keys";
 import type { Press } from "@renderer/keys";
 import type { Checks } from "@renderer/refresh";
 import type { MenuPlace } from "@renderer/shell/menu";
+import type { StatusKind } from "@renderer/shell/status";
 import { Words, button, el } from "@renderer/shell/util";
 import type { Per } from "@tally";
 import {
@@ -169,8 +170,8 @@ export interface Stage {
   refresh(source: string): void;
   /** Removes chart `id`, titled `title`, on the second ask, saying what that does on the first. */
   remove(id: string, title: string): void;
-  /** Writes `text` on the status line. */
-  say(text: string): void;
+  /** Writes `text` on the status line, as a message of `kind`. */
+  say(text: string, kind: StatusKind): void;
 }
 
 /** What a pointer does to a window: the rect it leaves `from`, moved `dx` and `dy` px. */
@@ -795,7 +796,7 @@ export class ChartWindow {
     else if (refreshKey(press)) this.refresh();
     else if (edits(press, e.target)) this.change();
     else if (deleteKey(press)) this.unchart();
-    else if (undoKey(press)) this.stage.say(m.chart_undo_hint());
+    else if (undoKey(press)) this.stage.say(m.chart_undo_hint(), "note");
     else if (!this.arrow(press, e.target)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -825,7 +826,7 @@ export class ChartWindow {
   private refresh(): void {
     const why = cannotRead(this.stage.heard(this.chart.id));
     if (why === undefined) this.stage.refresh(this.chart.source);
-    else this.stage.say(why);
+    else this.stage.say(why, "error");
   }
 
   /** unchart asks to remove the chart, by the title its head gives it. */
