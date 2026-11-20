@@ -20,6 +20,9 @@ export const LABELS: ReadonlyArray<() => string> = [
   m.formula_column,
   m.chart_form_source,
   m.chart_form_kind,
+  m.chart_kinds_compare,
+  m.chart_kinds_trend,
+  m.chart_kinds_relate,
   m.chart_form_at,
   m.chart_form_order,
   m.chart_form_per,
@@ -149,10 +152,12 @@ export class PopForm {
     hang(this.box, place, EDGE);
   }
 
-  /** Every focusable control outside a hidden field, in document order. */
+  /** Every focusable control outside a hidden field, in document order, a radio group by its choice. */
   private controls(): HTMLElement[] {
     const all = [...this.box.querySelectorAll<HTMLElement>("select, input, button")];
-    return all.filter((c) => c.closest("[hidden]") === null);
+    const unchosen = (c: HTMLElement) =>
+      c instanceof HTMLInputElement && c.type === "radio" && !c.checked;
+    return all.filter((c) => c.closest("[hidden]") === null && !unchosen(c));
   }
 }
 
