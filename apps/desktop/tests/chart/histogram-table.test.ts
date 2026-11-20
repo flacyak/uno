@@ -1,7 +1,8 @@
 /**
- * @fileoverview A histogram's table: each bin with its rows and share, the
- * rows under and over the bins, and the cells left out, so every row is
- * counted.
+ * @fileoverview A histogram's table, summary and caption: each bin with its
+ * rows and share, the rows under and over the bins, and the cells left out,
+ * so every row is counted; the span, step, fullest bin and median said; and
+ * the figures a coarsened spread holds.
  *
  * @vitest-environment happy-dom
  */
@@ -10,8 +11,10 @@ import { expect, test } from "vite-plus/test";
 
 import type { SpreadTally } from "@engine";
 import type { Level } from "@tally";
+import { binnedOver } from "@renderer/chart/summary";
 import { binned, tableOf } from "@renderer/chart/table";
 import { el } from "@renderer/shell/util";
+import { ROOM, kindFor } from "../charted.ts";
 
 const AMOUNT = { col: 2, header: "amount" };
 
@@ -73,4 +76,16 @@ test("a histogram's table counts every row: each bin, those under and over the b
     "50 and over | 5 | 25%",
     "2 blank · 1 not a number",
   ]);
+});
+
+test("a histogram's summary says its span, its step, its fullest bin of the span and its median", () => {
+  expect(binnedOver(LEVEL, TALLY.box!).span).toBe(
+    "From 20 to 40 in steps of 10, the most in 20 to 30: 5. Median 24.5.",
+  );
+});
+
+test("a histogram's caption says the figures a coarsened spread holds, and nothing while exact", () => {
+  const notes = (tally: SpreadTally) => kindFor(tally.plot).drawing(tally, ROOM)!.notes();
+  expect(notes(TALLY)).toStrictEqual(["to 3 significant figures"]);
+  expect(notes({ ...TALLY, figures: "exact" })).toStrictEqual([]);
 });

@@ -620,6 +620,8 @@
   "chart_stack_unsplit": "las filas pasados {count} pares van en Otros",
   "chart_table_under": "menos de {edge}",
   "chart_table_over": "{edge} o más",
+  "chart_summary_histogram": "De {from} a {to} en pasos de {step}, el máximo en {most}: {value}. Mediana {median}.",
+  "chart_figures": "a {count} cifras significativas",
   "chart_bin": "{from} a {to}",
   "chart_table_share": "proporción",
   "chart_table_aria": "Tabla",
