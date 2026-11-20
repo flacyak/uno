@@ -2,7 +2,8 @@
 
 import type { DotsPlot } from "@document";
 import { m } from "@paraglide/messages";
-import { dotTargets, dots as drawDots, fitDots } from "../dots.ts";
+import { dotTargets, dots as drawDots, dotsTold, fitDots } from "../dots.ts";
+import { dotted, tableOf } from "../table.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -28,5 +29,7 @@ export const dots: ChartKind<DotsPlot> = (plot) => ({
           draw: (height) => drawDots(plot, tally, height),
           fit: fitDots,
           targets: (drawn) => dotTargets(plot, tally, drawn),
+          table: (called) => tableOf(dotted(plot, tally), called),
+          told: () => dotsTold(plot, tally),
         },
 });

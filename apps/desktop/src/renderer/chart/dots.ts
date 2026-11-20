@@ -13,6 +13,8 @@ import { el } from "@renderer/shell/util";
 import { axis, tickLabels } from "./axes.ts";
 import { SPAN_LEAST, TIP_GAP, barsBox, room } from "./bars.ts";
 import { BAR_GAP, BAR_THICK, ranked, row, rowSteps } from "./rows.ts";
+import { SUMMARY_VALUES } from "./summary.ts";
+import type { Told } from "./summary.ts";
 import { ACCENT, among, named } from "./tooltip.ts";
 import type { Reading, Targets } from "./tooltip.ts";
 
@@ -123,4 +125,20 @@ export function dotTargets(plot: DotsPlot, tally: DotsTally, drawn: HTMLElement)
     return { mark, at, front: false, key: ACCENT, said };
   });
   return { all, under: among(all, ".chart-bar-row"), ...rowSteps(all.length) };
+}
+
+/**
+ * dotsTold gives what a dot plot's summary says past its rows: its values in
+ * the order sent, each with what its dot stands at, and how many come after
+ * the SUMMARY_VALUES named, with those the tally sent none of.
+ */
+export function dotsTold(plot: DotsPlot, tally: DotsTally): Told {
+  const sizes = measuresOf(plot, tally);
+  const each = tally.groups.map(({ value }, i) => {
+    const size = sizes[i];
+    const name = value === "" ? m.chart_blank_value() : value;
+    return `${name} ${size === undefined ? m.chart_dots_none() : num(size)}`;
+  });
+  const unsent = tally.others.values + tally.below.values;
+  return { span: "", each, more: Math.max(each.length - SUMMARY_VALUES, 0) + unsent };
 }

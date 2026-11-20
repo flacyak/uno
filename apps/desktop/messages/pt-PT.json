@@ -647,6 +647,7 @@
   "chart_summary_more": "e mais {count}.",
   "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",
   "chart_table_rows": "linhas",
+  "chart_table_numbers": "números",
   "chart_stack_total": "total",
   "chart_bar_moved": "{value} passa à posição {place} de {count}",
   "chart_summary_stack": "Dividido por {split} em {count} séries.",
