@@ -286,6 +286,23 @@ const DATES = { column: 500, open: 2_400, order: 5_000, per: 7_600, enter: 10_20
 const TO_WEEK = 2;
 
 /**
+ * The histogram story's beats: revenue selected, the chart form opened on a
+ * histogram of it, Enter, a click on a bin for the cursor, End to the last
+ * bin past the span, and Home to the first.
+ */
+const HISTOGRAM = {
+  column: 500,
+  open: 2_400,
+  enter: 5_400,
+  cursor: 8_400,
+  end: 10_200,
+  home: 12_600,
+  stop: 15_000,
+};
+/** The revenue cell the story selects: the gutter comes first, so revenue is a row's seventh cell. */
+const REVENUE_CELL = "tbody tr:nth-child(3) td:nth-child(7)";
+
+/**
  * The moving story's beats: the last of region's bars carried to the top by
  * its label, the cursor put on the second bar, Alt+Down twice, and Alt+Up.
  */
@@ -922,6 +939,7 @@ const STORIES: Record<string, Story> = {
   kinds: { end: KINDS_END, script: playKinds },
   dates: { end: DATES.end, script: playDates },
   stacked: { end: STACKED.end, script: playStacked },
+  histogram: { end: HISTOGRAM.stop, script: playHistogram },
   moving: { end: MOVING.end, script: playMoving },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
@@ -1126,6 +1144,33 @@ async function playDates(win: BrowserWindow, at: Clock): Promise<void> {
   await at(DATES.enter);
   press(win, "Return");
   await at(DATES.end);
+}
+
+/**
+ * playHistogram performs the histogram story: a revenue cell selected, the
+ * chart form opened on it by Ctrl+Shift+G on a histogram, Enter, and the keys
+ * stepping the cursor to the last bin, past the span, and back to the first,
+ * each scrolled into sight.
+ */
+async function playHistogram(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(HISTOGRAM.column);
+  await pressOn(REVENUE_CELL);
+  await glideTo(KEYED_REST);
+  await at(HISTOGRAM.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(HISTOGRAM.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-column")', "the histogram never drew");
+  await at(HISTOGRAM.cursor);
+  await pressOn(".chart .chart-period:nth-child(12)");
+  await at(HISTOGRAM.end);
+  press(win, "End");
+  await at(HISTOGRAM.home);
+  press(win, "Home");
+  await at(HISTOGRAM.stop);
 }
 
 /**

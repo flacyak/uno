@@ -22,6 +22,7 @@ import {
   TITLE_AT_MOST,
 } from "@document";
 import type { Chart, ChartColumn, Plot, TimePlot } from "@document";
+import type { Span } from "@tally";
 import { civilFromDays, readDate } from "@date";
 import type { Order, UnixUnit } from "@date";
 import { placeOf } from "@engine";
@@ -161,6 +162,10 @@ export class ChartForm {
   /** The date column an over-time chart counts or sums over, and the size of its periods. */
   private readonly at = select("at");
   private readonly per = select("per");
+  /** The number column a histogram spreads, and the span the chart opened on draws, which it keeps. */
+  private readonly of = select("of");
+  private readonly spread = field(m.chart_form_of(), this.of);
+  private readonly span: Span;
   /** How the chart opened on reads its dates, which it keeps while its date column stays. */
   private readonly read: TimePlot | undefined;
   /** The fields an over-time chart asks for before Sum of, and those bars and a pie ask for. */
@@ -199,6 +204,8 @@ export class ChartForm {
     this.source = active;
     const changes = opening.t === "change";
     this.read = changes && opening.chart.plot.t === "time" ? opening.chart.plot : undefined;
+    const was = opening.t === "change" ? opening.chart.plot : undefined;
+    this.span = was?.t === "histogram" ? was.span : "most";
     const label = changes ? m.chart_edit() : m.chart_form_title();
     const heading = changes
       ? m.chart_form_title_chart({ title: opening.chart.title || madeTitle(opening.chart.plot) })
@@ -224,7 +231,7 @@ export class ChartForm {
     this.by.addEventListener("change", () => this.ask());
     this.per.append(...PERS.map(([per, words]) => option(words(), per)));
 
-    if (opening.t === "insert") this.offer(opening.col);
+    if (opening.t === "insert") this.inserts(opening.col);
     else this.opensOn(opening.chart.plot);
     for (const column of [
       this.at,
@@ -235,6 +242,7 @@ export class ChartForm {
       this.split,
       this.x,
       this.y,
+      this.of,
     ]) {
       column.addEventListener("change", () => this.name());
     }
@@ -258,6 +266,7 @@ export class ChartForm {
       field(m.chart_form_source(), this.from),
       this.kind.box,
       ...this.timed,
+      this.spread,
       ...this.grouped,
       ...this.paired,
       field(m.chart_form_title_field(), this.title),
@@ -278,7 +287,9 @@ export class ChartForm {
   private choose(): void {
     const chosen = (select: HTMLSelectElement): ChartColumn | undefined =>
       select.value === "" ? undefined : this.column(select.value);
-    const [by, ...kept] = [this.by, this.sum, this.x, this.y, this.at, this.split].map(chosen);
+    const [by, ...kept] = [this.by, this.sum, this.x, this.y, this.at, this.split, this.of].map(
+      chosen,
+    );
     this.source = this.sources[Number(this.from.value)] ?? this.source;
     if (this.opening.t === "insert") {
       this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
@@ -287,18 +298,38 @@ export class ChartForm {
     this.reveal();
   }
 
+  /**
+   * inserts offers the source's columns for a chart of column `col`: over time
+   * where it holds dates, a histogram where it holds numbers, or else bars.
+   */
+  private inserts(col: number): void {
+    this.offer(col);
+    const numbered = [...this.of.options].some((made) => made.value === String(col));
+    if (this.kind.value !== "bars" || !numbered) return;
+    this.kind.value = "histogram";
+    this.ask();
+  }
+
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column; the form makes no histogram yet.
-    this.kind.value = plot.t === "stack" || plot.t === "histogram" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time") {
       this.per.value = plot.per;
       this.offer(this.placeAt(plot.at), [plot.sum, undefined, undefined, plot.at]);
     } else if (plot.t === "stack") {
       this.offer(this.placeAt(plot.by), [plot.sum, undefined, undefined, undefined, plot.split]);
-    } else if (plot.t === "histogram") this.offer(this.placeAt(plot.of), []);
-    else this.offer(this.placeAt(plot.by), [plot.sum]);
+    } else if (plot.t === "histogram") {
+      this.offer(this.placeAt(plot.of), [
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        plot.of,
+      ]);
+    } else this.offer(this.placeAt(plot.by), [plot.sum]);
   }
 
   /** placeAt gives where the source holds `column`, or else its first column. */
@@ -315,6 +346,7 @@ export class ChartForm {
   /** first gives the column select the kind chosen asks for first. */
   private first(): HTMLSelectElement {
     if (this.kind.value === "time") return this.at;
+    if (this.kind.value === "histogram") return this.of;
     return this.kind.value === "scatter" ? this.x : this.by;
   }
 
@@ -339,13 +371,16 @@ export class ChartForm {
     this.split.replaceChildren(option(m.chart_form_split_none(), ""));
     this.x.replaceChildren();
     this.y.replaceChildren();
+    this.of.replaceChildren();
     for (const [i, c] of columns.entries()) {
       this.by.append(fromFile(c.header, i));
       this.split.append(fromFile(c.header, i));
       // Cells that do not read as numbers are left out of a sum or a scatter and counted.
       if (c.kind !== "num" && !c.flagged) continue;
       numbers.push(i);
-      for (const offered of [this.sum, this.x, this.y]) offered.append(fromFile(c.header, i));
+      for (const offered of [this.sum, this.x, this.y, this.of]) {
+        offered.append(fromFile(c.header, i));
+      }
     }
     const held = (column?: ChartColumn): number | undefined => {
       const at = this.placed(column);
@@ -363,11 +398,14 @@ export class ChartForm {
     this.split.value = String(this.placed(kept[4]) ?? "");
     this.x.value = String(xAt ?? "");
     this.y.value = String(yAt ?? "");
+    this.of.value = String(held(kept[5]) ?? (numbers.includes(by) ? by : (numbers[0] ?? "")));
 
     const scatters = numbers.length >= SCATTER_COLUMNS;
     this.kind.disable("scatter", !scatters);
     if (!scatters && this.kind.value === "scatter") this.kind.value = "bars";
     this.kind.disable("time", dates.length === 0);
+    this.kind.disable("histogram", numbers.length === 0);
+    if (numbers.length === 0 && this.kind.value === "histogram") this.kind.value = "bars";
     if (dates.length === 0 && this.kind.value === "time") this.kind.value = "bars";
     // A date column selected in the grid opens the form on a chart over time of it.
     if (this.opening.t === "insert" && this.kind.value === "bars" && dates.includes(by)) {
@@ -382,8 +420,9 @@ export class ChartForm {
     for (const line of this.timed) line.hidden = t !== "time";
     const { order, unit } = this.source.band.columns[Number(this.at.value)] ?? {};
     this.timed[1]!.hidden ||= order === undefined || unit !== undefined;
-    this.grouped[0]!.hidden = t === "scatter" || t === "time";
-    this.grouped[1]!.hidden = t === "scatter";
+    this.spread.hidden = t !== "histogram";
+    this.grouped[0]!.hidden = t === "scatter" || t === "time" || t === "histogram";
+    this.grouped[1]!.hidden = t === "scatter" || t === "histogram";
     this.grouped[2]!.hidden = t !== "bars";
     // A value splits by another column, never by its own.
     for (const made of this.split.options) made.disabled = made.value === this.by.value;
@@ -399,6 +438,9 @@ export class ChartForm {
       return { t: "scatter", x: this.column(this.x.value), y: this.column(this.y.value) };
     }
     if (this.kind.value === "time") return this.overTime();
+    if (this.kind.value === "histogram") {
+      return { t: "histogram", of: this.column(this.of.value), span: this.span };
+    }
     const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
     const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };

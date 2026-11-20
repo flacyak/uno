@@ -57,6 +57,9 @@
  * - `dates`: selects a date of the fixture written day first, opens the
  *   chart form on it by Ctrl+Shift+G, reads its dates day first, sets it per
  *   week and presses Enter for a window of its weeks. Goes to out/dates.gif.
+ * - `histogram`: selects revenue, opens the chart form on a histogram of it
+ *   by Ctrl+Shift+G, presses Enter, then End and Home on its plot, each bin
+ *   scrolled into sight. Goes to out/histogram.gif.
  * - `moving`: carries the last of region's bars to the top by its label, then
  *   steps the cursor and moves a bar with Alt+Down and Alt+Up. Goes to
  *   out/moving.gif.
@@ -68,7 +71,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|moving|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|histogram|moving|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -128,6 +131,7 @@ const CHARTED = [
   "aside",
   "dates",
   "stacked",
+  "histogram",
   "moving",
 ];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
@@ -446,6 +450,7 @@ const staged = {
   menu: () => stageCharts("menu", []),
   dates: stageDates,
   stacked: () => stageCharts("stacked", []),
+  histogram: () => stageCharts("histogram", []),
   moving: () => stageCharts("moving", [REGION_BARS]),
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];

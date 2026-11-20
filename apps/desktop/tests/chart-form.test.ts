@@ -103,7 +103,12 @@ const NINETY_MINUTES = 90;
 const count = (): HTMLInputElement => document.querySelector<HTMLInputElement>(".count")!;
 
 /** The questions the kind tiles stand under, in the labels' column. */
-const QUESTION_WORDS = [m.chart_kinds_compare(), m.chart_kinds_trend(), m.chart_kinds_relate()];
+const QUESTION_WORDS = [
+  m.chart_kinds_compare(),
+  m.chart_kinds_trend(),
+  m.chart_kinds_spread(),
+  m.chart_kinds_relate(),
+];
 
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
@@ -185,7 +190,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a pie, a scatter and a chart over time, and opens on bars", () => {
+test("it offers bars, a pie, a chart over time, a histogram and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -193,6 +198,7 @@ test("it offers bars, a pie, a scatter and a chart over time, and opens on bars"
     m.chart_kind_bars(),
     m.chart_kind_pie(),
     m.chart_kind_time(),
+    m.chart_kind_histogram(),
     m.chart_kind_scatter(),
   ];
   expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
@@ -245,7 +251,7 @@ test("another source keeps a scatter's columns by header, or makes bars under tw
   expect([select("x").value, select("y").value]).toStrictEqual(["1", "0"]);
   pick("source", "1");
   expect(select("kind").value).toBe("bars");
-  expect(select("kind").options[2]!.disabled).toBe(true);
+  expect(tiles().options.find((radio) => radio.value === "scatter")!.disabled).toBe(true);
   expect(shown(box)).toContain(m.chart_form_by());
 });
 
@@ -591,6 +597,7 @@ test("a date column selected in the grid opens the form on a chart over time of 
     "source",
     "compare",
     "trend",
+    "spread",
     "relate",
     "dates",
     "per",
@@ -783,4 +790,31 @@ test("a stacked chart's form opens on bars of its column, split as it is, and Ap
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(stack, "Mix"), "closed"]);
+});
+
+test("a number column selected in the grid opens the form on a histogram of it, asking for its column alone", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: UNITS });
+  expect(select("kind").value).toBe("histogram");
+  expect(shown(box)).toStrictEqual([
+    m.chart_form_source(),
+    ...QUESTION_WORDS,
+    m.chart_form_of(),
+    m.chart_form_title_field(),
+    m.chart_form_refresh(),
+  ]);
+  expect(document.activeElement).toBe(select("of"));
+  expect([...select("of").options].map((o) => o.textContent)).toStrictEqual(["units", "revenue"]);
+  press("Enter");
+  await settle();
+  const histogram: Plot = { t: "histogram", of: { col: UNITS, header: "units" }, span: "most" };
+  expect(asked).toStrictEqual([inserting(histogram), "closed"]);
+});
+
+test("a histogram's form opens on its column, and keeps the span it draws", async () => {
+  const of = { col: REVENUE, header: "revenue" };
+  const { asked } = changing({ t: "histogram", of, span: "all" });
+  expect(chosen("kind", "of")).toStrictEqual(["histogram", String(REVENUE)]);
+  press("Enter");
+  await settle();
+  expect(asked[0]).toContain(JSON.stringify({ t: "histogram", of, span: "all" }));
 });
