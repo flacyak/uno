@@ -76,6 +76,9 @@ export interface Box {
 /** What a chart spans: the SPAN_PERCENTILES, or the least to the most. */
 export type Span = 'most' | 'all';
 
+/** What a box plot sends of a spread: a snapshot with no levels. */
+export type Boxed = Omit<Spread, 'levels'>;
+
 /** What a snapshot sends: no box and no level when no cell reads as a number. */
 export interface Spread {
   numbers: number;
@@ -196,14 +199,26 @@ export class SpreadFold {
    * a whisker by its middle.
    */
   snapshot(span: Span): Spread {
-    const { buckets, numbers, sum, figures } = this.read();
-    const skipped = { ...this.skipped };
-    if (numbers === 0) return { numbers, figures, levels: [], skipped };
-    const box = boxOf(buckets, sum);
+    const boxed = this.boxed();
+    const { box } = boxed;
+    if (box === undefined) return { ...boxed, levels: [] };
     const [low, high] =
       span === 'all' ? [box.five[0]!, box.five[4]!] : box.span;
-    const levels = levelsOf(buckets, figures, low![0], high![0]);
-    return { numbers, figures, box, levels, skipped };
+    const { buckets, figures } = this.read();
+    return { ...boxed, levels: levelsOf(buckets, figures, low![0], high![0]) };
+  }
+
+  /** boxed reads the fold as R reads its numbers, with no levels. */
+  boxed(): Boxed {
+    const { buckets, numbers, sum, figures } = this.read();
+    const skipped = { ...this.skipped };
+    if (numbers === 0) return { numbers, figures, skipped };
+    return { numbers, figures, box: boxOf(buckets, sum), skipped };
+  }
+
+  /** The rows the fold counts: those whose cells read as numbers, and those left out. */
+  get rows(): number {
+    return this.numbers + this.skipped.blank + this.skipped.unparsed;
   }
 
   /** read is what the fold holds, as plain numbers. */
