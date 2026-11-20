@@ -20,6 +20,8 @@ import type { Random } from '@core-tests/lab/cache/stats';
 
 const SEEDS = 50;
 const CELLS = 400;
+// Few enough buckets that a spread of CELLS coarsens.
+const COARSE = 64;
 const STEPS = [1, 2, 5];
 
 /** cellOf is a log-normal-ish amount, a few far out, as a cell writes it. */
@@ -46,10 +48,10 @@ function binned(level: Level, numbers: readonly number[]) {
 function spanned(cells: readonly string[]) {
   const fold = new SpreadFold('point');
   for (const c of cells) fold.add(c);
-  const { buckets } = fold.read();
-  const { span } = fold.snapshot().box!;
+  const { buckets, figures } = fold.read();
+  const { span } = fold.snapshot('most').box!;
   const [low, high] = [span[0]![0], span[1]![0]];
-  return { levels: levelsOf(buckets, low, high), low, high };
+  return { levels: levelsOf(buckets, figures, low, high), low, high };
 }
 
 test('every level counts what its edges hold', () => {
@@ -91,7 +93,7 @@ test('a spread of one number sends one bin of it', () => {
     expect(levels, cell).toHaveLength(1);
     expect(levels[0]).toMatchObject({ rows: [2], at: 0, spans: 1 });
   }
-  expect(levelsOf([], 0, 0)).toStrictEqual([]);
+  expect(new SpreadFold('point').snapshot('most').levels).toStrictEqual([]);
 });
 
 test('a level sends the bins past its span to each side, evenly where both want more', () => {
@@ -106,4 +108,55 @@ test('a level sends the bins past its span to each side, evenly where both want 
   const low = spanned([...zeros, ...middle, '5000']).levels[0]!;
   expect(low).toMatchObject({ at: 0, below: 0, above: 1 });
   expect(low.rows).toHaveLength(BINS_SENT_AT_MOST);
+});
+
+test('every level a snapshot sends counts what its edges hold, coarsened too', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const cells = Array.from({ length: CELLS }, () => cellOf(random));
+    const numbers = cells.map((c) => parse(c, 'point')!);
+    const fold = new SpreadFold('point', COARSE);
+    for (const c of cells) fold.add(c);
+    expect(fold.read().figures).not.toBe('exact');
+    for (const span of ['most', 'all'] as const) {
+      const { levels } = fold.snapshot(span);
+      expect(levels.length, `seed ${seed}`).toBeGreaterThan(0);
+      for (const level of levels) {
+        expect(level, `seed ${seed} ${span}`).toStrictEqual(
+          binned(level, numbers),
+        );
+      }
+    }
+  }
+});
+
+test('a snapshot sends no level whose edges need more figures than it holds', () => {
+  // Three figures fit 900 buckets a decade, two only 90.
+  const fold = new SpreadFold('point', 2 * 90);
+  for (let i = 100; i < 1000; i++) fold.add(`${i}`);
+  expect(fold.read().figures).toBe(2);
+  const { levels } = fold.snapshot('all');
+  expect(levels.map((l) => [l.step, l.power])[0]).toStrictEqual([1, 1]);
+});
+
+test("a snapshot's levels span every bin with 'all'", () => {
+  const random = seeded(2);
+  const fold = new SpreadFold('point');
+  for (let i = 0; i < CELLS; i++) fold.add(cellOf(random));
+  for (const level of fold.snapshot('all').levels) {
+    expect(level).toMatchObject({ at: 0, below: 0, above: 0 });
+    expect(level.spans).toBe(level.rows.length);
+  }
+});
+
+test('the bins past a span stop at the first edge a coarsened spread does not hold', () => {
+  // 3 figures hold 100 to 999 and [1000, 1010), so 1001 and 1002 share one.
+  const hundreds = Array.from({ length: 900 }, (_, i) => `${100 + i}`);
+  const fold = new SpreadFold('point', hundreds.length + 2);
+  for (const c of [...hundreds, '1001', '1002', '50000']) fold.add(c);
+  expect(fold.read().figures).toBe(3);
+  const finest = fold.snapshot('most').levels[0]!;
+  expect([finest.step, finest.power]).toStrictEqual([2, 0]);
+  expect(edgeOf(finest, finest.rows.length)).toBe(1000);
+  expect(finest.above).toBe(3);
 });

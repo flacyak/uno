@@ -9,6 +9,8 @@ import { parse } from '@num';
 import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
 import { boundsOf, coarser, isKey, keyOf } from './figures.ts';
+import { levelsOf } from './levels.ts';
+import type { Level } from './levels.ts';
 import { isCount, isMark, isRecord } from './saved.ts';
 import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
@@ -63,11 +65,16 @@ export interface Box {
   span: Within[];
 }
 
-/** What a snapshot sends: no box when no cell reads as a number. */
+/** What a chart spans: the SPAN_PERCENTILES, or the least to the most. */
+export type Span = 'most' | 'all';
+
+/** What a snapshot sends: no box and no level when no cell reads as a number. */
 export interface Spread {
   numbers: number;
   figures: Figures;
   box?: Box;
+  /** The histogram's levels over the span, finest first. */
+  levels: Level[];
   skipped: Skipped;
 }
 
@@ -176,13 +183,19 @@ export class SpreadFold {
   }
 
   /**
-   * snapshot reads the fold as R reads its numbers. Coarsened, a number at a
-   * rank is its bucket's ends, and a bucket is past a whisker by its middle.
+   * snapshot reads the fold as R reads its numbers, and bins it over `span`.
+   * Coarsened, a number at a rank is its bucket's ends, and a bucket is past
+   * a whisker by its middle.
    */
-  snapshot(): Spread {
+  snapshot(span: Span): Spread {
     const { buckets, numbers, sum, figures } = this.read();
-    const spread = { numbers, figures, skipped: { ...this.skipped } };
-    return numbers === 0 ? spread : { ...spread, box: boxOf(buckets, sum) };
+    const skipped = { ...this.skipped };
+    if (numbers === 0) return { numbers, figures, levels: [], skipped };
+    const box = boxOf(buckets, sum);
+    const [low, high] =
+      span === 'all' ? [box.five[0]!, box.five[4]!] : box.span;
+    const levels = levelsOf(buckets, figures, low![0], high![0]);
+    return { numbers, figures, box, levels, skipped };
   }
 
   /** read is what the fold holds, as plain numbers. */

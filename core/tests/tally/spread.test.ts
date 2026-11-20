@@ -225,7 +225,7 @@ test("a spread's box is R's boxplot of its numbers while exact", () => {
     // A fold counts -0 as 0.
     const x = cells.flatMap((c) => parse(c, 'point') ?? []).map((v) => v + 0);
     x.sort((a, b) => a - b);
-    const box = fold.snapshot().box!;
+    const box = fold.snapshot('most').box!;
     const r = boxed(x);
     expect(box.five, `seed ${seed}`).toStrictEqual(fivenum(x).map(point));
     expect(box.whiskers).toStrictEqual(r.whiskers.map(point));
@@ -246,7 +246,7 @@ test("a coarsened spread's box holds the numbers R reads, to its figures", () =>
     const fold = new SpreadFold('point', CELLS / 8);
     for (const c of cells) fold.add(c);
     const x = cells.map(Number).sort((a, b) => a - b);
-    const { box, figures } = fold.snapshot();
+    const { box, figures } = fold.snapshot('most');
     expect(figures).not.toBe('exact');
     const holds = ([low, high]: number[], v: number) => low! <= v && v <= high!;
     fivenum(x).forEach((v, i) => expect(holds(box!.five[i]!, v)).toBe(true));
@@ -262,5 +262,5 @@ test("a coarsened spread's box holds the numbers R reads, to its figures", () =>
 });
 
 test('a spread of no numbers has no box', () => {
-  expect(new SpreadFold('point').snapshot().box).toBeUndefined();
+  expect(new SpreadFold('point').snapshot('most').box).toBeUndefined();
 });
