@@ -13,6 +13,7 @@ import { el } from "@renderer/shell/util";
 import { axis, tickLabels } from "./axes.ts";
 import { SPAN_LEAST, TIP_GAP, barsBox, room } from "./bars.ts";
 import { BAR_GAP, BAR_THICK, ranked, row, rowSteps } from "./rows.ts";
+import { MOVE_KEYS } from "./moving.ts";
 import { SUMMARY_VALUES } from "./summary.ts";
 import type { Told } from "./summary.ts";
 import { ACCENT, among, named } from "./tooltip.ts";
@@ -124,7 +125,14 @@ export function dotTargets(plot: DotsPlot, tally: DotsTally, drawn: HTMLElement)
     const at = mark.querySelector(".chart-dot, .chart-dots-none")!;
     return { mark, at, front: false, key: ACCENT, said };
   });
-  return { all, under: among(all, ".chart-bar-row"), ...rowSteps(all.length) };
+  // A person moves a row with Alt as a bar.
+  const steps = rowSteps(all.length);
+  return {
+    all,
+    under: among(all, ".chart-bar-row"),
+    ...steps,
+    keys: [...steps.keys, ...MOVE_KEYS],
+  };
 }
 
 /**

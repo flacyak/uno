@@ -24,6 +24,9 @@ export const BAR_GAP = 2;
  */
 export const BARS_INSET = 10;
 
+/** A row of a value, which a label heads, past an axis's row of labels. */
+export const VALUE_ROWS = ".chart-bar-row:has(> .chart-bar-label)";
+
 /** The values that get a row, the largest first, and the lines under them. */
 export interface Ranked {
   shown: Group[];

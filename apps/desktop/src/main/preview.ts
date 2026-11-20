@@ -325,6 +325,12 @@ const TO_REGION = 2;
  * its label, the cursor put on the second bar, Alt+Down twice, and Alt+Up.
  */
 const MOVING = { carry: 600, cursor: 4_000, down: 5_400, up: 8_000, end: 10_400 };
+/**
+ * The dotted story's beats: the pointer on the second row of dots, Alt+Down,
+ * and the last row carried to the top by its label.
+ */
+const DOTTED = { point: 600, down: 3_000, carry: 5_000, end: 9_600 };
+
 /** How many places Alt+Down moves the bar in the moving story. */
 const MOVING_DOWNS = 2;
 
@@ -960,6 +966,7 @@ const STORIES: Record<string, Story> = {
   histogram: { end: HISTOGRAM.stop, script: playHistogram },
   box: { end: BOX.stop, script: playBox },
   moving: { end: MOVING.end, script: playMoving },
+  dotted: { end: DOTTED.end, script: playDotted },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
   reread: { end: REREAD.end, script: playReread },
@@ -1224,6 +1231,28 @@ async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
   await at(BOX.down);
   press(win, "Down");
   await at(BOX.stop);
+}
+
+/**
+ * playDotted performs the dotted story: a press on the second row's label for
+ * what it says, Alt+Down, and the last row carried by its label to the top,
+ * each saying on the status line where the row stands.
+ */
+async function playDotted(win: BrowserWindow, at: Clock): Promise<void> {
+  const { carryBy, pressOn } = await glider(win);
+  // The rows of region's four values, which the axis's labels follow.
+  const row = (n: number) => `.chart .chart-bar-row:nth-child(${n})`;
+  const [first, last] = [
+    await middle(win, row(1)),
+    await middle(win, `${row(4)} .chart-bar-label`),
+  ];
+  await at(DOTTED.point);
+  await pressOn(`${row(2)} .chart-bar-label`);
+  await at(DOTTED.down);
+  press(win, "Down", ["alt"]);
+  await at(DOTTED.carry);
+  await carryBy(`${row(4)} .chart-bar-label`, { x: 0, y: first.y - last.y - BAR_THICK / 2 });
+  await at(DOTTED.end);
 }
 
 /**

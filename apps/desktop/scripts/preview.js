@@ -66,6 +66,9 @@
  * - `moving`: carries the last of region's bars to the top by its label, then
  *   steps the cursor and moves a bar with Alt+Down and Alt+Up. Goes to
  *   out/moving.gif.
+ * - `dotted`: points at a row of mean revenue per region's dots for what it
+ *   says, moves it with Alt+Down, then carries the last row by its label to
+ *   the top. Goes to out/dotted.gif.
  * - `stacked`: selects region, opens the chart form on it by Ctrl+Shift+G,
  *   splits its bars by channel, sums revenue, and presses Enter for a window
  *   of stacked bars. Goes to out/stacked.gif.
@@ -74,7 +77,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|histogram|box|moving|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|histogram|box|moving|dotted|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -137,6 +140,7 @@ const CHARTED = [
   "histogram",
   "box",
   "moving",
+  "dotted",
 ];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
 const TO_OUT = [...AGAINST_BUCKET, ...CHARTED, ...KEYED];
@@ -304,6 +308,14 @@ async function stageSidebar() {
  */
 const REGION_BARS = { t: "bars", by: { col: 1, header: "region" } };
 
+/** Mean revenue per region of the fixture, as dots. */
+const MEAN_DOTS = {
+  t: "dots",
+  by: { col: 1, header: "region" },
+  of: { col: 5, header: "revenue" },
+  measure: "mean",
+};
+
 /**
  * Revenue against units of the fixture, whose table of points runs past any
  * window, and the focus story's window at the foot.
@@ -457,6 +469,7 @@ const staged = {
   histogram: () => stageCharts("histogram", []),
   box: () => stageCharts("box", []),
   moving: () => stageCharts("moving", [REGION_BARS]),
+  dotted: () => stageCharts("dotted", [MEAN_DOTS]),
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 

@@ -104,6 +104,15 @@ export const CHART_DOTS: Check[] = [
     `,
   },
   {
+    name: "Alt with Up moves Bolt's row above Crane's, and the dots stand so",
+    input: { events: pressing("Up", ["alt"]), through: true },
+    script: `
+      const win = document.querySelector(".chart");
+      const order = () => [...win.querySelectorAll(".chart-bar-label")].map((label) => label.textContent).join();
+      return (await until(() => order() === "Acme,Bolt,Crane,Dart,Eagle")) ? "" : "the rows read " + order();
+    `,
+  },
+  {
     name: "a dot plot's table lists a line per carrier with its mean, numbers and rows, then the cell that is not a number",
     click: { selector: ".chart:first-child .chart-table-toggle" },
     shot: "chart-dots-table",
@@ -111,8 +120,16 @@ export const CHART_DOTS: Check[] = [
       const win = document.querySelector(".chart");
       if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
       const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((cell) => cell.textContent).join(" | "));
-      const want = ["carrier | mean | numbers | rows", "Acme | 3.4 | 2 | 2", "Crane | 3.25 | 2 | 2", "Bolt | 3.1 | 2 | 2", "Dart | 2.9 | 2 | 2", "Eagle | no numbers | 0 | 1", "1 not a number"];
+      const want = ["carrier | mean | numbers | rows", "Acme | 3.4 | 2 | 2", "Bolt | 3.1 | 2 | 2", "Crane | 3.25 | 2 | 2", "Dart | 2.9 | 2 | 2", "Eagle | no numbers | 0 | 1", "1 not a number"];
       return lines.join(" / ") === want.join(" / ") ? "" : "the table reads " + lines.join(" / ");
+    `,
+  },
+  {
+    name: "a save keeps the order the dots were moved in, and leaves the workspace clean for the groups after",
+    send: ["menu:save"],
+    script: `
+      if (!(await arrives(() => text("#status-msg").startsWith("saved ")))) return "saving says " + text("#status-msg");
+      return document.querySelector(".ws.open .dirty") === null ? "" : "the workspace is still marked unsaved";
     `,
   },
 ];
