@@ -2,7 +2,7 @@
 
 import type { Plot } from "@document";
 import { m } from "@paraglide/messages";
-import { binnedIn, fitHistogram, histogram as drawn } from "../histogram.ts";
+import { binTargets, binnedIn, fitHistogram, histogram as drawn } from "../histogram.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -16,6 +16,11 @@ export const histogram: ChartKind<Extract<Plot, { t: "histogram" }>> = (plot) =>
     if (tally.t !== "spread") return undefined;
     const binned = binnedIn(tally.levels, room);
     if (binned === undefined) return { ...undrawn, empty: true };
-    return { ...undrawn, draw: () => drawn(binned), fit: fitHistogram };
+    return {
+      ...undrawn,
+      draw: () => drawn(binned),
+      fit: fitHistogram,
+      targets: (box) => binTargets(binned.level, tally.numbers, box),
+    };
   },
 });

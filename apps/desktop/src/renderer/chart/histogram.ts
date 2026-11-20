@@ -4,11 +4,16 @@
  * it stand beyond its edges, in a scroller that first shows the span.
  */
 
+import { m } from "@paraglide/messages";
+import { num, percent, places } from "@renderer/locale";
+import { edgeOf } from "@tally";
 import type { Level } from "@tally";
 import { el } from "@renderer/shell/util";
 import { COLUMN_PITCH_LEAST, aside, sized, upOf, upward } from "./columns.ts";
 import type { PlotRoom } from "./kind.ts";
 import { BARS_INSET } from "./rows.ts";
+import { among } from "./tooltip.ts";
+import type { Reading, Targets } from "./tooltip.ts";
 
 /** The level a plot draws, and whether each bin of its span has COLUMN_PITCH_LEAST px. */
 export interface Binned {
@@ -43,8 +48,6 @@ export function histogram({ level, fits }: Binned): HTMLElement {
     periods.append(slot);
   }
   const along = el("div", "chart-along chart-scrolls themed-bar");
-  // The plot has the keys, so its scroller is no stop of its own.
-  along.tabIndex = -1;
   along.append(periods);
   sized(box, up, fits);
   box.style.setProperty("--span-at", `${level.at / level.spans}`);
@@ -61,4 +64,43 @@ export function fitHistogram(drawn: HTMLElement): void {
   along.scrollLeft = at * along.clientWidth;
   const below = along.getBoundingClientRect().bottom - periods.getBoundingClientRect().bottom;
   drawn.style.setProperty("--below", `${below}px`);
+}
+
+/** revealed scrolls `slot`'s scroller the least that brings it into sight. */
+function revealed(slot: Element): void {
+  const along = slot.closest(".chart-along");
+  if (along === null) return;
+  const [at, sight] = [slot.getBoundingClientRect(), along.getBoundingClientRect()];
+  if (at.left < sight.left) along.scrollLeft -= sight.left - at.left;
+  else if (at.right > sight.right) along.scrollLeft += at.right - sight.right;
+}
+
+/**
+ * binTargets gives the bins of `box`, as histogram drew `level`, in order, the
+ * bins past the span too: each worth its rows and their share of `numbers`,
+ * named by its edges, written to the decimals of its width. The keys scroll
+ * the one they step to into sight.
+ */
+export function binTargets(level: Level, numbers: number, box: HTMLElement): Targets {
+  const edge = (i: number) => places(edgeOf(level, i), -level.power);
+  const slots = [...box.querySelectorAll(".chart-period")];
+  const all = slots.map((slot, i) => {
+    const said = (): Reading[] => [
+      {
+        value: num(level.rows[i]!),
+        label: el("span", "", m.chart_bin({ from: edge(i), to: edge(i + 1) })),
+      },
+      { value: percent(level.rows[i]! / numbers), label: el("span", "", m.chart_table_share()) },
+    ];
+    const at = slot.firstElementChild!;
+    return {
+      mark: slot,
+      at,
+      front: false,
+      key: "var(--accent)",
+      said,
+      reveal: () => revealed(slot),
+    };
+  });
+  return { all, under: among(all, ".chart-period") };
 }

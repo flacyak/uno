@@ -11,13 +11,22 @@
 
 import { BAR_GAP, BAR_THICK } from "@renderer/chart/rows";
 import { RECT_SLACK } from "./charts.ts";
-import type { Check } from "./check.ts";
+import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote of two histograms. */
 const SPREAD = process.env["UNO_SMOKE_SPREAD"] ?? "";
 
 /** How far a column may stand off its baseline, or the span off its scroller's edge: a px's rounding. */
 const PX_SLACK = 1;
+
+/** The new window's bin a pointer clicks: the span's third. */
+const THIRD_BIN = ".chart:first-child .chart-period:nth-child(4)";
+
+/** A real press of `key`. */
+const press = (key: string): readonly Input[] => [
+  { type: "keyDown", keyCode: key },
+  { type: "keyUp", keyCode: key },
+];
 
 export const CHART_HISTOGRAM: Check[] = [
   {
@@ -34,6 +43,9 @@ export const CHART_HISTOGRAM: Check[] = [
       document.body.append(probe);
       const accent = getComputedStyle(probe).color;
       probe.remove();
+      // The plot has the keys, so Tab passes its scroller by.
+      const stops = [...document.querySelectorAll(".chart-along")].filter((along) => along.tabIndex >= 0);
+      if (stops.length > 0) return "Tab stops at " + stops.length + " scrollers";
       for (const win of windows()) {
         const along = win.querySelector(".chart-along");
         if (along.scrollWidth <= along.clientWidth) return "a histogram's bins fit its scroller, with none past the span";
@@ -59,6 +71,42 @@ export const CHART_HISTOGRAM: Check[] = [
         if (Math.abs((foot.top + foot.bottom) / 2 - base) > ${PX_SLACK}) return "the y axis's 0 centres at " + (foot.top + foot.bottom) / 2 + " off the baseline at " + base;
       }
       return "";
+    `,
+  },
+  {
+    name: "the pointer on a bin names its edges with its rows and their share, and its column darkens over a wash of its slot",
+    click: { selector: THIRD_BIN },
+    script: `
+      const slot = document.querySelector(${JSON.stringify(THIRD_BIN)});
+      if (!(await until(() => slot.classList.contains("cursor")))) return "the bin wears no cursor";
+      const said = slot.closest(".chart").querySelector(".chart-tip-words").textContent;
+      return /^[\\d,]+ [\\d,.]+ to [\\d,.]+ · [\\d.]+% share$/.test(said) ? "" : "the box says " + said;
+    `,
+  },
+  {
+    name: "End steps the cursor to the last bin past the span, scrolled into sight, the box by it inside the window",
+    input: { events: press("End"), through: true },
+    shot: "chart-histogram-end",
+    script: `
+      const win = document.querySelector(".chart");
+      const slots = [...win.querySelectorAll(".chart-period")];
+      if (!(await until(() => slots.at(-1).classList.contains("cursor")))) return "the last bin wears no cursor";
+      const rect = (at) => at.getBoundingClientRect();
+      const [last, sight, tip, room] = [slots.at(-1), win.querySelector(".chart-along"), win.querySelector(".chart-tip"), win].map(rect);
+      if (last.right > sight.right + ${PX_SLACK} || last.left < sight.left - ${PX_SLACK}) return "the last bin stands from " + last.left + " to " + last.right + " out of a scroller from " + sight.left + " to " + sight.right;
+      if (win.querySelector(".chart-tip").hidden || tip.left < room.left || tip.right > room.right) return "the box stands from " + tip.left + " to " + tip.right + " in a window from " + room.left + " to " + room.right;
+      return "";
+    `,
+  },
+  {
+    name: "Home steps the cursor to the first bin, scrolled to the scroller's start",
+    input: { events: press("Home"), through: true },
+    script: `
+      const win = document.querySelector(".chart");
+      const first = win.querySelector(".chart-period");
+      if (!(await until(() => first.classList.contains("cursor")))) return "the first bin wears no cursor";
+      const scrolled = win.querySelector(".chart-along").scrollLeft;
+      return scrolled < ${PX_SLACK} ? "" : "the scroller stands " + scrolled + " px along";
     `,
   },
 ];

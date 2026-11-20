@@ -618,6 +618,7 @@
   "chart_bar_moved": "{value} passa à posição {place} de {count}",
   "chart_summary_stack": "Dividido por {split} em {count} séries.",
   "chart_stack_unsplit": "as linhas além de {count} pares entram em Outros",
+  "chart_bin": "{from} a {to}",
   "chart_table_share": "proporção",
   "chart_table_aria": "Tabela",
   "chart_refresh_aria": "Atualizar",

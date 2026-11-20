@@ -598,6 +598,7 @@
   "chart_bar_moved": "{value} moved to {place} of {count}",
   "chart_summary_stack": "Split by {split} into {count} series.",
   "chart_stack_unsplit": "rows past {count} pairs are in Other",
+  "chart_bin": "{from} to {to}",
   "chart_table_share": "share",
   "chart_table_aria": "Table",
   "chart_refresh_aria": "Refresh",
