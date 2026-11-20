@@ -52,6 +52,7 @@ export type {
   Sample,
   SampleTally,
   SpreadTally,
+  BoxTally,
   StackTally,
   TimeTally,
   SignIns,

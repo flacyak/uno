@@ -44,6 +44,7 @@ describe('parsePlot', () => {
     { t: 'time', at: DATE, sum: REVENUE, per: 'week', unit: 's' },
     { t: 'histogram', of: REVENUE, span: 'most' },
     { t: 'histogram', of: UNITS, span: 'all' },
+    { t: 'box', of: REVENUE, span: 'most' },
   ])('reads %j', (plot) => {
     expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });
@@ -69,6 +70,10 @@ describe('parsePlot', () => {
     ],
     [{ t: 'time', at: DATE, per: 'day' }, ONE_READING],
     [{ t: 'histogram', of: REVENUE }, 'span is not most or all'],
+    [
+      { t: 'box', of: REVENUE, by: REGION, span: 'most' },
+      'this build does not read "by"',
+    ],
     [{ t: 'histogram', of: REVENUE, span: 'some' }, 'span is not most or all'],
     [
       { t: 'histogram', of: REVENUE, span: 'all', by: REGION },

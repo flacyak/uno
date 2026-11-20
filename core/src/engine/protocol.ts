@@ -18,7 +18,7 @@ import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
 import type { Groups, Per, Sample, Split, TimeLevel, Times } from '@tally';
-import type { Spread } from '@tally';
+import type { Skipped, Spread, Spreads } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -321,6 +321,14 @@ export interface SpreadTally extends Spread {
   coverage: Coverage;
 }
 
+/** A box plot's tally: a box per value, the highest median first, and Other's, or its column's one box as `rest`. */
+export interface BoxTally extends Spreads {
+  t: 'box';
+  plot: Plot;
+  coverage: Coverage;
+  skipped: Skipped;
+}
+
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
  * arrays, or why the source could not be read. Each names the plot it reads,
@@ -333,6 +341,7 @@ export type Tally =
   | TimeTally
   | StackTally
   | SpreadTally
+  | BoxTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**

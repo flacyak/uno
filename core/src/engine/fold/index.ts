@@ -20,4 +20,5 @@ export const FOLDERS: Folders = {
   time: timeFolder,
   stack: splitFolder,
   histogram: spreadFolder,
+  box: spreadFolder,
 };

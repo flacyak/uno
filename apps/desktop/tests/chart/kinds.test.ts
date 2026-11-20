@@ -15,6 +15,7 @@ import { bars as drawBars } from "@renderer/chart/bars";
 import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
+import { box } from "@renderer/chart/kinds/box";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
@@ -177,7 +178,7 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram });
+  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box });
 });
 
 /** Rows per region by channel, two regions in two channels and Other. */

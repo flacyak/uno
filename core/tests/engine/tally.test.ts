@@ -170,6 +170,13 @@ const REVENUE_SPREAD: Chart = {
   plot: { t: 'histogram', of: column(REVENUE), span: 'all' },
 };
 
+/** The fixture's units as one box. */
+const UNITS_BOX: Chart = {
+  ...REGION_ROWS,
+  id: 'c10',
+  plot: { t: 'box', of: column(UNITS), span: 'most' },
+};
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -192,6 +199,19 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       fold.add(cell(r, by), cell(r, split), cells);
     }
     return { t: 'stack', plot, coverage, ...fold.snapshot(plot.order) };
+  }
+  if (plot.t === 'box') {
+    const fold = new SpreadFold('point');
+    for (let r = 0; r < rows; r++) fold.add(cell(r, plot.of));
+    const rest = fold.boxed();
+    return {
+      t: 'box',
+      plot,
+      coverage,
+      values: [],
+      rest,
+      skipped: rest.skipped,
+    };
   }
   if (plot.t === 'histogram') {
     const fold = new SpreadFold('point');
@@ -656,6 +676,15 @@ test('a histogram folded a block at a time reads as the pure spread of its numbe
   // Bars of the same column hold a fold of another key, so they fold anew.
   tallies.attach({ ...every, plot: { t: 'bars', by: column(UNITS) } }, HEADERS);
   expect(tallies.from()).toBe(0);
+});
+
+test("a box plot folded a block at a time reads as the pure spread of its numbers, and shares a histogram's fold of its column", () => {
+  const tallies = folded([UNITS_BOX]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [UNITS_BOX.id, pure(UNITS_BOX.plot)],
+  ]);
+  tallies.attach({ ...UNITS_SPREAD, id: UNITS_BOX.id }, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
 });
 
 test('an edit to a number moves a histogram by its one row, and a save keeps the fold, which reads back with no pass', async () => {

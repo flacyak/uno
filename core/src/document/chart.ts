@@ -79,7 +79,9 @@ export type Plot =
   | TimePlot
   | StackPlot
   /** Rows per bin of the numbers of `of`, over the 1st to 99th percentile or every number. */
-  | { t: 'histogram'; of: ChartColumn; span: Span };
+  | { t: 'histogram'; of: ChartColumn; span: Span }
+  /** A box of the numbers of `of`, as R's boxplot draws it. */
+  | { t: 'box'; of: ChartColumn; span: Span };
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are
