@@ -508,6 +508,8 @@
   "chart_kinds_spread": "distribución",
   "chart_kind_histogram": "Histograma",
   "chart_form_of": "de",
+  "chart_kind_box": "Diagrama de caja",
+  "chart_form_box_none": "ninguna, una caja",
   "chart_kind_bars": "Barras",
   "chart_kind_pie": "Circular",
   "chart_kind_scatter": "Dispersión",

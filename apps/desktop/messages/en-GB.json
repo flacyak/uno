@@ -492,6 +492,8 @@
   "chart_kinds_spread": "spread",
   "chart_kind_histogram": "Histogram",
   "chart_form_of": "of",
+  "chart_kind_box": "Box plot",
+  "chart_form_box_none": "none, one box",
   "chart_kind_bars": "Bars",
   "chart_kind_pie": "Pie",
   "chart_kind_scatter": "Scatter",

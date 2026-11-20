@@ -190,7 +190,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a pie, a chart over time, a histogram and a scatter, and opens on bars", () => {
+test("it offers bars, a pie, a chart over time, a histogram, a box plot and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -199,6 +199,7 @@ test("it offers bars, a pie, a chart over time, a histogram and a scatter, and o
     m.chart_kind_pie(),
     m.chart_kind_time(),
     m.chart_kind_histogram(),
+    m.chart_kind_box(),
     m.chart_kind_scatter(),
   ];
   expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
@@ -817,4 +818,35 @@ test("a histogram's form opens on its column, and keeps the span it draws", asyn
   press("Enter");
   await settle();
   expect(asked[0]).toContain(JSON.stringify({ t: "histogram", of, span: "all" }));
+});
+
+test("a box plot asks for the number column it is of and a column to split it by, none or another", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: REVENUE });
+  pick("kind", "box");
+  expect(shown(box)).toStrictEqual([
+    m.chart_form_source(),
+    ...QUESTION_WORDS,
+    m.chart_form_of(),
+    m.chart_form_by(),
+    m.chart_form_title_field(),
+    m.chart_form_refresh(),
+  ]);
+  expect(select("box-by").value).toBe("");
+  const own = [...select("box-by").options].find((o) => o.value === String(REVENUE))!;
+  expect(own.disabled).toBe(true);
+  pick("box-by", String(REGION));
+  const of = { col: REVENUE, header: "revenue" };
+  const boxPlot: Plot = { t: "box", of, by: { col: REGION, header: "region" }, span: "most" };
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(boxPlot),
+  );
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(boxPlot), "closed"]);
+});
+
+test("a box plot's form opens on its columns, and keeps its span", () => {
+  const of = { col: REVENUE, header: "revenue" };
+  changing({ t: "box", of, by: { col: REGION, header: "region" }, span: "all" });
+  expect(chosen("kind", "of", "box-by")).toStrictEqual(["box", String(REVENUE), String(REGION)]);
 });

@@ -303,6 +303,24 @@ const HISTOGRAM = {
 const REVENUE_CELL = "tbody tr:nth-child(3) td:nth-child(7)";
 
 /**
+ * The box story's beats: revenue selected, the chart form opened on it, its
+ * kind stepped from Histogram to Box plot, By stepped to region, Enter, and a
+ * click on a region's row, then Down to the next.
+ */
+const BOX = {
+  column: 500,
+  open: 2_400,
+  kind: 4_400,
+  by: 6_400,
+  enter: 9_000,
+  cursor: 11_400,
+  down: 13_400,
+  stop: 16_000,
+};
+/** How many Downs take By from None, past the date, to region. */
+const TO_REGION = 2;
+
+/**
  * The moving story's beats: the last of region's bars carried to the top by
  * its label, the cursor put on the second bar, Alt+Down twice, and Alt+Up.
  */
@@ -940,6 +958,7 @@ const STORIES: Record<string, Story> = {
   dates: { end: DATES.end, script: playDates },
   stacked: { end: STACKED.end, script: playStacked },
   histogram: { end: HISTOGRAM.stop, script: playHistogram },
+  box: { end: BOX.stop, script: playBox },
   moving: { end: MOVING.end, script: playMoving },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
@@ -1171,6 +1190,40 @@ async function playHistogram(win: BrowserWindow, at: Clock): Promise<void> {
   await at(HISTOGRAM.home);
   press(win, "Home");
   await at(HISTOGRAM.stop);
+}
+
+/**
+ * playBox performs the box story: revenue selected, the form opened on it by
+ * Ctrl+Shift+G, Down on the kinds from Histogram to Box plot, By set to
+ * region, Enter, then a click on a row's label for its box's numbers, and
+ * Down to the next row.
+ */
+async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(BOX.column);
+  await pressOn(REVENUE_CELL);
+  await glideTo(KEYED_REST);
+  await at(BOX.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(BOX.kind);
+  // The keys open in Of, after the kinds.
+  press(win, "Tab", ["shift"]);
+  press(win, "Down");
+  await glideTo('.chart-form select[name="box-by"]');
+  await at(BOX.by);
+  press(win, "Tab");
+  press(win, "Tab");
+  await presses(win, "Down", TO_REGION, KIND_STEP_MS);
+  await at(BOX.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-box")', "the box plot never drew");
+  await at(BOX.cursor);
+  await pressOn(".chart .chart-bar-row:nth-child(2) .chart-bar-label");
+  await at(BOX.down);
+  press(win, "Down");
+  await at(BOX.stop);
 }
 
 /**

@@ -25,7 +25,7 @@ test("each question is a row of its kinds' tiles, one radio group the form names
   expect(rows).toStrictEqual([
     [m.chart_kinds_compare(), m.chart_kind_bars(), m.chart_kind_pie()],
     [m.chart_kinds_trend(), m.chart_kind_time()],
-    [m.chart_kinds_spread(), m.chart_kind_histogram()],
+    [m.chart_kinds_spread(), m.chart_kind_histogram(), m.chart_kind_box()],
     [m.chart_kinds_relate(), m.chart_kind_scatter()],
   ]);
   expect(tiles.box.getAttribute("role")).toBe("radiogroup");
