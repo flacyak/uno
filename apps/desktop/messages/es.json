@@ -553,6 +553,7 @@
   "chart_form_hint_change": "Intro aplica · Esc cierra",
   "chart_inserted": "insertado: {title}",
   "chart_bars_more": "+{count} más",
+  "chart_dots_none": "sin números",
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",
   "chart_points": [
     {

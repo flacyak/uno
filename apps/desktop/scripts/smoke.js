@@ -463,6 +463,54 @@ await writeFile(
   }),
 );
 
+// A workspace of two dot plots of an export of five carriers' delivery days,
+// their means a few tenths apart and Eagle's no number at all: the mean per
+// carrier in a new window's size at the sheet's foot, and the same in a
+// window of the least width at its top.
+const dottedFile = join(scratch, "sent", "dotted.csv");
+const dottedDays = {
+  Acme: [3.3, 3.5],
+  Bolt: [3, 3.2],
+  Crane: [3.2, 3.3],
+  Dart: [2.8, 3],
+  Eagle: ["n/a"],
+};
+const dottedRows = Object.entries(dottedDays).flatMap(([carrier, days]) =>
+  days.map((d) => `${carrier},${d}`),
+);
+await writeFile(dottedFile, `${["carrier,days", ...dottedRows].join("\n")}\n`);
+const dotted = join(scratch, "sent", "dotted.uno");
+const dottedSource = {
+  ...spreadSource,
+  id: "dotted",
+  name: "dotted.csv",
+  path: dottedFile,
+  rows: dottedRows.length,
+  cols: 2,
+};
+const dottedPlot = {
+  t: "dots",
+  by: { col: 0, header: "carrier" },
+  of: { col: 1, header: "days" },
+  measure: "mean",
+};
+const dottedChart = { source: dottedSource.id, title: "", refresh: 0, plot: dottedPlot };
+await writeFile(
+  dotted,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [dottedSource],
+    active: dottedSource.id,
+    log: [],
+    charts: [
+      { ...dottedChart, id: "c1", place: { ...chartSize, x: 0, y: 1 } },
+      { ...dottedChart, id: "c2", place: { ...chartSize, width: leastSize.width, x: 1, y: 0 } },
+    ],
+    extra: new Map(),
+    at: dotted,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -822,6 +870,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_STACKED: stacked,
       UNO_SMOKE_SPREAD: spread,
       UNO_SMOKE_BOXED: boxed,
+      UNO_SMOKE_DOTTED: dotted,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,

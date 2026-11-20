@@ -22,6 +22,7 @@ import { CHART_KEYS } from "./chart-keys.ts";
 import { CHART_MOVES } from "./chart-moves.ts";
 import { CHART_MOVE } from "./chart-move.ts";
 import { CHART_BOX } from "./chart-box.ts";
+import { CHART_DOTS } from "./chart-dots.ts";
 import { CHART_HISTOGRAM } from "./chart-histogram.ts";
 import { CHART_STACK } from "./chart-stack.ts";
 import { CHART_TIP } from "./chart-tip.ts";
@@ -103,6 +104,7 @@ const CHECKS: Record<string, Check[]> = {
   "chart-stack": CHART_STACK,
   "chart-histogram": CHART_HISTOGRAM,
   "chart-box": CHART_BOX,
+  "chart-dots": CHART_DOTS,
   "chart-move": CHART_MOVE,
   "chart-blank": CHART_BLANK,
   "chart-states": CHART_STATES,

@@ -519,6 +519,34 @@
   background: var(--surface);
 }
 
+/* A dot plot's track, from dots.ts: a dot stands --at of it, the dataviz
+ * skill's 8 px marker in the accent, ringed 2 px in the window's ground. */
+.chart-dot-track {
+  position: relative;
+  align-self: stretch;
+}
+
+.chart-dot {
+  position: absolute;
+  top: calc(50% - 4px);
+  left: calc(var(--at) * 100% - 4px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* Words in place of a dot, in the caption's ink. */
+.chart-dots-none {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
  * kept inside the tracks at either end. */
 .chart-box-axis .chart-ticks {

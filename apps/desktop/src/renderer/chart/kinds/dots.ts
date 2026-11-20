@@ -1,7 +1,8 @@
-/** @fileoverview A dot plot's kind, whose window says it is not drawn yet. */
+/** @fileoverview A dot plot's kind: a dot per value at its rows, or at the sum or mean of another column. */
 
 import type { DotsPlot } from "@document";
 import { m } from "@paraglide/messages";
+import { dots as drawDots } from "../dots.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -18,5 +19,12 @@ export const dots: ChartKind<DotsPlot> = (plot) => ({
   },
   numbered: plot.of === undefined ? [] : [plot.of],
   valued: [plot.by],
-  drawing: () => undrawn,
+  drawing: (tally) =>
+    tally.t !== "groups" && tally.t !== "mean"
+      ? undefined
+      : {
+          ...undrawn,
+          empty: tally.groups.length === 0,
+          draw: (height) => drawDots(plot, tally, height),
+        },
 });

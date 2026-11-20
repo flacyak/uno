@@ -537,6 +537,7 @@
   "chart_form_hint_change": "Enter applies · Esc closes",
   "chart_inserted": "inserted {title}",
   "chart_bars_more": "+{count} more",
+  "chart_dots_none": "no numbers",
   "chart_bars_past": "more than {count} values · later ones are counted in the rest",
   "chart_points": [
     {
