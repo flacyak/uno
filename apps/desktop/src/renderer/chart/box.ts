@@ -6,8 +6,9 @@
 import type { BoxTally } from "@engine";
 import type { Box, Within } from "@tally";
 import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { axis } from "./axes.ts";
+import { axis, tickLabels } from "./axes.ts";
 import { barsBox } from "./bars.ts";
 import { row, rowsIn } from "./rows.ts";
 
@@ -53,7 +54,9 @@ export function boxes(rows: readonly Boxed[], all: boolean, height: number): HTM
   const up = axis(Math.min(...ends), Math.max(...ends));
   const [low, high] = [up.ticks[0]!, up.ticks.at(-1)!];
   const at = (x: number) => Math.min(Math.max((x - low) / (high - low), 0), 1);
-  const shown = rows.slice(0, rowsIn(height));
+  // The axis's labels take a row, and a line of the rows left out another.
+  const fits = Math.max(rowsIn(height) - 1, 0);
+  const shown = rows.length <= fits ? rows : rows.slice(0, Math.max(fits - 1, 0));
   const plot = barsBox("chart-boxes");
   for (const { label, box } of shown) {
     const [q1, median, q3] = [box.five[1]!, box.five[2]!, box.five[3]!].map(middle);
@@ -63,8 +66,23 @@ export function boxes(rows: readonly Boxed[], all: boolean, height: number): HTM
       mark("chart-whisker", at(whiskLow!), at(whiskHigh!)),
       mark("chart-box", at(q1!), at(q3!)),
       mark("chart-median", at(median!), at(median!)),
+      ...[...box.below.buckets, ...box.above.buckets].map((b) => {
+        const x = at(middle([b.low, b.high]));
+        return mark("chart-past", x, x);
+      }),
     );
     plot.append(row(label, track));
   }
+  const left = rows.length - shown.length;
+  if (left > 0) plot.append(el("div", "chart-bars-line", m.chart_bars_more({ count: num(left) })));
+  const ticks = el("div", "chart-ticks x");
+  for (const [i, label] of tickLabels(up).entries()) {
+    label.style.setProperty("--at", `${at(up.ticks[i]!)}`);
+    label.style.setProperty("--wide", `${label.textContent!.length}ch`);
+    ticks.append(label);
+  }
+  const under = el("div", "chart-bar-row chart-box-axis");
+  under.append(el("span"), ticks);
+  plot.append(under);
   return plot;
 }

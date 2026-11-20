@@ -122,5 +122,29 @@ test("a mark past the span stands at its edge, and the rows a plot cannot hold a
   };
   expect(marks(boxes([{ label: "a", box: wide }], false, TALL))[0]![0]).toBe("chart-whisker 0 1");
   const many = Array.from({ length: 40 }, (_, i) => ({ label: `${i}`, box: boxAt(i) }));
-  expect(boxes(many, false, TALL).querySelectorAll(".chart-box-track").length).toBe(rowsIn(TALL));
+  expect(boxes(many, false, TALL).querySelectorAll(".chart-box-track").length).toBeLessThan(
+    rowsIn(TALL),
+  );
+});
+
+test("a number past a whisker is a ring, the axis is labelled under the rows, and a line says how many rows are left out", () => {
+  const past: Box = {
+    ...boxAt(50),
+    span: [
+      [0, 0],
+      [100, 100],
+    ],
+    above: { rows: 3, buckets: [{ low: 90, high: 90, rows: 3 }] },
+  };
+  const box = boxes([{ label: "a", box: past }], false, TALL);
+  expect(marks(box)[0]!.at(-1)).toBe("chart-past 0.9 0.9");
+  const ticks = [...box.querySelectorAll(".chart-box-axis .chart-tick")].map((t) => t.textContent);
+  expect(ticks).toStrictEqual(["0", "50", "100"]);
+  const many = Array.from({ length: 40 }, (_, i) => ({ label: `${i}`, box: boxAt(i) }));
+  const shown = rowsIn(TALL) - 2;
+  const crowded = boxes(many, false, TALL);
+  expect(crowded.querySelectorAll(".chart-box-track")).toHaveLength(shown);
+  expect(crowded.querySelector(".chart-bars-line")!.textContent).toContain(
+    `${many.length - shown}`,
+  );
 });
