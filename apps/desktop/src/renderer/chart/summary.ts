@@ -13,8 +13,9 @@ import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
 import type { Group, Groups, Sample, StackTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
-import { list, num, percent } from "@renderer/locale";
-import type { TimeLevel } from "@tally";
+import { list, num, percent, places } from "@renderer/locale";
+import type { Box, Level, TimeLevel } from "@tally";
+import { edgeWords } from "./histogram.ts";
 import { fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
 
@@ -121,6 +122,27 @@ export function spannedOver({ sum }: TimePlot, level: TimeLevel): Told {
     to: name(level.span - 1),
     most: name(most),
     value,
+  });
+  return { span, each: [], more: 0 };
+}
+
+/**
+ * binnedOver gives what a histogram's summary says of `level`, past its rows:
+ * the edges of its span, its bins' width, the bin of the span with the most
+ * rows, and the median of `box`.
+ */
+export function binnedOver(level: Level, box: Box): Told {
+  const { at, spans, rows } = level;
+  const inSpan = (i: number) => i >= at && i < at + spans;
+  const most = rows.reduce((top, n, i) => (inSpan(i) && n > rows[top]! ? i : top), at);
+  const words = (i: number) => edgeWords(level, i);
+  const span = m.chart_summary_histogram({
+    from: words(at),
+    to: words(at + spans),
+    step: places(Number(`${level.step}e${level.power}`), -level.power),
+    most: m.chart_bin({ from: words(most), to: words(most + 1) }),
+    value: num(rows[most]!),
+    median: num(box.five[2]![0]),
   });
   return { span, each: [], more: 0 };
 }

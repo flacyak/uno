@@ -454,6 +454,82 @@
   left: auto;
 }
 
+/* A box plot's marks, from box.ts, from --from to --to of their track: the
+ * whiskers a 2 px accent line with 8 px caps centred on its ends, the box
+ * hinge to hinge with 2 px corners, and a median of the window's ground. */
+.chart-box-track {
+  position: relative;
+  align-self: stretch;
+}
+
+.chart-box-track > * {
+  position: absolute;
+  inset-block: 0;
+  left: calc(var(--from) * 100%);
+  width: calc((var(--to) - var(--from)) * 100%);
+}
+
+.chart-whisker {
+  inset-block: calc(50% - 4px);
+  width: calc((var(--to) - var(--from)) * 100% + 2px);
+  margin-left: -1px;
+  border-inline: 2px solid var(--accent);
+  background: linear-gradient(var(--accent) 0 0) center / 100% 2px no-repeat;
+}
+
+.chart-box {
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.chart-median {
+  width: 2px;
+  translate: -1px 0;
+  background: var(--surface);
+}
+
+/* A box plot's rows scroll sideways under their labels, which stand still,
+ * over the window's ground, as box.ts widens the tracks. */
+.chart-boxes {
+  width: max-content;
+  min-width: 100%;
+}
+
+.chart-boxes .chart-bar-row.cursor .chart-bar-label {
+  background: var(--accent-b);
+}
+
+.chart-boxes .chart-bar-label {
+  position: sticky;
+  left: var(--bars-inset);
+  z-index: 1;
+  align-self: stretch;
+  align-content: center;
+  background: var(--surface);
+}
+
+/* A number past a whisker is an 8 px ring, accent round the window's ground. */
+.chart-past {
+  inset-block: calc(50% - 4px);
+  width: 8px;
+  translate: -4px 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+/* The axis's labels stand under the rows' tracks, each centred on its tick,
+ * kept inside the tracks at either end. */
+.chart-box-axis .chart-ticks {
+  position: relative;
+  align-self: stretch;
+}
+
+.chart-box-axis .chart-tick {
+  left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+}
+
 /* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it
  * starts `--from` of the span past zero and runs `--part` of it rightward, and
  * under zero the same leftward. Each after the first gives --segment-gap of
@@ -556,7 +632,8 @@
  * SVG paints from the whole px nearest its start, so the points start on one,
  * and a gridline lands where its label centres. */
 .chart-scatter,
-.chart-time {
+.chart-time,
+.chart-histogram {
   display: grid;
   grid-template: minmax(0, 1fr) auto / round(up, var(--gutter), 1px) minmax(0, 1fr);
   column-gap: var(--tick-gap);
@@ -602,9 +679,56 @@
 /* An over-time chart's plot, from columns.ts, laid out as a scatter's. A label
  * under the periods centres under its column, kept from the gutter's start to
  * the periods' right edge, which timeAxis.ts reckons with in thinning them. */
-.chart-time {
+.chart-time,
+.chart-histogram {
   --x-first: 0px;
   --x-last: 0px;
+}
+
+/* A histogram's plot, from histogram.ts: its periods scroll sideways alone, so
+ * a wheel turned up or down goes on, and the y axis ends where they do. */
+.chart-histogram .chart-ticks.y {
+  margin-bottom: var(--below, 0px);
+}
+
+.chart-along {
+  --fade: 16px;
+  overflow: auto hidden;
+}
+
+/* A side with bins past it fades out over --fade, as histogram.ts marks it. */
+.chart-along.more-before {
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade));
+}
+
+.chart-along.more-after {
+  mask-image: linear-gradient(to left, transparent, #000 var(--fade));
+}
+
+.chart-along.more-before.more-after {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade),
+    #000 calc(100% - var(--fade)),
+    transparent
+  );
+}
+
+.chart-bins {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+/* A label under the bins centres under its edge, kept inside them. */
+.chart-histogram .chart-ticks.x {
+  grid-column: 1;
+}
+
+.chart-histogram .chart-ticks.x .chart-tick {
+  left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
 }
 
 .chart-time .chart-ticks.x .chart-tick {
@@ -654,7 +778,8 @@
   border-radius: 0 0 4px 4px;
 }
 
-.chart-time.crowded .chart-column {
+.chart-time.crowded .chart-column,
+.chart-histogram.crowded .chart-column {
   width: max(1px, 100%);
 }
 
@@ -838,6 +963,8 @@
   --key-length: 10px;
   --key-thick: 2px;
   position: absolute;
+  /* Over a plot's scroller, which stands over the window's right edge. */
+  z-index: 2;
   max-width: calc(100% - 2 * var(--tip-edge));
   display: flex;
   align-items: center;

@@ -100,11 +100,12 @@ test("another insert keeps the window there, and two Enters add one window", asy
 });
 
 test("the form makes a pie of region and a scatter of units, which draw from the engine", async () => {
-  const kind = (t: string): HTMLSelectElement => {
-    const chosen = document.querySelector<HTMLSelectElement>('.chart-form select[name="kind"]')!;
-    chosen.value = t;
-    chosen.dispatchEvent(new Event("change"));
-    return chosen;
+  const kind = (t: string): HTMLInputElement => {
+    const tile = document.querySelector<HTMLInputElement>(
+      `.chart-form input[name="kind"][value="${t}"]`,
+    )!;
+    tile.click();
+    return tile;
   };
   await openForm();
   await enter(kind("pie"));

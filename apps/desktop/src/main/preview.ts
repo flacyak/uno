@@ -286,6 +286,41 @@ const DATES = { column: 500, open: 2_400, order: 5_000, per: 7_600, enter: 10_20
 const TO_WEEK = 2;
 
 /**
+ * The histogram story's beats: revenue selected, the chart form opened on a
+ * histogram of it, Enter, a click on a bin for the cursor, End to the last
+ * bin past the span, and Home to the first.
+ */
+const HISTOGRAM = {
+  column: 500,
+  open: 2_400,
+  enter: 5_400,
+  cursor: 8_400,
+  end: 10_200,
+  home: 12_600,
+  stop: 15_000,
+};
+/** The revenue cell the story selects: the gutter comes first, so revenue is a row's seventh cell. */
+const REVENUE_CELL = "tbody tr:nth-child(3) td:nth-child(7)";
+
+/**
+ * The box story's beats: revenue selected, the chart form opened on it, its
+ * kind stepped from Histogram to Box plot, By stepped to region, Enter, and a
+ * click on a region's row, then Down to the next.
+ */
+const BOX = {
+  column: 500,
+  open: 2_400,
+  kind: 4_400,
+  by: 6_400,
+  enter: 9_000,
+  cursor: 11_400,
+  down: 13_400,
+  stop: 16_000,
+};
+/** How many Downs take By from None, past the date, to region. */
+const TO_REGION = 2;
+
+/**
  * The moving story's beats: the last of region's bars carried to the top by
  * its label, the cursor put on the second bar, Alt+Down twice, and Alt+Up.
  */
@@ -307,13 +342,13 @@ const TO_REVENUE = 2;
 /**
  * The kinds story's beats: the insert story's, once for a pie of region and
  * once for a scatter of units, with the kind chosen in the form before Enter.
- * Each Down chooses the next kind after bars, KIND_STEP_MS apart. The gutter
+ * Each Down chooses the next kind after bars, over time before scatter, KIND_STEP_MS apart. The gutter
  * comes first, so region is a row's third cell and units its sixth, clicked in
  * a row under the pie's window.
  */
 const KINDS = [
   { row: 3, cell: 3, downs: 1, column: 500, menu: 2_000, chart: 3_600, choose: 6_400 },
-  { row: 15, cell: 6, downs: 2, column: 10_000, menu: 11_600, chart: 13_200, choose: 16_000 },
+  { row: 15, cell: 6, downs: 3, column: 10_000, menu: 11_600, chart: 13_200, choose: 16_000 },
 ];
 /**
  * The change story's beats: the edit button pressed on a window of region's
@@ -922,6 +957,8 @@ const STORIES: Record<string, Story> = {
   kinds: { end: KINDS_END, script: playKinds },
   dates: { end: DATES.end, script: playDates },
   stacked: { end: STACKED.end, script: playStacked },
+  histogram: { end: HISTOGRAM.stop, script: playHistogram },
+  box: { end: BOX.stop, script: playBox },
   moving: { end: MOVING.end, script: playMoving },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
@@ -1129,6 +1166,67 @@ async function playDates(win: BrowserWindow, at: Clock): Promise<void> {
 }
 
 /**
+ * playHistogram performs the histogram story: a revenue cell selected, the
+ * chart form opened on it by Ctrl+Shift+G on a histogram, Enter, and the keys
+ * stepping the cursor to the last bin, past the span, and back to the first,
+ * each scrolled into sight.
+ */
+async function playHistogram(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(HISTOGRAM.column);
+  await pressOn(REVENUE_CELL);
+  await glideTo(KEYED_REST);
+  await at(HISTOGRAM.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(HISTOGRAM.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-column")', "the histogram never drew");
+  await at(HISTOGRAM.cursor);
+  await pressOn(".chart .chart-period:nth-child(12)");
+  await at(HISTOGRAM.end);
+  press(win, "End");
+  await at(HISTOGRAM.home);
+  press(win, "Home");
+  await at(HISTOGRAM.stop);
+}
+
+/**
+ * playBox performs the box story: revenue selected, the form opened on it by
+ * Ctrl+Shift+G, Down on the kinds from Histogram to Box plot, By set to
+ * region, Enter, then a click on a row's label for its box's numbers, and
+ * Down to the next row.
+ */
+async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(BOX.column);
+  await pressOn(REVENUE_CELL);
+  await glideTo(KEYED_REST);
+  await at(BOX.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(BOX.kind);
+  // The keys open in Of, after the kinds.
+  press(win, "Tab", ["shift"]);
+  press(win, "Down");
+  await glideTo('.chart-form select[name="box-by"]');
+  await at(BOX.by);
+  press(win, "Tab");
+  press(win, "Tab");
+  await presses(win, "Down", TO_REGION, KIND_STEP_MS);
+  await at(BOX.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-box")', "the box plot never drew");
+  await at(BOX.cursor);
+  await pressOn(".chart .chart-bar-row:nth-child(2) .chart-bar-label");
+  await at(BOX.down);
+  press(win, "Down");
+  await at(BOX.stop);
+}
+
+/**
  * playMoving performs the moving story: the last bar carried by its label up
  * past the three above it, a click on the second bar for the cursor, Alt+Down
  * twice, and Alt+Up, each saying on the status line where the bar stands.
@@ -1197,7 +1295,7 @@ async function playKinds(win: BrowserWindow, at: Clock): Promise<void> {
     // The first form waits for its module, so the keys wait for the form.
     await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
     // The pointer leaves the source's name for the kind the keys change.
-    await glideTo('.chart-form select[name="kind"]');
+    await glideTo(".chart-form .chart-tile:has(input:checked)");
     await at(kind.choose);
     // The keys open in By, the field after the kind.
     press(win, "Tab", ["shift"]);

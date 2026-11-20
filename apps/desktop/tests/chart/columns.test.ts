@@ -10,7 +10,8 @@
 import { expect, test } from "vite-plus/test";
 
 import type { TimeLevel } from "@tally";
-import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
+import { axis } from "@renderer/chart/axes";
+import { COLUMN_PITCH_LEAST, columns, fitted, sized, upward } from "@renderer/chart/columns";
 import type { Fitted } from "@renderer/chart/columns";
 import { BARS_INSET } from "@renderer/chart/rows";
 import { periodTargets } from "@renderer/chart/tooltip";
@@ -160,4 +161,19 @@ test("the keys and the pointer step through every period, a zero too, each named
   const slot = box.querySelectorAll(".chart-period")[3]!;
   expect(summed.under(slot, 0, 0)).toBe(3);
   expect(summed.all[3]!.at).toBe(slot.querySelector(".chart-column"));
+});
+
+test("a plot of another kind of column takes the gridlines, labels and sizes an over-time chart's does", () => {
+  const box = columns(drawn(DAYS), false, ROOM);
+  const up = axis(0, Math.max(...DAYS.rows));
+  const { span, grid, labels } = upward(up);
+  expect(span).toBe(4);
+  expect(grid.outerHTML).toBe(box.querySelector(".chart-gridlines")!.outerHTML);
+  expect(labels.outerHTML).toBe(box.querySelector(".chart-ticks.y")!.outerHTML);
+  const other = document.createElement("div");
+  sized(other, up, false);
+  expect(other.classList.contains("crowded")).toBe(true);
+  for (const size of ["--zero", "--inset", "--gutter", "--tick-gap", "--bar-thick", "--bar-gap"]) {
+    expect(other.style.getPropertyValue(size), size).toBe(box.style.getPropertyValue(size));
+  }
 });

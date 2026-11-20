@@ -101,7 +101,7 @@ test("the edit button opens the form on the chart, and Apply on rep refolds and 
 
 test("a new title shows at once, and the tally the engine sends again reads no bytes", async () => {
   await edit();
-  const title = document.querySelector<HTMLInputElement>(".chart-form input")!;
+  const title = document.querySelector<HTMLInputElement>('.chart-form input[type="text"]')!;
   title.value = "Who sold";
   const heard = vi.spyOn(shell.charts!, "hear");
   const before = reads;

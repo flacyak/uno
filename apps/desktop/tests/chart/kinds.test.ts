@@ -15,6 +15,8 @@ import { bars as drawBars } from "@renderer/chart/bars";
 import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
+import { box } from "@renderer/chart/kinds/box";
+import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
 import { scatter } from "@renderer/chart/kinds/scatter";
@@ -176,7 +178,7 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack });
+  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box });
 });
 
 /** Rows per region by channel, two regions in two channels and Other. */
@@ -299,4 +301,11 @@ test("an over-time chart's kind names its date column and how it reads it, for i
   expect(time(DATED).dated).toStrictEqual({ at: DATED.at, reading: "day" });
   expect(time({ t: "time", at: DATED.at, per: "auto", unit: "ms" }).dated?.reading).toBe("ms");
   expect(bars(ROWS).dated).toBeUndefined();
+});
+
+test("a box plot is titled by its column, and by both where it splits by another", () => {
+  const revenue = { col: 5, header: "revenue" };
+  const region = { col: 1, header: "region" };
+  expect(madeTitle({ t: "box", of: revenue, span: "most" })).toBe("revenue");
+  expect(madeTitle({ t: "box", of: revenue, by: region, span: "most" })).toBe("revenue per region");
 });

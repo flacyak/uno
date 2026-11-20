@@ -14,6 +14,17 @@ export type { Group, Groups, Measure, SavedGroups } from './groups.ts';
 export { SCATTER_POINTS_AT_MOST, SampleFold } from './sample.ts';
 export type { Marks, SavedSample } from './sample.ts';
 export type { Point, Sample } from './sample.ts';
+export { FIGURES_AT_MOST, SPREAD_AT_MOST, SpreadFold } from './spread.ts';
+export type { Bucket, Figures, SavedSpread, Spreading } from './spread.ts';
+export type { Box, Past, Span, Spread, Within } from './spread.ts';
+export {
+  BOX_VALUES_AT_MOST,
+  SPREAD_VALUE_AT_MOST,
+  SpreadsFold,
+} from './spreads.ts';
+export type { SavedSpreads, Spreads, ValueSpread } from './spreads.ts';
+export { edgeOf } from './levels.ts';
+export type { Level } from './levels.ts';
 export { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from './split.ts';
 export type {
   Measured,

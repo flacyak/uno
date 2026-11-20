@@ -19,7 +19,7 @@ import { read as ingestRead } from '@ingest';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { GROUPS_SENT, PER } from '@tally';
-import type { Per } from '@tally';
+import type { Per, Span } from '@tally';
 import type {
   CarriedChart,
   Chart,
@@ -1099,6 +1099,14 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   scatter: ['t', 'x', 'y'],
   time: ['t', 'at', 'sum', 'per', 'order', 'unit'],
   stack: ['t', 'by', 'split', 'sum', 'order'],
+  histogram: ['t', 'of', 'span'],
+  box: ['t', 'of', 'by', 'span'],
+};
+
+/** What a histogram may span. */
+const SPAN: Expects<Span> = {
+  is: (v): v is Span => v === 'most' || v === 'all',
+  not: 'is not most or all',
 };
 
 /**
@@ -1146,7 +1154,8 @@ function isPlotKind(t: string): t is Plot['t'] {
  * parsePlot reads what a chart draws. Bars and pie name the `by` column whose
  * values they show, and may name a `sum` column to add up per value. Scatter
  * names its `x` and `y`, an over-time chart is as parseOverTime reads it,
- * and a stacked bar chart as parseStacked reads it. It refuses a kind or a key it does not know, so a
+ * a stacked bar chart as parseStacked reads it, and a histogram names the
+ * column `of` its numbers and its `span`. It refuses a kind or a key it does not know, so a
  * later build's plot is carried whole and never drawn or saved without what
  * it added.
  */
@@ -1164,6 +1173,14 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'scatter') return { t, x: column('x'), y: column('y') };
   if (t === 'time') return parseOverTime(where, p);
   if (t === 'stack') return parseStacked(where, p);
+  if (t === 'histogram' || t === 'box') {
+    const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
+    if (t === 'histogram' || p['by'] === undefined) return { t, of, span };
+    const by = column('by');
+    if (by.col === of.col)
+      throw new Error(`${where}: by names the column of names`);
+    return { t, of, by, span };
+  }
   const sum = p['sum'] === undefined ? {} : { sum: column('sum') };
   if (t === 'pie') return { t, by: column('by'), ...sum };
   return { t, by: column('by'), ...sum, ...movedOf(where, p) };

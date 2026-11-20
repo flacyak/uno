@@ -105,6 +105,8 @@ export interface Target {
   said: () => Reading[];
   /** Whether the box says each reading on a line of its own, keyed, as a stack's bar. */
   lines?: boolean;
+  /** reveal scrolls the mark into view where the keys step to it, for a plot that scrolls. */
+  reveal?: () => void;
 }
 
 /** The marks of a drawing, in the order the keys step through them. */
@@ -146,7 +148,7 @@ function column({ header, col }: ChartColumn): HTMLElement {
 }
 
 /** among gives the hit test of `all`, whose marks are the `selector` a pointer is over. */
-function among(all: readonly Target[], selector: string): Targets["under"] {
+export function among(all: readonly Target[], selector: string): Targets["under"] {
   return (hit) => {
     const mark = hit instanceof Element ? hit.closest(selector) : null;
     const at = all.findIndex((target) => target.mark === mark);
@@ -418,6 +420,8 @@ export class Tooltip {
       if (e.pointerType !== TOUCH) this.clear();
     });
     plot.addEventListener("focusout", () => this.clear());
+    // A scroll in the plot moves the marks under a still pointer, or from under the box.
+    plot.addEventListener("scroll", () => this.scrolled(), { capture: true });
   }
 
   /**
@@ -474,6 +478,22 @@ export class Tooltip {
     this.words.replaceChildren();
   }
 
+  /**
+   * scrolled puts the cursor on the mark under the pointer where a pointer put
+   * it, or stands the box by its mark again, hidden while the mark is out of
+   * the plot's sight.
+   */
+  private scrolled(): void {
+    const point = this.cursor?.point;
+    if (point !== undefined) this.hover(document.elementFromPoint(point.x, point.y), point);
+    else if (this.cursor !== undefined) {
+      const by = this.targets.all[this.cursor.at]!.at.getBoundingClientRect();
+      const sight = this.plot.getBoundingClientRect();
+      this.box.hidden = by.right <= sight.left || by.left >= sight.right;
+      this.stand(by);
+    }
+  }
+
   /** point puts the cursor on the mark under the pointer at `e`. */
   private point(e: PointerEvent): void {
     this.hover(e.target, { x: e.clientX, y: e.clientY });
@@ -503,6 +523,7 @@ export class Tooltip {
       this.say(target);
     }
     this.cursor = { at, point };
+    if (point === undefined) target.reveal?.();
     this.box.hidden = false;
     this.stand(
       point === undefined ? target.at.getBoundingClientRect() : new DOMRect(point.x, point.y),

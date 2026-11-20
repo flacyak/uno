@@ -1,6 +1,56 @@
 /* The chart form, in the pop-up forms' look (form.css). Each rule outranks
  * form.css's, whichever loads first. */
 
+/* The kinds, from tiles.ts: a row per question, its tiles two to a row on one
+ * grid, each a control's height, wrapping a long kind's words. A tile's radio
+ * fills it unseen, so a click anywhere on it chooses it. */
+.pop-form.chart-form .chart-kinds {
+  display: contents;
+}
+
+.pop-form.chart-form .chart-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.pop-form.chart-form .chart-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 26px;
+  padding: 4px 8px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--ink-2);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.pop-form.chart-form .chart-tile input {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  margin: 0;
+  opacity: 0;
+}
+
+.pop-form.chart-form .chart-tile:has(:checked) {
+  color: var(--ink);
+  background: var(--accent-b);
+  border-color: var(--accent);
+}
+
+.pop-form.chart-form .chart-tile:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pop-form.chart-form .chart-tile:has(:disabled) {
+  color: var(--ink-3);
+}
+
 /* Refresh takes what Every…'s number and unit leave. The number holds three
  * digits, EVERY_AT_MOST's, inside an input's padding and border. */
 .pop-form.chart-form .schedule {

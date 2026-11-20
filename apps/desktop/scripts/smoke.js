@@ -357,6 +357,112 @@ await writeFile(
   }),
 );
 
+// A workspace of two histograms of an export of amounts spread over two
+// decades, most from 10 to 1,000, and a few far past them either side, so a
+// level's bins reach past its 1st to 99th percentile: one in a new window's
+// size at the sheet's foot, one of the least width at its top. The amounts
+// come from a fixed sequence, so every run draws the same bins.
+const spreadFile = join(scratch, "sent", "spread.csv");
+const spreadHeader = "amount";
+const spreadRows = 2_000;
+const spreadSeed = 1_234_567;
+const spreadModulus = 2 ** 31 - 1;
+const spreadMultiplier = 48_271;
+const spreadDecades = 2;
+const spreadLeast = 10;
+const spreadFar = ["0.5", "0.9", "4800", "5200", "9900"];
+const spreadActiveRow = 11;
+let spreadState = spreadSeed;
+const spreadAmounts = Array.from({ length: spreadRows }, () => {
+  spreadState = (spreadState * spreadMultiplier) % spreadModulus;
+  // Two draws averaged, so the amounts hump in the middle of their decades.
+  const first = spreadState / spreadModulus;
+  spreadState = (spreadState * spreadMultiplier) % spreadModulus;
+  const both = (first + spreadState / spreadModulus) / 2;
+  return `${Math.round(spreadLeast * 10 ** (both * spreadDecades))}`;
+});
+await writeFile(spreadFile, `${[spreadHeader, ...spreadAmounts, ...spreadFar].join("\n")}\n`);
+const spread = join(scratch, "sent", "spread.uno");
+const spreadSource = {
+  id: "spread",
+  name: "spread.csv",
+  path: spreadFile,
+  rows: spreadRows + spreadFar.length,
+  cols: 1,
+  // A cell between the two windows, so neither fades aside from it.
+  state: { active: { row: spreadActiveRow, col: 0 } },
+};
+const spreadChart = {
+  source: spreadSource.id,
+  title: "",
+  refresh: 0,
+  plot: { t: "histogram", of: { col: 0, header: spreadHeader }, span: "most" },
+};
+await writeFile(
+  spread,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [spreadSource],
+    active: spreadSource.id,
+    log: [],
+    charts: [
+      { ...spreadChart, id: "c1", place: { ...chartSize, x: 0, y: 1 } },
+      { ...spreadChart, id: "c2", place: { ...chartSize, width: leastSize.width, x: 1, y: 0 } },
+    ],
+    extra: new Map(),
+    at: spread,
+  }),
+);
+
+// A workspace of two box plots of an export of four regions' amounts, each
+// spread its own way, East's with two far past its whiskers: one box per
+// region in a new window's size at the sheet's foot, and one box of every
+// amount in a window of the least width at its top.
+const boxedFile = join(scratch, "sent", "boxed.csv");
+const boxedHeader = "region,amount";
+const boxedRegions = { North: [10, 90], South: [50, 250], East: [5, 55], West: [100, 50] };
+const boxedRows = Object.entries(boxedRegions).flatMap(([region, [base, range]]) =>
+  Array.from({ length: spreadRows / 10 }, (_, i) => `${region},${base + ((i * 37) % range)}`),
+);
+boxedRows.push("East,600", "East,900");
+await writeFile(boxedFile, `${[boxedHeader, ...boxedRows].join("\n")}\n`);
+const boxed = join(scratch, "sent", "boxed.uno");
+const boxedSource = {
+  ...spreadSource,
+  id: "boxed",
+  name: "boxed.csv",
+  path: boxedFile,
+  rows: boxedRows.length,
+  cols: 2,
+};
+const amountOf = { col: 1, header: "amount" };
+const boxedChart = { source: boxedSource.id, title: "", refresh: 0 };
+await writeFile(
+  boxed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [boxedSource],
+    active: boxedSource.id,
+    log: [],
+    charts: [
+      {
+        ...boxedChart,
+        id: "c1",
+        plot: { t: "box", of: amountOf, by: { col: 0, header: "region" }, span: "most" },
+        place: { ...chartSize, x: 0, y: 1 },
+      },
+      {
+        ...boxedChart,
+        id: "c2",
+        plot: { t: "box", of: amountOf, span: "most" },
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: boxed,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -714,6 +820,8 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_PIES: pies,
       UNO_SMOKE_TIMED: timed,
       UNO_SMOKE_STACKED: stacked,
+      UNO_SMOKE_SPREAD: spread,
+      UNO_SMOKE_BOXED: boxed,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,

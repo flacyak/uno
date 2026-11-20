@@ -28,7 +28,9 @@ const NAMED = { name: "sales-q3.csv" };
 const SAID = offered(false).map((locale) => ({
   labels: [
     m.chart_form_source,
-    m.chart_form_kind,
+    m.chart_kinds_compare,
+    m.chart_kinds_trend,
+    m.chart_kinds_relate,
     m.chart_form_by,
     m.chart_form_sum,
     m.chart_form_x,
