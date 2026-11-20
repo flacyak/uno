@@ -244,13 +244,14 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     }
     return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
   }
-  const { by, sum } = plot;
+  const by = plot.by;
+  const sum = plot.t === 'dots' ? plot.of : plot.sum;
   const fold =
     sum === undefined ? new GroupsFold() : new GroupsFold('sum', 'point');
   for (let r = 0; r < rows; r++) {
     fold.add(cell(r, by), sum === undefined ? '' : cell(r, sum));
   }
-  const moved = plot.t === 'bars' ? plot.order : [];
+  const moved = plot.t === 'pie' ? [] : plot.order;
   return { t: 'groups', plot, coverage, ...fold.snapshot(moved) };
 }
 
@@ -727,6 +728,28 @@ test('an edit moves a box plot by a column by its one row, and a save keeps the 
   reopened.attach(REVENUE_BOXES, HEADERS);
   expect(reopened.from()).toBe(ROWS);
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test("dots of rows or a sum share a bar chart's fold, and read as its pure fold", () => {
+  const [by, of] = [column(CHANNEL), column(UNITS)];
+  const pairs: Array<[Plot, Plot]> = [
+    [
+      { t: 'bars', by },
+      { t: 'dots', by },
+    ],
+    [
+      { t: 'bars', by, sum: of },
+      { t: 'dots', by, of, measure: 'sum', order: ['web'] },
+    ],
+  ];
+  for (const [bars, plot] of pairs) {
+    const tallies = folded([{ ...REGION_ROWS, plot: bars }]);
+    tallies.attach({ ...REGION_ROWS, plot }, HEADERS);
+    expect(tallies.from()).toBe(ROWS);
+    expect(tallies.read(ROWS, true)).toStrictEqual([
+      [REGION_ROWS.id, pure(plot)],
+    ]);
+  }
 });
 
 test('an edit to a number moves a histogram by its one row, and a save keeps the fold, which reads back with no pass', async () => {

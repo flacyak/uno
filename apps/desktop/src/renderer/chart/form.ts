@@ -325,8 +325,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column; the form makes no dot plot yet.
+    this.kind.value = plot.t === "stack" || plot.t === "dots" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time") {
       this.per.value = plot.per;
@@ -337,7 +337,7 @@ export class ChartForm {
       const by = plot.t === "box" ? plot.by : undefined;
       const unused = [undefined, undefined, undefined, undefined, undefined];
       this.offer(this.placeAt(plot.of), [...unused, plot.of, by]);
-    } else this.offer(this.placeAt(plot.by), [plot.sum]);
+    } else this.offer(this.placeAt(plot.by), [plot.t === "dots" ? plot.of : plot.sum]);
   }
 
   /** placeAt gives where the source holds `column`, or else its first column. */

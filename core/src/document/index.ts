@@ -65,6 +65,8 @@ export type {
   Chart,
   ChartColumn,
   ChartPlace,
+  DotMeasure,
+  DotsPlot,
   Plot,
   StackPlot,
   TimePlot,

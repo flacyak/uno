@@ -25,6 +25,8 @@ import type {
   Chart,
   ChartColumn,
   ChartPlace,
+  DotMeasure,
+  DotsPlot,
   Plot,
   StackPlot,
   TimePlot,
@@ -1101,6 +1103,13 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   stack: ['t', 'by', 'split', 'sum', 'order'],
   histogram: ['t', 'of', 'span'],
   box: ['t', 'of', 'by', 'span'],
+  dots: ['t', 'by', 'of', 'measure', 'order'],
+};
+
+/** What a dot plot's dots may stand at. */
+const MEASURE: Expects<DotMeasure> = {
+  is: (v): v is DotMeasure => v === 'sum',
+  not: 'is not sum',
 };
 
 /** What a histogram may span. */
@@ -1173,6 +1182,7 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'scatter') return { t, x: column('x'), y: column('y') };
   if (t === 'time') return parseOverTime(where, p);
   if (t === 'stack') return parseStacked(where, p);
+  if (t === 'dots') return parseDots(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };
@@ -1184,6 +1194,24 @@ export function parsePlot(where: string, value: unknown): Plot {
   const sum = p['sum'] === undefined ? {} : { sum: column('sum') };
   if (t === 'pie') return { t, by: column('by'), ...sum };
   return { t, by: column('by'), ...sum, ...movedOf(where, p) };
+}
+
+/**
+ * parseDots reads a dot plot: its `by`, and a column `of` numbers with the
+ * `measure` its dots stand at, both or neither, and the values a person moved.
+ */
+function parseDots(where: string, p: Record<string, unknown>): DotsPlot {
+  const by = columnOf(where, p, 'by');
+  const moved = movedOf(where, p);
+  if (p['of'] === undefined) {
+    if (p['measure'] !== undefined)
+      throw new Error(`${where}: measure names no column of numbers`);
+    return { t: 'dots', by, ...moved };
+  }
+  const of = columnOf(where, p, 'of');
+  if (of.col === by.col) throw new Error(`${where}: of and by name one column`);
+  const measure = required(p, 'measure', MEASURE, where);
+  return { t: 'dots', by, of, measure, ...moved };
 }
 
 /** columnOf reads the column `p` names at `key`. */

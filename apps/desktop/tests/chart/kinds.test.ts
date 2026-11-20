@@ -16,6 +16,7 @@ import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
+import { dots } from "@renderer/chart/kinds/dots";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
@@ -178,7 +179,14 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box });
+  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots });
+});
+
+test("a dot plot's kind titles its rows or its sum per value, and reads its numbers from its column", () => {
+  const sums = dots({ t: "dots", by: REGION, of: REVENUE, measure: "sum" });
+  expect([sums.title(), sums.numbered]).toStrictEqual(["sum of revenue per region", [REVENUE]]);
+  const rows = dots({ t: "dots", by: REGION });
+  expect([rows.title(), rows.numbered]).toStrictEqual(["rows per region", []]);
 });
 
 /** Rows per region by channel, two regions in two channels and Other. */
