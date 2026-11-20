@@ -37,6 +37,7 @@ import { el, message, option } from "@renderer/shell/util";
 import { rereads } from "@renderer/workspace";
 import type { Rereads } from "@renderer/workspace";
 import { PER_WORDS, monthOf } from "./periods.ts";
+import { KindTiles, QUESTIONS } from "./tiles.ts";
 import { madeTitle } from "./window.ts";
 import { PER } from "@tally";
 
@@ -68,14 +69,6 @@ export interface ChartAsks {
 export type Opening =
   | { t: "insert"; col: number }
   | { t: "change"; chart: Pick<Chart, "plot" | "title" | "refresh">; on?: "refresh" };
-
-/** The kinds of chart, in the order the form offers them. */
-const KINDS: ReadonlyArray<readonly [Plot["t"], () => string]> = [
-  ["bars", m.chart_kind_bars],
-  ["pie", m.chart_kind_pie],
-  ["scatter", m.chart_kind_scatter],
-  ["time", m.chart_kind_time],
-];
 
 /** The sizes Per offers, Automatic first, then finest first. */
 const PERS: ReadonlyArray<readonly [TimePlot["per"], () => string]> = [
@@ -155,7 +148,7 @@ const SCATTER_COLUMNS = 2;
 export class ChartForm {
   private readonly form: PopForm;
   private readonly from = select("source");
-  private readonly kind = select("kind");
+  private readonly kind = new KindTiles(QUESTIONS);
   private readonly by = select("by");
   /** The number column bars or a pie sum, or "" for none, which counts the rows. */
   private readonly sum = select("sum");
@@ -226,8 +219,7 @@ export class ChartForm {
     }
     this.from.value = String(sources.indexOf(active));
     this.from.addEventListener("change", () => this.choose());
-    this.kind.append(...KINDS.map(([t, words]) => option(words(), t)));
-    this.kind.addEventListener("change", () => this.ask());
+    this.kind.box.addEventListener("change", () => this.ask());
     this.at.addEventListener("change", () => this.dated());
     this.by.addEventListener("change", () => this.ask());
     this.per.append(...PERS.map(([per, words]) => option(words(), per)));
@@ -264,7 +256,7 @@ export class ChartForm {
 
     const fields = [
       field(m.chart_form_source(), this.from),
-      field(m.chart_form_kind(), this.kind),
+      this.kind.box,
       ...this.timed,
       ...this.grouped,
       ...this.paired,
@@ -373,10 +365,9 @@ export class ChartForm {
     this.y.value = String(yAt ?? "");
 
     const scatters = numbers.length >= SCATTER_COLUMNS;
-    for (const made of this.kind.options) if (made.value === "scatter") made.disabled = !scatters;
+    this.kind.disable("scatter", !scatters);
     if (!scatters && this.kind.value === "scatter") this.kind.value = "bars";
-    for (const made of this.kind.options)
-      if (made.value === "time") made.disabled = dates.length === 0;
+    this.kind.disable("time", dates.length === 0);
     if (dates.length === 0 && this.kind.value === "time") this.kind.value = "bars";
     // A date column selected in the grid opens the form on a chart over time of it.
     if (this.opening.t === "insert" && this.kind.value === "bars" && dates.includes(by)) {

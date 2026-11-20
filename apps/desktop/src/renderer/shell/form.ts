@@ -19,7 +19,6 @@ export const EDGE = 8;
 export const LABELS: ReadonlyArray<() => string> = [
   m.formula_column,
   m.chart_form_source,
-  m.chart_form_kind,
   m.chart_kinds_compare,
   m.chart_kinds_trend,
   m.chart_kinds_relate,

@@ -102,6 +102,9 @@ const NINETY_MINUTES = 90;
 /** The open form's number of minutes or hours. */
 const count = (): HTMLInputElement => document.querySelector<HTMLInputElement>(".count")!;
 
+/** The questions the kind tiles stand under, in the labels' column. */
+const QUESTION_WORDS = [m.chart_kinds_compare(), m.chart_kinds_trend(), m.chart_kinds_relate()];
+
 const REGION_BARS: Plot = { t: "bars", by: { col: REGION, header: "region" } };
 const regionBars = inserting(REGION_BARS);
 
@@ -126,12 +129,28 @@ function form(
   return { asked, box: document.querySelector<HTMLFormElement>(".chart-form")! };
 }
 
-/** The open form's select named `name`. */
+/** The open form's select named `name`, or for "kind" what its tiles hold, as a select would. */
 const select = (name: string): HTMLSelectElement =>
-  document.querySelector<HTMLSelectElement>(`.chart-form select[name="${name}"]`)!;
+  name === "kind"
+    ? (tiles() as unknown as HTMLSelectElement)
+    : document.querySelector<HTMLSelectElement>(`.chart-form select[name="${name}"]`)!;
 
-/** Chooses `value` in the select named `name`, with the keys in it. */
+/** The open form's kind tiles, as the value chosen and their radios. */
+function tiles(): { value: string; options: HTMLInputElement[] } {
+  const options = [
+    ...document.querySelectorAll<HTMLInputElement>('.chart-form input[name="kind"]'),
+  ];
+  return { value: options.find((radio) => radio.checked)?.value ?? "", options };
+}
+
+/** Chooses `value` in the select named `name`, or the kind tile of `value`, with the keys in it. */
 function pick(name: string, value: string): void {
+  if (name === "kind") {
+    const radio = tiles().options.find((option) => option.value === value)!;
+    radio.focus();
+    radio.click();
+    return;
+  }
   select(name).focus();
   select(name).value = value;
   select(name).dispatchEvent(new Event("change"));
@@ -169,12 +188,12 @@ test("Enter inserts bars of the selected column, and closes", async () => {
 test("it offers bars, a pie, a scatter and a chart over time, and opens on bars", () => {
   form();
   const kind = select("kind");
-  const offered = [...kind.options].map((o) => [o.textContent, o.disabled]);
+  const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
   const kinds = [
     m.chart_kind_bars(),
     m.chart_kind_pie(),
-    m.chart_kind_scatter(),
     m.chart_kind_time(),
+    m.chart_kind_scatter(),
   ];
   expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
   expect(kind.value).toBe("bars");
@@ -186,7 +205,9 @@ test("a pie shares out the rows, or a sum, per value of the selected column", as
   pick("sum", String(REVENUE));
   const by = { col: REGION, header: "region" };
   const pie: Plot = { t: "pie", by, sum: { col: REVENUE, header: "revenue" } };
-  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(pie));
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(pie),
+  );
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(pie), "closed"]);
@@ -195,12 +216,14 @@ test("a pie shares out the rows, or a sum, per value of the selected column", as
 test("a scatter asks for X and Y of the number columns, the first two to begin", async () => {
   const { asked, box } = form();
   pick("kind", "scatter");
-  const words = [m.chart_form_source(), m.chart_form_kind(), m.chart_form_x(), m.chart_form_y()];
+  const words = [m.chart_form_source(), ...QUESTION_WORDS, m.chart_form_x(), m.chart_form_y()];
   expect(shown(box)).toStrictEqual([...words, m.chart_form_title_field(), m.chart_form_refresh()]);
   expect([...select("x").options].map((o) => o.textContent)).toStrictEqual(["units", "revenue"]);
   const x = { col: UNITS, header: "units" };
   const scatter: Plot = { t: "scatter", x, y: { col: REVENUE, header: "revenue" } };
-  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(scatter));
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(scatter),
+  );
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(scatter), "closed"]);
@@ -228,7 +251,7 @@ test("another source keeps a scatter's columns by header, or makes bars under tw
 
 test("an empty title shows the one the chart makes, which follows the column", () => {
   const { box } = form();
-  const [by, title] = [select("by"), box.querySelector("input")!];
+  const [by, title] = [select("by"), box.querySelector<HTMLInputElement>('input[type="text"]')!];
   expect(title.placeholder).toBe(madeTitle(REGION_BARS));
   by.value = String(REGION + 1);
   by.dispatchEvent(new Event("change"));
@@ -237,7 +260,7 @@ test("an empty title shows the one the chart makes, which follows the column", (
 
 test("a title of one's own goes in the chart, without the spaces round it", async () => {
   const { asked, box } = form();
-  box.querySelector("input")!.value = "  Orders per region ";
+  box.querySelector<HTMLInputElement>('input[type="text"]')!.value = "  Orders per region ";
   box.requestSubmit();
   await settle();
   expect(asked).toStrictEqual([inserting(REGION_BARS, "Orders per region"), "closed"]);
@@ -252,7 +275,9 @@ test("a sum is of a number column, and is in the title the chart makes", async (
   sum.value = String(REVENUE);
   sum.dispatchEvent(new Event("change"));
   const revenue: Plot = { ...REGION_BARS, sum: { col: REVENUE, header: "revenue" } };
-  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(revenue));
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(revenue),
+  );
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(revenue), "closed"]);
@@ -478,7 +503,9 @@ test("a chart's form opens on what it shows, over its source", () => {
   const revenue = { col: REVENUE, header: "revenue" };
   changing({ ...REGION_BARS, sum: revenue }, "Takings");
   expect(chosen("kind", "by", "sum")).toStrictEqual(["bars", String(REGION), String(REVENUE)]);
-  expect(document.querySelector<HTMLInputElement>(".chart-form input")!.value).toBe("Takings");
+  expect(document.querySelector<HTMLInputElement>('.chart-form input[type="text"]')!.value).toBe(
+    "Takings",
+  );
   expect(document.activeElement).toBe(select("by"));
 
   // The ads export has region second.
@@ -562,7 +589,9 @@ test("a date column selected in the grid opens the form on a chart over time of 
   expect(select("kind").value).toBe("time");
   expect(shown(box)).toStrictEqual([
     "source",
-    "chart",
+    "compare",
+    "trend",
+    "relate",
     "dates",
     "per",
     "sum of",
@@ -710,7 +739,9 @@ test("picking a split column makes stacked bars, titled by both columns, and non
     split: { col: CHANNEL, header: "channel" },
     sum: { col: REVENUE, header: "revenue" },
   };
-  expect(box.querySelector("input")!.placeholder).toBe(madeTitle(stack));
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(stack),
+  );
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(stack), "closed"]);
@@ -718,7 +749,9 @@ test("picking a split column makes stacked bars, titled by both columns, and non
   form();
   pick("split", String(CHANNEL));
   pick("split", "");
-  expect(document.querySelector("input")!.placeholder).toBe(madeTitle(REGION_BARS));
+  expect(document.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(REGION_BARS),
+  );
 });
 
 test("a value splits by any column but its own, and a pie or a scatter asks for no split", () => {

@@ -307,13 +307,13 @@ const TO_REVENUE = 2;
 /**
  * The kinds story's beats: the insert story's, once for a pie of region and
  * once for a scatter of units, with the kind chosen in the form before Enter.
- * Each Down chooses the next kind after bars, KIND_STEP_MS apart. The gutter
+ * Each Down chooses the next kind after bars, over time before scatter, KIND_STEP_MS apart. The gutter
  * comes first, so region is a row's third cell and units its sixth, clicked in
  * a row under the pie's window.
  */
 const KINDS = [
   { row: 3, cell: 3, downs: 1, column: 500, menu: 2_000, chart: 3_600, choose: 6_400 },
-  { row: 15, cell: 6, downs: 2, column: 10_000, menu: 11_600, chart: 13_200, choose: 16_000 },
+  { row: 15, cell: 6, downs: 3, column: 10_000, menu: 11_600, chart: 13_200, choose: 16_000 },
 ];
 /**
  * The change story's beats: the edit button pressed on a window of region's
@@ -1197,7 +1197,7 @@ async function playKinds(win: BrowserWindow, at: Clock): Promise<void> {
     // The first form waits for its module, so the keys wait for the form.
     await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
     // The pointer leaves the source's name for the kind the keys change.
-    await glideTo('.chart-form select[name="kind"]');
+    await glideTo(".chart-form .chart-tile:has(input:checked)");
     await at(kind.choose);
     // The keys open in By, the field after the kind.
     press(win, "Tab", ["shift"]);
