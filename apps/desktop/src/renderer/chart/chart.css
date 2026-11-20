@@ -548,14 +548,16 @@
 }
 
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
- * kept inside the tracks at either end. */
+ * kept inside the tracks at either end. The clamp centres a label itself, so
+ * it takes no x axis's half-label shift as well. */
 .chart-box-axis .chart-ticks {
   position: relative;
   align-self: stretch;
 }
 
-.chart-box-axis .chart-tick {
+.chart-box-axis .chart-ticks.x .chart-tick {
   left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
 }
 
 /* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it
