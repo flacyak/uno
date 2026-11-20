@@ -54,6 +54,10 @@ test("a dot stands at its mean on an axis from the tick at or under the least to
   );
   // 3.4, 3.1 and 3.2 on an axis of 3.1 to 3.4.
   expect(shares(drawn).map((at) => Math.round(at! * 3))).toStrictEqual([3, 0, 1]);
+  const tips = [...drawn.querySelectorAll(".chart-dot-tip")].map((t) => t.textContent);
+  expect(tips).toStrictEqual(["3.4", "3.1", "3.2"]);
+  // The values take the room of the longest past the dots.
+  expect(drawn.style.getPropertyValue("--tips-room")).toBe("calc(3ch + var(--tip-gap))");
 });
 
 test("the axis's labels stand under the rows, a gridline at each tick runs through every row, and a hairline runs to each dot", () => {
@@ -108,6 +112,7 @@ test("dots of rows or a sum stand at them, and one value's axis runs from zero p
   };
   expect(shares(dots({ t: "dots", by: CARRIER }, tally, HEIGHT))).toStrictEqual([0.5]);
   const summed = dots({ t: "dots", by: CARRIER, of: DAYS, measure: "sum" }, tally, HEIGHT);
+  expect(summed.querySelector(".chart-dot-tip")?.textContent).toBe("12");
   // 12 reaches to 24, which ticks of 10 take in by 30.
   expect(shares(summed)).toStrictEqual([0.4]);
 });

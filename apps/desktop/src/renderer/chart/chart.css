@@ -520,11 +520,16 @@
 }
 
 /* A dot plot's track, from dots.ts: a mark stands --at of its span, which
- * leaves --room at its end for half the last label. A gridline is
+ * leaves --room at its end for the values past the dots, and for half the
+ * last label. A gridline is
  * 1 px of the rule at a tick, reaching half the gap into each next row so the
  * lines run unbroken; a hairline of the rule runs from the axis's low end to
  * the dot; and the dot is the dataviz skill's 8 px marker in the accent,
  * ringed 2 px in the window's ground. */
+.chart-dots {
+  --room: max(var(--label-room), calc(4px + var(--tips-room)));
+}
+
 .chart-dot-track {
   --span: calc(100% - var(--room));
   position: relative;
@@ -557,6 +562,19 @@
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* A value wears ink, never its dot's colour, a gap past the dot, as a bar's
+ * past its tip. */
+.chart-dot-tip {
+  position: absolute;
+  inset-block: 0;
+  left: calc(var(--at) * var(--span) + 4px + var(--tip-gap));
+  display: flex;
+  align-items: center;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Words in place of a dot, in the caption's ink, over the gridlines. */

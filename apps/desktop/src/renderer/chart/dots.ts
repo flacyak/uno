@@ -2,15 +2,16 @@
  * @fileoverview A dot plot: a dot per value at its rows, sum or mean, on one
  * axis over the values shown, so a small difference reads where a bar from
  * zero would hide it. A hairline runs to each dot from the axis's low end,
- * Cleveland's guide, over a gridline at each tick.
+ * Cleveland's guide, over a gridline at each tick, and its value stands past it.
  */
 
 import type { DotsPlot } from "@document";
 import type { GroupsTally, MeanTally } from "@engine";
 import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { axis, tickLabels } from "./axes.ts";
-import { barsBox } from "./bars.ts";
+import { SPAN_LEAST, TIP_GAP, barsBox, room } from "./bars.ts";
 import { BAR_GAP, BAR_THICK, ranked, row } from "./rows.ts";
 
 /** A tally a dot plot draws: rows or a sum per value, or a mean. */
@@ -50,14 +51,17 @@ export function dots(plot: DotsPlot, tally: DotsTally, height: number): HTMLElem
   const [low, high] = [scale.ticks[0]!, scale.ticks.at(-1)!];
   const at = (x: number) => Math.min(Math.max((x - low) / (high - low), 0), 1);
   const ticks = scale.ticks.map(at);
+  const tips = sizes.map((size) => ({ tip: size === undefined ? "" : num(size) }));
   const box = barsBox("chart-dots");
+  box.style.setProperty("--tips-room", room(tips.filter(({ tip }) => tip !== "")));
   for (const [i, g] of shown.entries()) {
     const [size, track] = [sizes[i], el("div", "chart-dot-track")];
     track.append(...ticks.map((tick) => placed("chart-dot-line", tick)));
     if (size === undefined) track.append(el("span", "chart-dots-none", m.chart_dots_none()));
     else {
       track.style.setProperty("--at", `${at(size)}`);
-      track.append(el("span", "chart-dot-guide"), el("span", "chart-dot"));
+      const tip = el("span", "chart-dot-tip", tips[i]!.tip);
+      track.append(el("span", "chart-dot-guide"), el("span", "chart-dot"), tip);
     }
     box.append(row(g.value, track));
   }
@@ -68,9 +72,23 @@ export function dots(plot: DotsPlot, tally: DotsTally, height: number): HTMLElem
     label.style.setProperty("--wide", `${label.textContent!.length}ch`);
     labels.append(label);
   }
-  box.style.setProperty("--room", `${scale.labels.at(-1)!.length / 2}ch`);
+  box.style.setProperty("--label-room", `${scale.labels.at(-1)!.length / 2}ch`);
   const under = el("div", "chart-bar-row chart-dots-axis");
   under.append(el("span"), labels);
   box.append(under);
   return box;
+}
+
+/**
+ * fitDots takes the values out of a drawn dot plot where they would leave
+ * its axis under SPAN_LEAST px, so the dots take the whole track, as fitTips
+ * does for bars. It measures, so the plot stands in the page by then.
+ */
+export function fitDots(box: HTMLElement): void {
+  const width = box.querySelector(".chart-dot-track")?.getBoundingClientRect().width ?? 0;
+  const tips = [...box.querySelectorAll(".chart-dot-tip")];
+  const widest = Math.max(0, ...tips.map((tip) => tip.getBoundingClientRect().width));
+  if (width === 0 || tips.length === 0 || width - widest - TIP_GAP >= SPAN_LEAST) return;
+  for (const tip of tips) tip.remove();
+  box.style.setProperty("--tips-room", "0px");
 }

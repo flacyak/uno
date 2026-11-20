@@ -1,9 +1,9 @@
 /**
  * @fileoverview Checks of dot plots in real layout: a row per carrier, the
- * highest mean first, each an 8 px dot in the accent centred on its row, on an
- * axis that does not start at zero and is labelled under them, its gridlines
- * unbroken and a hairline to each dot, and Eagle's row, of no number, saying
- * so; and the same in a narrow window.
+ * highest mean first, each an 8 px dot in the accent centred on its row with
+ * its mean past it inside the row, on an axis that does not start at zero and
+ * is labelled under them, its gridlines unbroken and a hairline to each dot,
+ * and Eagle's row, of no number, saying so; and the same in a narrow window.
  *
  * They open the workspace smoke.js wrote of five carriers' delivery days.
  */
@@ -49,9 +49,11 @@ export const CHART_DOTS: Check[] = [
         if (Math.abs(dot.width - ${DOT}) > ${RECT_SLACK} || Math.abs(dot.height - ${DOT}) > ${RECT_SLACK}) return "a dot is " + dot.width + " by " + dot.height;
         if (getComputedStyle(track.querySelector(".chart-dot")).backgroundColor !== accent) return "a dot wears another colour";
         if (Math.abs(dot.top + dot.height / 2 - (row.top + row.height / 2)) > ${PX_SLACK}) return "a dot stands off its row";
+        const tip = rect(track.querySelector(".chart-dot-tip"));
+        if (tip.left < dot.right || tip.right > row.right + ${PX_SLACK}) return "a mean stands from " + tip.left + " to " + tip.right + " by a dot to " + dot.right + " in a row to " + row.right;
       }
       // Dart's 2.9 stands a tenth past the axis's 2.8, clear of the track's start.
-      const dart = [...windows()[0].querySelectorAll(".chart-bar-row")].find((row) => row.textContent === "Dart");
+      const dart = [...windows()[0].querySelectorAll(".chart-bar-row")].find((row) => row.querySelector(".chart-bar-label")?.textContent === "Dart");
       const [start, dot] = [rect(dart.querySelector(".chart-dot-track")), rect(dart.querySelector(".chart-dot"))];
       return dot.left - start.left > ${DOT} ? "" : "Dart's dot stands at the axis's start, " + (dot.left - start.left) + " px in";
     `,

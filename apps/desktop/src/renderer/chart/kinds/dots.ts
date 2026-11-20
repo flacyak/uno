@@ -2,7 +2,7 @@
 
 import type { DotsPlot } from "@document";
 import { m } from "@paraglide/messages";
-import { dots as drawDots } from "../dots.ts";
+import { dots as drawDots, fitDots } from "../dots.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -26,5 +26,6 @@ export const dots: ChartKind<DotsPlot> = (plot) => ({
           ...undrawn,
           empty: tally.groups.length === 0,
           draw: (height) => drawDots(plot, tally, height),
+          fit: fitDots,
         },
 });
