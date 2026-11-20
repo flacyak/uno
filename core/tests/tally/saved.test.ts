@@ -14,7 +14,9 @@ import {
   GroupsFold,
   HELD_AT_MOST,
   PAIRS_AT_MOST,
+  SPREAD_AT_MOST,
   SampleFold,
+  SpreadFold,
   SplitFold,
   TALLY_VERSION,
   TimeFold,
@@ -493,12 +495,83 @@ test('a save that holds no time fold reads back as none', () => {
   expect(TimeFold.restored(yearOf(8029))).toBeDefined();
 });
 
+/** Numbers of a few figures over many decades, either side of zero. */
+const SPREAD_CELLS = [...CELLS, '0', '2.3', '-2.25', '1e300', '7e-12'];
+// Few enough buckets that a spread of DRAWS rows coarsens.
+const SPREAD_BUCKETS = 8;
+
+test('a spread read back from its save folds on as the fold it was', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = () =>
+      SPREAD_CELLS[Math.floor(random() * SPREAD_CELLS.length)]!;
+    const cells = Array.from({ length: DRAWS }, pick);
+    for (const [mark, atMost] of [
+      ['point', SPREAD_AT_MOST],
+      ['comma', SPREAD_AT_MOST],
+      ['point', SPREAD_BUCKETS],
+    ] as const) {
+      const make = () => new SpreadFold(mark, atMost);
+      // An edit takes the first row back before the save, and puts it back
+      // after it.
+      const first = (fold: SpreadFold) => {
+        for (const c of cells.slice(0, HALF)) fold.add(c);
+        fold.remove(cells[0]!);
+      };
+      const then = (fold: SpreadFold) => {
+        for (const c of cells.slice(HALF)) fold.add(c);
+        fold.add(cells[0]!);
+      };
+      const [whole, before] = [make(), make()];
+      first(whole);
+      then(whole);
+      first(before);
+      const after = SpreadFold.restored(throughJson(before.saved()), atMost)!;
+      then(after);
+      expect(after.saved(), `seed ${seed}`).toStrictEqual(whole.saved());
+      expect(after.read(), `seed ${seed}`).toStrictEqual(whole.read());
+    }
+  }
+});
+
+test('a save that holds no spread reads back as none', () => {
+  const fold = new SpreadFold('point', SPREAD_BUCKETS);
+  for (const c of SPREAD_CELLS) fold.add(c);
+  const saved = fold.saved();
+  expect(saved.figures).not.toBe('exact');
+  const [key, rows] = saved.buckets[1]!;
+  const unsaved = [
+    null,
+    [],
+    { ...saved, mark: 'dot' },
+    { ...saved, figures: 0 },
+    { ...saved, figures: 13 },
+    { ...saved, buckets: [...saved.buckets, [key, rows]] },
+    { ...saved, buckets: [[key, 0], ...saved.buckets.slice(2)] },
+    { ...saved, buckets: [[key + 0.5, rows], ...saved.buckets.slice(2)] },
+    { ...saved, buckets: [[Number.MAX_SAFE_INTEGER, rows]] },
+    { ...saved, sum: { partials: [1], units: 0.5 } },
+    { ...saved, skipped: { blank: -1, unparsed: 0 } },
+    { ...new SpreadFold('point').saved(), buckets: [[Number.NaN, 1]] },
+  ];
+  for (const v of unsaved) {
+    expect(SpreadFold.restored(throughJson(v), SPREAD_BUCKETS)).toBeUndefined();
+  }
+  expect(SpreadFold.restored(throughJson(saved), SPREAD_BUCKETS)).toBeDefined();
+  // A fold that holds more buckets than its bound above one figure refolds.
+  const exact = new SpreadFold('point');
+  for (const c of SPREAD_CELLS) exact.add(c);
+  expect(SpreadFold.restored(throughJson(exact.saved()))).toBeDefined();
+  expect(SpreadFold.restored(throughJson(exact.saved()), 1)).toBeUndefined();
+});
+
 /**
  * The hash of the folds TALLY_VERSION makes of the fixture: its rows by
  * region, its revenue and units summed by channel with each mark, its
  * revenue against units with each mark, and its rows and revenue over its
  * dates in each order, with DATES added, and its rows and revenue per
- * region by channel with each mark, with CELLS added. It
+ * region by channel with each mark, with CELLS added, and its revenue and
+ * units spread with each mark, exact and coarsened, with SPREAD_CELLS. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -508,6 +581,7 @@ const GOLDEN = {
   sample: '82b28cba5c4ad68f0358cb3c9b9cfbe9e4aaecbb4f143ca0412395470acb6432',
   time: '2df69fd36bdc14b0210c23556d82b8f16274974e471b7d7464b59c1c25e34b15',
   split: '10134ed7db0713a75f0bbebee410afa91ef190bbc0d7ef23fed72bf12fd9191c',
+  spread: 'e623684be52f441a3afae50186f5f68a0d942ccb3b267715a208bd1734956c67',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -572,4 +646,17 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(splits.map((f) => f.saved())))),
     'a split fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.split);
+  const spreads = (['point', 'comma'] as const).flatMap((mark) =>
+    [REVENUE, UNITS].flatMap((col) =>
+      [undefined, SPREAD_BUCKETS].map((atMost) => {
+        const fold = new SpreadFold(mark, atMost);
+        for (const c of [...column(col), ...SPREAD_CELLS]) fold.add(c);
+        return fold.saved();
+      }),
+    ),
+  );
+  expect(
+    hashOf(encoder.encode(JSON.stringify(spreads))),
+    'a spread, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.spread);
 });

@@ -10,8 +10,9 @@
 const EXPONENT_OFFSET = 400;
 /** The greatest power of ten a double holds exactly. */
 const EXACT_POWER_AT_MOST = 22;
-/** The greatest power of ten a double reaches. */
+/** The greatest power of ten a double reaches, and the least. */
 const POWER_AT_MOST = 308;
+const POWER_AT_LEAST = -324;
 /**
  * How near a whole number, relatively, a scaled cell is read as it: nearer
  * than a cell of 15 written figures comes, and farther than the few roundings
@@ -66,6 +67,19 @@ function splitKey(key: number, f: number): [number, number] {
   // Digits past zero are never 0, and below it may be `top`: one less finds the exponent of both.
   const offset = Math.floor((Math.abs(key) - 1) / top);
   return [offset, Math.abs(key) - offset * top];
+}
+
+/** isKey says whether `key` names a bucket at `f` figures, as keyOf gives one. */
+export function isKey(key: number, f: number): boolean {
+  if (key === 0) return true;
+  if (!Number.isSafeInteger(key)) return false;
+  const [offset, digits] = splitKey(key, f);
+  const [least, top] = [DIGITS ** (f - 1), DIGITS ** f];
+  const e = offset - EXPONENT_OFFSET;
+  if (e < POWER_AT_LEAST || e > POWER_AT_MOST) return false;
+  return key > 0
+    ? digits >= least && digits < top
+    : digits > least && digits <= top;
 }
 
 /** coarser is the key at `f` - 1 figures of the bucket `key` names at `f`. */
