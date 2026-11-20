@@ -183,6 +183,13 @@ const REVENUE_BOXES: Chart = {
   plot: { t: 'box', of: column(REVENUE), by: column(REGION), span: 'most' },
 };
 
+/** The fixture's mean units per channel, as dots. */
+const CHANNEL_MEANS: Chart = {
+  ...REGION_ROWS,
+  id: 'c11',
+  plot: { t: 'dots', by: column(CHANNEL), of: column(UNITS), measure: 'mean' },
+};
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -243,6 +250,11 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       fold.add(cell(r, at), sum === undefined ? '' : cell(r, sum));
     }
     return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
+  }
+  if (plot.t === 'dots' && plot.measure === 'mean') {
+    const fold = new GroupsFold('mean', 'point');
+    for (let r = 0; r < rows; r++) fold.add(cell(r, plot.by), cell(r, plot.of));
+    return { t: 'mean', plot, coverage, ...fold.means(plot.order) };
   }
   const by = plot.by;
   const sum = plot.t === 'dots' ? plot.of : plot.sum;
@@ -726,6 +738,39 @@ test('an edit moves a box plot by a column by its one row, and a save keeps the 
   const reopened = new Tallies();
   reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
   reopened.attach(REVENUE_BOXES, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test("dots of a mean folded a block at a time read as the pure mean fold of their column, which a sum's does not share", () => {
+  const tallies = folded([CHANNEL_MEANS]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_MEANS.id, pure(CHANNEL_MEANS.plot)],
+  ]);
+  const [by, of] = [column(CHANNEL), column(UNITS)];
+  tallies.attach(
+    { ...CHANNEL_MEANS, plot: { t: 'dots', by, of, measure: 'sum' } },
+    HEADERS,
+  );
+  expect(tallies.from()).toBe(0);
+});
+
+test('an edit moves dots of a mean by its one row, and a save keeps the fold, which reads back with no pass', async () => {
+  const tallies = folded([CHANNEL_MEANS]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, UNITS, 'n/a');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[CHANNEL_MEANS.id, pure(CHANNEL_MEANS.plot, sheet)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const saved = tallies.saved();
+  expect(saved[CHANNEL_MEANS.id]?.key).toBe(`mean ${CHANNEL} ${UNITS}`);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(saved)), ROWS);
+  reopened.attach(CHANNEL_MEANS, HEADERS);
   expect(reopened.from()).toBe(ROWS);
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });

@@ -1108,8 +1108,8 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
 
 /** What a dot plot's dots may stand at. */
 const MEASURE: Expects<DotMeasure> = {
-  is: (v): v is DotMeasure => v === 'sum',
-  not: 'is not sum',
+  is: (v): v is DotMeasure => v === 'sum' || v === 'mean',
+  not: 'is not sum or mean',
 };
 
 /** What a histogram may span. */

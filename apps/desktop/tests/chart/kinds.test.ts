@@ -182,7 +182,9 @@ test("each plot kind has its module", () => {
   expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots });
 });
 
-test("a dot plot's kind titles its rows or its sum per value, and reads its numbers from its column", () => {
+test("a dot plot's kind titles its rows, its sum or its mean per value, and reads its numbers from its column", () => {
+  const means = dots({ t: "dots", by: REGION, of: REVENUE, measure: "mean" });
+  expect([means.title(), means.numbered]).toStrictEqual(["mean of revenue per region", [REVENUE]]);
   const sums = dots({ t: "dots", by: REGION, of: REVENUE, measure: "sum" });
   expect([sums.title(), sums.numbered]).toStrictEqual(["sum of revenue per region", [REVENUE]]);
   const rows = dots({ t: "dots", by: REGION });

@@ -69,11 +69,13 @@ function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
   return plot.t === "time" ? [plot.at, plot.sum] : [plot.by, plot.sum];
 }
 
-/** Returns whether two plots draw one kind from the same columns. */
+/** Returns whether two plots draw one kind from the same columns, a dot plot's at one measure. */
 function samePlot(a: Plot, b: Plot): boolean {
   const theirs = columnsOf(b);
+  const measure = (plot: Plot) => (plot.t === "dots" ? plot.measure : undefined);
   return (
     a.t === b.t &&
+    measure(a) === measure(b) &&
     columnsOf(a).every((c, i) => c?.col === theirs[i]?.col && c?.header === theirs[i]?.header)
   );
 }

@@ -47,7 +47,7 @@ describe('parsePlot', () => {
     { t: 'box', of: REVENUE, span: 'most' },
     { t: 'box', of: REVENUE, by: REGION, span: 'all' },
     { t: 'dots', by: REGION },
-    { t: 'dots', by: REGION, of: REVENUE, measure: 'sum' },
+    { t: 'dots', by: REGION, of: REVENUE, measure: 'mean' },
     { t: 'dots', by: REGION, of: UNITS, measure: 'sum', order: ['East'] },
   ])('reads %j', (plot) => {
     expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
@@ -74,14 +74,14 @@ describe('parsePlot', () => {
     ],
     [{ t: 'time', at: DATE, per: 'day' }, ONE_READING],
     [{ t: 'histogram', of: REVENUE }, 'span is not most or all'],
-    [{ t: 'dots', by: REGION, of: REVENUE }, 'measure is not sum'],
+    [{ t: 'dots', by: REGION, of: REVENUE }, 'measure is not sum or mean'],
     [
-      { t: 'dots', by: REGION, measure: 'sum' },
+      { t: 'dots', by: REGION, measure: 'mean' },
       'measure names no column of numbers',
     ],
     [
       { t: 'dots', by: REGION, of: REVENUE, measure: 'median' },
-      'measure is not sum',
+      'measure is not sum or mean',
     ],
     [
       { t: 'dots', by: REGION, of: REGION, measure: 'sum' },

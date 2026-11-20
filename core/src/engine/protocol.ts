@@ -18,7 +18,7 @@ import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
 import type { Groups, Per, Sample, Split, TimeLevel, Times } from '@tally';
-import type { Skipped, Spread, Spreads } from '@tally';
+import type { MeanGroup, Skipped, Spread, Spreads } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -293,6 +293,13 @@ export interface GroupsTally extends Groups {
   coverage: Coverage;
 }
 
+/** A dot plot's tally of means: each value's rows, sum and numbers, the highest mean first. */
+export interface MeanTally extends Groups<MeanGroup> {
+  t: 'mean';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /** A scatter's tally: some of its points, and the extent of every row. */
 export interface SampleTally extends Sample {
   t: 'sample';
@@ -337,6 +344,7 @@ export interface BoxTally extends Spreads {
  */
 export type Tally =
   | GroupsTally
+  | MeanTally
   | SampleTally
   | TimeTally
   | StackTally

@@ -6,12 +6,16 @@ import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
-/** dots is what a window does with a dot plot's plot: "sum of revenue per region". */
+/** dots is what a window does with a dot plot's plot: "mean of days per carrier". */
 export const dots: ChartKind<DotsPlot> = (plot) => ({
-  title: () =>
-    plot.of === undefined
-      ? m.chart_title_rows({ by: named(plot.by) })
-      : m.chart_title_sum({ sum: named(plot.of), by: named(plot.by) }),
+  title: () => {
+    const by = named(plot.by);
+    if (plot.of === undefined) return m.chart_title_rows({ by });
+    const of = named(plot.of);
+    return plot.measure === "mean"
+      ? m.chart_title_mean({ of, by })
+      : m.chart_title_sum({ sum: of, by });
+  },
   numbered: plot.of === undefined ? [] : [plot.of],
   valued: [plot.by],
   drawing: () => undrawn,

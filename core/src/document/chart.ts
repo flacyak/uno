@@ -65,12 +65,12 @@ export interface StackPlot {
   order?: string[];
 }
 
-/** What a dot plot's dots stand at: the sum of a column's numbers. */
-export type DotMeasure = 'sum';
+/** What a dot plot's dots stand at: the sum of a column's numbers, or their mean. */
+export type DotMeasure = 'sum' | 'mean';
 
 /**
- * A dot plot: a dot per value of `by` at its rows, or at the sum of `of`, on
- * an axis that need not start at zero. `order` holds the values a person
+ * A dot plot: a dot per value of `by` at its rows, or at the sum or mean of
+ * `of`, on an axis that need not start at zero. `order` holds the values a person
  * moved, as for bars.
  */
 export type DotsPlot = { t: 'dots'; by: ChartColumn; order?: string[] } & (

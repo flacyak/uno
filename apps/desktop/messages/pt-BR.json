@@ -475,6 +475,7 @@
   "chart_title_per": "{of} por {by}",
   "chart_title_rows": "linhas por {by}",
   "chart_title_sum": "soma de {sum} por {by}",
+  "chart_title_mean": "média de {of} por {by}",
   "chart_title_stack_rows": "linhas por {by} e por {split}",
   "chart_title_stack_sum": "soma de {sum} por {by} e por {split}",
   "chart_title_time_rows": "linhas por {per} de {at}",
