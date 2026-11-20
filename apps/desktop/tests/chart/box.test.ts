@@ -148,3 +148,36 @@ test("a number past a whisker is a ring, the axis is labelled under the rows, an
     `${many.length - shown}`,
   );
 });
+
+test("a box plot's axis reaches whole spans past its span, two at most each side, its span standing where the scroll starts", () => {
+  const far: Box = {
+    ...boxAt(50),
+    five: [
+      [-150, -150],
+      [20, 20],
+      [50, 50],
+      [80, 80],
+      [900, 900],
+    ],
+    span: [
+      [0, 0],
+      [100, 100],
+    ],
+    above: { rows: 1, buckets: [{ low: 900, high: 900, rows: 1 }] },
+  };
+  const along = boxes([{ label: "a", box: far }], false, TALL);
+  const plot = along.querySelector<HTMLElement>(".chart-boxes")!;
+  expect(along.classList.contains("chart-scrolls")).toBe(true);
+  expect([
+    plot.style.getPropertyValue("--spans"),
+    plot.style.getPropertyValue("--span-at"),
+  ]).toStrictEqual(["5", "2"]);
+  const ticks = [...plot.querySelectorAll(".chart-box-axis .chart-tick")].map((t) => t.textContent);
+  expect([ticks[0], ticks.at(-1)]).toStrictEqual(["-200", "300"]);
+  expect(marks(plot)[0]!.at(-1)).toBe("chart-past 1 1");
+  // Every number shows on an axis of its own, which reaches no further.
+  const all = boxes([{ label: "a", box: far }], true, TALL).querySelector<HTMLElement>(
+    ".chart-boxes",
+  )!;
+  expect(all.style.getPropertyValue("--spans")).toBe("1");
+});

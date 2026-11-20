@@ -9,6 +9,7 @@ import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { axis, tickLabels } from "./axes.ts";
+import type { Axis } from "./axes.ts";
 import { barsBox } from "./bars.ts";
 import { row, rowsIn } from "./rows.ts";
 
@@ -35,6 +36,33 @@ export function boxedRows(tally: BoxTally, whole: string): Boxed[] {
 /** middle is where a number a spread knows to its bucket stands: exact, or its bucket's middle. */
 const middle = ([low, high]: Within): number => (low + high) / 2;
 
+/**
+ * The most spans a box plot's axis reaches past its span on each side, so the
+ * numbers past it a scroll away stand apart, and one far placeholder cannot
+ * make the scroll a mile long; a mark further out stands at its far edge.
+ */
+const REACH_AT_MOST = 2;
+
+/**
+ * reaching gives the axis of `span`, as many more spans of its width to each
+ * side as the least and the most of `rows` reach into, up to REACH_AT_MOST,
+ * with its ticks a step apart throughout, and how many spans it reaches before.
+ */
+function reaching(span: Axis, rows: readonly Boxed[]): [Axis, number] {
+  const [low, high] = [span.ticks[0]!, span.ticks.at(-1)!];
+  const width = high - low;
+  const spans = (past: number) => Math.min(Math.max(Math.ceil(past / width), 0), REACH_AT_MOST);
+  const before = spans(low - Math.min(...rows.map(({ box }) => box.five[0]![0])));
+  const after = spans(Math.max(...rows.map(({ box }) => box.five[4]![1])) - high);
+  const parts = Array.from({ length: before + 1 + after }, (_, i) => {
+    const by = (i - before) * width;
+    return axis(low + by, high + by);
+  });
+  const ticks = parts.flatMap((part, i) => part.ticks.slice(i === 0 ? 0 : 1));
+  const labels = parts.flatMap((part, i) => part.labels.slice(i === 0 ? 0 : 1));
+  return [{ ticks, labels, compact: parts.some((part) => part.compact) }, before];
+}
+
 /** mark gives a mark of `kind` from `from` to `to` of the axis, as shares of it. */
 function mark(kind: string, from: number, to: number): HTMLElement {
   const made = el("div", kind);
@@ -51,8 +79,10 @@ export function boxes(rows: readonly Boxed[], all: boolean, height: number): HTM
   const ends = rows.flatMap(({ box }) =>
     all ? [box.five[0]![0], box.five[4]![1]] : [box.span[0]![0], box.span[1]![1]],
   );
-  const up = axis(Math.min(...ends), Math.max(...ends));
+  const span = axis(Math.min(...ends), Math.max(...ends));
+  const [up, before] = all ? [span, 0] : reaching(span, rows);
   const [low, high] = [up.ticks[0]!, up.ticks.at(-1)!];
+  const spans = (high - low) / (span.ticks.at(-1)! - span.ticks[0]!);
   const at = (x: number) => Math.min(Math.max((x - low) / (high - low), 0), 1);
   // The axis's labels take a row, and a line of the rows left out another.
   const fits = Math.max(rowsIn(height) - 1, 0);
@@ -84,5 +114,26 @@ export function boxes(rows: readonly Boxed[], all: boolean, height: number): HTM
   const under = el("div", "chart-bar-row chart-box-axis");
   under.append(el("span"), ticks);
   plot.append(under);
-  return plot;
+  plot.style.setProperty("--spans", `${spans}`);
+  plot.style.setProperty("--span-at", `${before}`);
+  const along = el("div", "chart-along chart-scrolls themed-bar");
+  along.append(plot);
+  return along;
+}
+
+/**
+ * fitBoxes widens a drawn box plot's tracks to as many times the room beside
+ * its labels as its axis reaches spans, and scrolls to its span, the labels
+ * standing still.
+ */
+export function fitBoxes(along: HTMLElement): void {
+  const plot = along.querySelector<HTMLElement>(".chart-boxes");
+  if (plot === null) return;
+  const style = getComputedStyle(plot);
+  const label = parseFloat(style.gridTemplateColumns);
+  const inside = along.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const room = inside - label - parseFloat(style.columnGap);
+  const spans = Number(plot.style.getPropertyValue("--spans"));
+  plot.style.gridTemplateColumns = `${label}px ${room * spans}px`;
+  along.scrollLeft = Number(plot.style.getPropertyValue("--span-at")) * room;
 }

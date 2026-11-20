@@ -2,7 +2,7 @@
 
 import type { Plot } from "@document";
 import { m } from "@paraglide/messages";
-import { boxedRows, boxes } from "../box.ts";
+import { boxedRows, boxes, fitBoxes } from "../box.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -19,6 +19,7 @@ export const box: ChartKind<Extract<Plot, { t: "box" }>> = (plot) => ({
     if (tally.t !== "box") return undefined;
     const rows = boxedRows(tally, named(plot.of));
     if (rows.length === 0) return { ...undrawn, empty: true };
-    return { ...undrawn, draw: (height) => boxes(rows, plot.span === "all", height) };
+    const draw = (height: number) => boxes(rows, plot.span === "all", height);
+    return { ...undrawn, draw, fit: fitBoxes };
   },
 });

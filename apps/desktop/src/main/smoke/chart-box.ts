@@ -65,4 +65,23 @@ export const CHART_BOX: Check[] = [
       return near === -1 ? "" : "two labels stand " + (ticks[near].left - ticks[near - 1].right) + " px apart";
     `,
   },
+  {
+    name: "a box plot first shows its span, and scrolls sideways to East's far numbers, apart, its labels standing still",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      const win = document.querySelector(".chart");
+      const along = win.querySelector(".chart-along");
+      if (along.scrollWidth <= along.clientWidth) return "the box plot reaches nothing past its span";
+      const label = rect(win.querySelector(".chart-bar-label"));
+      along.scrollLeft = along.scrollWidth;
+      await frame();
+      const moved = rect(win.querySelector(".chart-bar-label"));
+      if (Math.abs(moved.left - label.left) > ${PX_SLACK}) return "the labels moved from " + label.left + " to " + moved.left;
+      const east = [...win.querySelectorAll(".chart-bar-row")].find((row) => row.textContent === "East");
+      const rings = [...east.querySelectorAll(".chart-past")].map(rect);
+      const sight = rect(along);
+      if (rings.some((at) => at.right > sight.right + ${PX_SLACK})) return "a ring stands past the scroller's end";
+      return rings[1].left - rings[0].right > 0 ? "" : "East's rings stand together";
+    `,
+  },
 ];

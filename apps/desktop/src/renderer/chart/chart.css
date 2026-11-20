@@ -489,6 +489,22 @@
   background: var(--surface);
 }
 
+/* A box plot's rows scroll sideways under their labels, which stand still,
+ * over the window's ground, as box.ts widens the tracks. */
+.chart-boxes {
+  width: max-content;
+  min-width: 100%;
+}
+
+.chart-boxes .chart-bar-label {
+  position: sticky;
+  left: var(--bars-inset);
+  z-index: 1;
+  align-self: stretch;
+  align-content: center;
+  background: var(--surface);
+}
+
 /* A number past a whisker is an 8 px ring, accent round the window's ground. */
 .chart-past {
   inset-block: calc(50% - 4px);
