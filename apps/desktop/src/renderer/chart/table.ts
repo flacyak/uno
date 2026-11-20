@@ -10,15 +10,16 @@
  * file's text, set as text alone, and a number is in the app's language.
  */
 
-import type { Plot, StackPlot, TimePlot } from "@document";
+import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { Groups, Sample, StackTally, TimeTally } from "@engine";
+import type { Groups, Sample, SpreadTally, StackTally, TimeTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import type { TimeLevel } from "@tally";
+import type { Level, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
+import { edgeWords } from "./histogram.ts";
 import { PER_WORDS, label } from "./periods.ts";
 import { PIE_SLICES_AT_MOST, slices, unsent, wholeOf } from "./pie.ts";
 
@@ -190,13 +191,45 @@ export function timed(
   const { undated } = tally;
   if (undated.rows > 0)
     rows.push(row(rowNamed(m.chart_table_undated()), ...cells(undated.rows, undated.sum)));
+  return [heads, [...rows, ...leftOut(tally, heads.length)]];
+}
+
+/** leftOut gives a line across `span` columns of the cells `tally` left out, or none. */
+function leftOut(tally: TimeTally | SpreadTally, span: number): HTMLElement[] {
   const left = [blank(tally), notNumbers(tally)].filter((part) => part !== "").join(SEP);
-  if (left !== "") {
-    const line = el("td", "chart-table-line", left);
-    line.colSpan = heads.length;
-    rows.push(row(line));
+  if (left === "") return [];
+  const line = el("td", "chart-table-line", left);
+  line.colSpan = span;
+  return [row(line)];
+}
+
+/**
+ * binned gives a histogram's heads and rows: each bin of `level` named by its
+ * edges, with its rows and their share, then the rows under and over every
+ * bin sent and the cells left out, so every row of the file is counted.
+ */
+export function binned(
+  of: ChartColumn,
+  tally: SpreadTally,
+  level: Level,
+): [HTMLElement[], HTMLElement[]] {
+  const heads = [
+    header(columnLabel(of.header, of.col), true),
+    header(m.chart_table_rows(), false, true),
+    header(m.chart_table_share(), false, true),
+  ];
+  const cells = (n: number) => [digits(n), el("td", "num", percent(n / tally.numbers))];
+  const edge = (i: number) => edgeWords(level, i);
+  const bin = (i: number) => m.chart_bin({ from: edge(i), to: edge(i + 1) });
+  const rows = level.rows.map((n, i) => row(rowNamed(bin(i)), ...cells(n)));
+  const count = level.rows.length;
+  if (level.below > 0) {
+    rows.unshift(row(rowNamed(m.chart_table_under({ edge: edge(0) })), ...cells(level.below)));
   }
-  return [heads, rows];
+  if (level.above > 0) {
+    rows.push(row(rowNamed(m.chart_table_over({ edge: edge(count) })), ...cells(level.above)));
+  }
+  return [heads, [...rows, ...leftOut(tally, heads.length)]];
 }
 
 /**

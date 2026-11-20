@@ -29,6 +29,11 @@ const DIGITS = 10;
 /** How near its end a scroller counts as there, in px: a zoom leaves scrollLeft fractional. */
 const END_SLACK = 1;
 
+/** edgeWords gives the edge of `level`'s bin at `i`, written to the decimals of its width. */
+export function edgeWords(level: Level, i: number): string {
+  return places(edgeOf(level, i), -level.power);
+}
+
 /** across gives the px `room` leaves the bins beside the y axis `up`'s labels. */
 function across(up: Axis, room: PlotRoom): number {
   return room.width - 2 * BARS_INSET - aside(up, room);
@@ -40,7 +45,7 @@ function across(up: Axis, room: PlotRoom): number {
  */
 function edges(level: Level, up: Axis, room: PlotRoom): HTMLElement {
   const ticks = el("div", "chart-ticks x");
-  const words = (i: number) => places(edgeOf(level, i), -level.power);
+  const words = (i: number) => edgeWords(level, i);
   const count = level.rows.length;
   const widest = Math.max(words(0).length, words(count).length) * room.ch + TICK_GAP;
   const pitch = across(up, room) / level.spans;
@@ -129,7 +134,7 @@ function revealed(slot: Element): void {
  * the one they step to into sight.
  */
 export function binTargets(level: Level, numbers: number, box: HTMLElement): Targets {
-  const edge = (i: number) => places(edgeOf(level, i), -level.power);
+  const edge = (i: number) => edgeWords(level, i);
   const slots = [...box.querySelectorAll(".chart-period")];
   const all = slots.map((slot, i) => {
     const said = (): Reading[] => [

@@ -23,6 +23,9 @@ const PX_SLACK = 1;
 /** The new window's bin a pointer clicks: the span's third. */
 const THIRD_BIN = ".chart:first-child .chart-period:nth-child(4)";
 
+/** The new window's button that puts its table in the plot's place, and back. */
+const TABLE = ".chart:first-child .chart-table-toggle";
+
 /** A real press of `key`. */
 const press = (key: string): readonly Input[] => [
   { type: "keyDown", keyCode: key },
@@ -129,6 +132,30 @@ export const CHART_HISTOGRAM: Check[] = [
       if (!(await until(() => first.classList.contains("cursor")))) return "the first bin wears no cursor";
       const scrolled = win.querySelector(".chart-along").scrollLeft;
       return scrolled < ${PX_SLACK} ? "" : "the scroller stands " + scrolled + " px along";
+    `,
+  },
+  {
+    name: "a histogram's table lists every bin with its rows and share, the rows under and over them, and adds up to every row read",
+    click: { selector: TABLE },
+    shot: "chart-histogram-table",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const bins = win.querySelectorAll(".chart-period").length;
+      const lines = [...win.querySelectorAll(".chart-table tbody tr")];
+      const counted = lines.filter((tr) => tr.children.length === 3);
+      if (counted.length < bins) return "the table lists " + counted.length + " lines for " + bins + " bins";
+      const rows = counted.reduce((sum, tr) => sum + Number(tr.children[1].textContent.replace(/[^0-9]/g, "")), 0);
+      const read = Number(win.querySelector(".chart-said").textContent.replace(/[^0-9]/g, ""));
+      return rows === read ? "" : "the table counts " + rows + " of " + read + " rows";
+    `,
+  },
+  {
+    name: "the same button puts the histogram back",
+    click: { selector: TABLE },
+    script: `
+      const win = document.querySelector(".chart");
+      return (await until(() => win.querySelector(".chart-column") !== null)) ? "" : "the window draws no columns";
     `,
   },
 ];
