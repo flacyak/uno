@@ -1,8 +1,9 @@
 /**
  * @fileoverview Checks of dot plots in real layout: a row per carrier, the
- * highest mean first, each an 8 px dot in the accent centred on its row, on
- * an axis that does not start at zero, and Eagle's row,
- * of no number, saying so; and the same in a narrow window.
+ * highest mean first, each an 8 px dot in the accent centred on its row, on an
+ * axis that does not start at zero and is labelled under them, its gridlines
+ * unbroken and a hairline to each dot, and Eagle's row, of no number, saying
+ * so; and the same in a narrow window.
  *
  * They open the workspace smoke.js wrote of five carriers' delivery days.
  */
@@ -53,6 +54,27 @@ export const CHART_DOTS: Check[] = [
       const dart = [...windows()[0].querySelectorAll(".chart-bar-row")].find((row) => row.textContent === "Dart");
       const [start, dot] = [rect(dart.querySelector(".chart-dot-track")), rect(dart.querySelector(".chart-dot"))];
       return dot.left - start.left > ${DOT} ? "" : "Dart's dot stands at the axis's start, " + (dot.left - start.left) + " px in";
+    `,
+  },
+  {
+    name: "a dot plot's axis is labelled under its rows from 2.8, each label centred on a gridline that runs unbroken through every row, and a hairline runs to each dot",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      const win = document.querySelector(".chart");
+      const ticks = [...win.querySelectorAll(".chart-dots-axis .chart-tick")];
+      if (ticks[0]?.textContent !== "2.8") return "the axis starts at " + ticks[0]?.textContent;
+      const rows = [...win.querySelectorAll(".chart-dot-track")];
+      for (const [i, tick] of ticks.entries()) {
+        const lines = rows.map((row) => rect(row.querySelectorAll(".chart-dot-line")[i]));
+        const middle = rect(tick).left + rect(tick).width / 2;
+        if (lines.some((line) => Math.abs(line.left + line.width / 2 - middle) > ${PX_SLACK})) return "the label " + tick.textContent + " centres at " + middle + ", its gridline at " + lines[0].left;
+        if (lines.some((line, r) => r > 0 && line.top - lines[r - 1].bottom > ${RECT_SLACK})) return "the gridline at " + tick.textContent + " breaks between rows";
+      }
+      for (const track of win.querySelectorAll(".chart-dot-track:has(.chart-dot)")) {
+        const [guide, dot] = [rect(track.querySelector(".chart-dot-guide")), rect(track.querySelector(".chart-dot"))];
+        if (Math.abs(guide.left - rect(track).left) > ${PX_SLACK} || Math.abs(guide.right - (dot.left + dot.width / 2)) > ${PX_SLACK}) return "a hairline runs from " + guide.left + " to " + guide.right;
+      }
+      return "";
     `,
   },
 ];

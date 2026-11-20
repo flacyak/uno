@@ -56,6 +56,28 @@ test("a dot stands at its mean on an axis from the tick at or under the least to
   expect(shares(drawn).map((at) => Math.round(at! * 3))).toStrictEqual([3, 0, 1]);
 });
 
+test("the axis's labels stand under the rows, a gridline at each tick runs through every row, and a hairline runs to each dot", () => {
+  const drawn = dots(
+    MEANS,
+    means([
+      ["Acme", 6.8, 2],
+      ["Bolt", 3.1, 1],
+      ["None", 0, 0],
+    ]),
+    HEIGHT,
+  );
+  const ticks = [...drawn.querySelectorAll<HTMLElement>(".chart-dots-axis .chart-tick")];
+  expect(ticks.map((t) => t.textContent)).toStrictEqual(["3.1", "3.2", "3.3", "3.4"]);
+  const at = (marks: Iterable<HTMLElement>) =>
+    [...marks].map((mark) => Math.round(Number(mark.style.getPropertyValue("--at")) * 3));
+  expect(at(ticks)).toStrictEqual([0, 1, 2, 3]);
+  for (const track of drawn.querySelectorAll<HTMLElement>(".chart-dot-track")) {
+    expect(at(track.querySelectorAll<HTMLElement>(".chart-dot-line"))).toStrictEqual([0, 1, 2, 3]);
+  }
+  expect(drawn.querySelectorAll(".chart-dot-guide")).toHaveLength(2);
+  expect(drawn.lastElementChild?.classList.contains("chart-dots-axis")).toBe(true);
+});
+
 test("a value with no number has no dot and says so, and the rows a plot cannot hold are left out, a line counting them", () => {
   const many = means([
     ["a", 5, 1],

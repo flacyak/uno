@@ -519,17 +519,39 @@
   background: var(--surface);
 }
 
-/* A dot plot's track, from dots.ts: a dot stands --at of it, the dataviz
- * skill's 8 px marker in the accent, ringed 2 px in the window's ground. */
+/* A dot plot's track, from dots.ts: a mark stands --at of its span, which
+ * leaves --room at its end for half the last label. A gridline is
+ * 1 px of the rule at a tick, reaching half the gap into each next row so the
+ * lines run unbroken; a hairline of the rule runs from the axis's low end to
+ * the dot; and the dot is the dataviz skill's 8 px marker in the accent,
+ * ringed 2 px in the window's ground. */
 .chart-dot-track {
+  --span: calc(100% - var(--room));
   position: relative;
   align-self: stretch;
+}
+
+.chart-dot-line {
+  position: absolute;
+  inset-block: calc(var(--bar-gap) / -2);
+  left: round(down, calc(var(--at) * var(--span)), 1px);
+  width: 1px;
+  background: var(--rule);
+}
+
+.chart-dot-guide {
+  position: absolute;
+  top: calc(50% - 1px);
+  left: 0;
+  width: calc(var(--at) * var(--span));
+  height: 1px;
+  background: var(--rule);
 }
 
 .chart-dot {
   position: absolute;
   top: calc(50% - 4px);
-  left: calc(var(--at) * 100% - 4px);
+  left: calc(var(--at) * var(--span) - 4px);
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -537,20 +559,24 @@
   box-shadow: 0 0 0 2px var(--surface);
 }
 
-/* Words in place of a dot, in the caption's ink. */
+/* Words in place of a dot, in the caption's ink, over the gridlines. */
 .chart-dots-none {
   position: absolute;
   inset-block: 0;
   display: flex;
   align-items: center;
+  padding-inline-end: var(--tip-gap);
+  background: var(--surface);
   color: var(--ink-3);
   white-space: nowrap;
 }
 
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
  * kept inside the tracks at either end. The clamp centres a label itself, so
- * it takes no x axis's half-label shift as well. */
-.chart-box-axis .chart-ticks {
+ * it takes no x axis's half-label shift as well. A dot plot's centre on their
+ * gridlines at the ends too. */
+.chart-box-axis .chart-ticks,
+.chart-dots-axis .chart-ticks {
   position: relative;
   align-self: stretch;
 }
@@ -558,6 +584,14 @@
 .chart-box-axis .chart-ticks.x .chart-tick {
   left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
   translate: none;
+}
+
+.chart-dots-axis .chart-ticks {
+  margin-right: var(--room);
+}
+
+.chart-dots-axis .chart-tick {
+  left: calc(var(--at) * 100%);
 }
 
 /* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it
