@@ -142,6 +142,48 @@ test('a save that holds no groups fold reads back as none', () => {
   for (const v of unsaved) expect(GroupsFold.restored(v)).toBeUndefined();
 });
 
+test('a mean fold read back from its save folds on as the fold it was, its counts of numbers with it', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const rows = Array.from({ length: DRAWS }, (): [string, string] => [
+      pick(['', 'East', 'West']),
+      pick(CELLS),
+    ]);
+    for (const mark of ['point', 'comma'] as const) {
+      const [whole, before] = [
+        new GroupsFold('mean', mark),
+        new GroupsFold('mean', mark),
+      ];
+      for (const r of rows) whole.add(...r);
+      for (const r of rows.slice(0, HALF)) before.add(...r);
+      const after = GroupsFold.restored(throughJson(before.saved()))!;
+      for (const r of rows.slice(HALF)) after.add(...r);
+      expect(after.saved(), `seed ${seed}`).toStrictEqual(whole.saved());
+      expect(after.means(), `seed ${seed}`).toStrictEqual(whole.means());
+    }
+  }
+});
+
+test('a save that holds no mean fold reads back as none', () => {
+  const fold = new GroupsFold('mean', 'point');
+  fold.add('East', '2');
+  const saved = fold.saved();
+  const [east] = saved.groups;
+  const unsaved = [
+    { ...saved, mark: undefined },
+    { ...saved, groups: [{ ...east, numbers: undefined }] },
+    { ...saved, groups: [{ ...east, numbers: 2 }] },
+    { ...saved, groups: [{ ...east, numbers: -1 }] },
+    { ...saved, rest: { rows: 0, sum: saved.rest.sum } },
+  ];
+  for (const v of unsaved)
+    expect(GroupsFold.restored(throughJson(v))).toBeUndefined();
+  expect(GroupsFold.restored(throughJson(saved))?.means()).toStrictEqual(
+    fold.means(),
+  );
+});
+
 test('a split fold saves each count in the order it began, with its exact sum', () => {
   const fold = new SplitFold('point');
   fold.add('East', 'web', '1.5');
@@ -632,7 +674,8 @@ test('a save that holds no spreads fold reads back as none', () => {
  * dates in each order, with DATES added, and its rows and revenue per
  * region by channel with each mark, with CELLS added, and its revenue and
  * units spread with each mark, exact and coarsened, with SPREAD_CELLS, and
- * its revenue spread by region and by rep with each mark. It
+ * its revenue spread by region and by rep with each mark, and its revenue
+ * and units' mean by channel with each mark, with CELLS added. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -644,6 +687,7 @@ const GOLDEN = {
   split: '10134ed7db0713a75f0bbebee410afa91ef190bbc0d7ef23fed72bf12fd9191c',
   spread: 'e623684be52f441a3afae50186f5f68a0d942ccb3b267715a208bd1734956c67',
   spreads: '4d692394f8b2ad5f577c4016013a381dc2662741743816ab00b57a35dc29e6d1',
+  mean: '46fe0e11379d829a37ab6ee93bbfb3c25da30cff2630076375e3aca28605c4f9',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -733,4 +777,17 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(byValue))),
     'a spreads fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.spreads);
+  const means = (['point', 'comma'] as const).flatMap((mark) =>
+    [REVENUE, UNITS].map((col) => {
+      const fold = new GroupsFold('mean', mark);
+      const cells = column(col);
+      channels.forEach((v, r) => fold.add(v, cells[r]));
+      CELLS.forEach((cell) => fold.add('', cell));
+      return fold.saved();
+    }),
+  );
+  expect(
+    hashOf(encoder.encode(JSON.stringify(means))),
+    'a mean fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.mean);
 });

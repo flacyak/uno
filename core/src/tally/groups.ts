@@ -53,8 +53,11 @@ export function movedFirst<T extends { value: string }>(
   ];
 }
 
-/** What a fold ranks its groups by: their rows, or the sum of their cells. */
-export type Measure = 'rows' | 'sum';
+/**
+ * What a fold ranks its groups by: their rows, the sum of their cells, or
+ * their mean, the sum over the cells that read as numbers.
+ */
+export type Measure = 'rows' | 'sum' | 'mean';
 
 /** One value's rows, and the sum of their cells. */
 export interface Group {
@@ -65,10 +68,18 @@ export interface Group {
   sum: number;
 }
 
+/** One value's group of a mean fold: its cells that read as numbers too. */
+export interface MeanGroup extends Group {
+  numbers: number;
+}
+
 /** What a fold holds, read. */
-export interface Groups {
-  /** At most GROUPS_SENT groups, the largest first, ties in value order. */
-  groups: Group[];
+export interface Groups<G extends Group = Group> {
+  /**
+   * At most GROUPS_SENT groups, the largest first, ties in value order; of a
+   * mean, the values with no number last.
+   */
+  groups: G[];
   /** The groups not sent that measure more than zero, read as one. */
   others: { values: number; rows: number; sum: number };
   /** The groups not sent that measure zero or less, which a pie leaves out. */
@@ -79,29 +90,35 @@ export interface Groups {
   skipped: Skipped;
 }
 
-/** One group as a save writes it: its rows, and their sum when summed. */
+/**
+ * One group as a save writes it: its rows, their sum when summed, and its
+ * cells that read as numbers for a mean.
+ */
 interface SavedCount {
   value: string;
   rows: number;
   sum?: SavedSum;
+  numbers?: number;
 }
 
 /**
- * SavedGroups is every bit of a GroupsFold, as a save writes it: the mark it
- * sums with, none when it counts rows, its groups in the order they began,
- * the rest's rows and sum, and the cells it left out.
+ * SavedGroups is every bit of a GroupsFold, as a save writes it: whether it
+ * means, the mark it sums with, none when it counts rows, its groups in the
+ * order they began, the rest's rows and sum, and the cells it left out.
  */
 export interface SavedGroups {
+  measure?: 'mean';
   mark?: Mark;
   groups: SavedCount[];
   rest: Omit<SavedCount, 'value'>;
   skipped: Skipped;
 }
 
-/** Rows counted together, and their cells added exactly. */
+/** Rows counted together, their cells added exactly, and those read as numbers. */
 export class Count {
   rows = 0;
   sum = new ExactSum();
+  numbers = 0;
 }
 
 /**
@@ -119,8 +136,10 @@ export function counted(
   to.rows += sign;
   if (mark === undefined) return;
   const x = parse(cell, mark);
-  if (x !== undefined) to.sum.add(sign * x);
-  else if (cell === '') skipped.blank += sign;
+  if (x !== undefined) {
+    to.sum.add(sign * x);
+    to.numbers += sign;
+  } else if (cell === '') skipped.blank += sign;
   else skipped.unparsed += sign;
 }
 
@@ -133,6 +152,8 @@ export function counted(
  * are all in its group or all in the rest, and every count and sum is exact.
  * An edit takes back its old row first, so its new row can fill a freed place.
  * A fold that sums reads the cells with the decimal mark of their column.
+ * A fold that means sums them too, and counts each value's cells that read
+ * as numbers, which `means` sends and its save keeps.
  */
 export class GroupsFold {
   private readonly measure: Measure;
@@ -143,8 +164,8 @@ export class GroupsFold {
   private readonly skipped: Skipped = { blank: 0, unparsed: 0 };
 
   constructor();
-  constructor(measure: 'sum', mark: Mark);
-  constructor(measure?: 'sum', mark?: Mark) {
+  constructor(measure: 'sum' | 'mean', mark: Mark);
+  constructor(measure?: 'sum' | 'mean', mark?: Mark) {
     this.measure = measure ?? 'rows';
     this.mark = mark;
   }
@@ -170,9 +191,14 @@ export class GroupsFold {
   /** saved is what the fold holds, which `restored` reads back as it was. */
   saved(): SavedGroups {
     const summed = this.mark !== undefined;
-    const kept = ({ rows, sum }: Count) =>
-      summed ? { rows, sum: sum.saved() } : { rows };
+    const meant = this.measure === 'mean';
+    const kept = ({ rows, sum, numbers }: Count) => ({
+      rows,
+      ...(summed ? { sum: sum.saved() } : {}),
+      ...(meant ? { numbers } : {}),
+    });
     return {
+      ...(meant ? { measure: 'mean' as const } : {}),
       mark: this.mark,
       groups: [...this.groups].map(([value, c]) => ({ value, ...kept(c) })),
       rest: kept(this.rest),
@@ -183,18 +209,29 @@ export class GroupsFold {
   /** restored is the fold `saved` holds, or undefined where it holds none. */
   static restored(saved: unknown): GroupsFold | undefined {
     if (!isRecord(saved)) return undefined;
-    const { mark, groups, rest } = saved;
+    const { measure, mark, groups, rest } = saved;
     const skipped = restoredSkipped(saved['skipped']);
     if (skipped === undefined || (mark !== undefined && !isMark(mark)))
       return undefined;
+    const meant = measure === 'mean';
     if (!Array.isArray(groups) || groups.length > DISTINCT_AT_MOST)
       return undefined;
+    if ((measure !== undefined && !meant) || (meant && mark === undefined))
+      return undefined;
     const fold =
-      mark === undefined ? new GroupsFold() : new GroupsFold('sum', mark);
-    // A count holds rows, and its sum where the fold sums.
+      mark === undefined
+        ? new GroupsFold()
+        : new GroupsFold(meant ? 'mean' : 'sum', mark);
+    // A count holds rows, its sum where the fold sums, and of a mean, its
+    // numbers, none past its rows.
     const count = (v: unknown, into: Count): boolean => {
       if (!isRecord(v) || !isCount(v['rows'])) return false;
       into.rows = v['rows'];
+      const numbers = v['numbers'];
+      if (meant) {
+        if (!isCount(numbers) || numbers > into.rows) return false;
+        into.numbers = numbers;
+      }
       const sum = mark === undefined ? into.sum : ExactSum.restored(v['sum']);
       if (sum !== undefined) into.sum = sum;
       return sum !== undefined;
@@ -215,12 +252,35 @@ export class GroupsFold {
    * `moved` first, in its order, and the rest largest first.
    */
   snapshot(moved: readonly string[] = []): Groups {
-    const ranked = [...this.groups].map(([value, { rows, sum }]) => ({
+    return this.read(moved, (value, { rows, sum }) => ({
       value,
       rows,
       sum: sum.value(),
     }));
-    const size = (g: Group) => g[this.measure];
+  }
+
+  /** means reads a fold that means as snapshot does, with each group's numbers. */
+  means(moved: readonly string[] = []): Groups<MeanGroup> {
+    return this.read(moved, (value, { rows, sum, numbers }) => ({
+      value,
+      rows,
+      sum: sum.value(),
+      numbers,
+    }));
+  }
+
+  /** read is the snapshot of the fold, each group read by `of`. */
+  private read<G extends Group>(
+    moved: readonly string[],
+    of: (value: string, count: Count) => G,
+  ): Groups<G> {
+    const ranked = [...this.groups].map(([value, count]) => of(value, count));
+    // A mean ranks a value with no number under every value with one.
+    const size = (g: Group) => {
+      if (this.measure !== 'mean') return g[this.measure];
+      const { numbers } = this.groups.get(g.value)!;
+      return numbers === 0 ? Number.NEGATIVE_INFINITY : g.sum / numbers;
+    };
     // Two infinite sums differ by NaN, a tie, which goes to value order too.
     ranked.sort(
       (a, b) => size(b) - size(a) || compareStrings(a.value, b.value),
@@ -237,7 +297,7 @@ export class GroupsFold {
   }
 
   /** merged reads groups as one, their sums merged and read once. */
-  private merged(unsent: Group[]): Groups['others'] {
+  private merged(unsent: readonly Group[]): Groups['others'] {
     const all = new Count();
     for (const { value } of unsent) {
       const { rows, sum } = this.groups.get(value)!;
