@@ -3,8 +3,9 @@
 import { compareStrings } from '@go';
 import type { Mark } from '@num';
 
+import { isMark, isRecord } from './saved.ts';
 import { SpreadFold } from './spread.ts';
-import type { Boxed } from './spread.ts';
+import type { Boxed, SavedSpread } from './spread.ts';
 
 /** The most values a box plot by a column keeps a spread of; later values share Other's. */
 export const BOX_VALUES_AT_MOST = 32;
@@ -17,6 +18,13 @@ export type ValueSpread = { value: string; spread: Boxed };
 /** What a snapshot sends: the values kept, by median, and Other's spread where a row is in it. */
 export type Spreads = { values: ValueSpread[]; rest?: Boxed };
 
+/** SavedSpreads is every bit of a SpreadsFold: its mark, each value's spread in the order they began, and Other's. */
+export interface SavedSpreads {
+  mark: Mark;
+  values: Array<[string, SavedSpread]>;
+  rest: SavedSpread;
+}
+
 /**
  * SpreadsFold keeps a spread per value, as GroupsFold keeps a group: while
  * fewer than BOX_VALUES_AT_MOST have one and Other is empty, so a value's rows
@@ -26,7 +34,7 @@ export class SpreadsFold {
   /** The mark cells are read with. */
   readonly mark: Mark;
   private readonly values = new Map<string, SpreadFold>();
-  private readonly rest: SpreadFold;
+  private rest: SpreadFold;
 
   constructor(mark: Mark) {
     this.mark = mark;
@@ -49,6 +57,42 @@ export class SpreadsFold {
     const spread = this.values.get(value);
     (spread ?? this.rest).remove(cell);
     if (spread?.rows === 0) this.values.delete(value);
+  }
+
+  /** saved is what the fold holds, which `restored` reads back as it was. */
+  saved(): SavedSpreads {
+    const values = [...this.values].map(([v, fold]): [string, SavedSpread] => [
+      v,
+      fold.saved(),
+    ]);
+    return { mark: this.mark, values, rest: this.rest.saved() };
+  }
+
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none: a
+   * spread that is not one of its mark, a value twice or empty, or more than
+   * BOX_VALUES_AT_MOST values.
+   */
+  static restored(saved: unknown): SpreadsFold | undefined {
+    if (!isRecord(saved) || !isMark(saved['mark'])) return undefined;
+    const { mark, values } = saved;
+    const fold = new SpreadsFold(mark);
+    const spreadOf = (s: unknown) => {
+      const back = SpreadFold.restored(s, SPREAD_VALUE_AT_MOST);
+      return back?.mark === mark ? back : undefined;
+    };
+    const rest = spreadOf(saved['rest']);
+    if (rest === undefined || !Array.isArray(values)) return undefined;
+    if (values.length > BOX_VALUES_AT_MOST) return undefined;
+    for (const v of values as unknown[]) {
+      const [value, spread]: unknown[] = Array.isArray(v) ? v : [];
+      const back = spreadOf(spread);
+      if (typeof value !== 'string' || fold.values.has(value)) return undefined;
+      if (back === undefined || back.rows === 0) return undefined;
+      fold.values.set(value, back);
+    }
+    fold.rest = rest;
+    return fold;
   }
 
   /** snapshot reads each value's spread, the highest median first, ties by value, and Other's. */
