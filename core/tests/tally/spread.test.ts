@@ -6,7 +6,13 @@ import { expect, test } from 'vite-plus/test';
 
 import { parse } from '@num';
 import type { Mark } from '@num';
-import { FIGURES_AT_MOST, SPREAD_AT_MOST, SpreadFold } from '@tally/spread';
+import {
+  FIGURES_AT_MOST,
+  SPAN_PERCENTILES,
+  SPREAD_AT_MOST,
+  SpreadFold,
+  WHISKER_SPREADS,
+} from '@tally/spread';
 import type { Bucket } from '@tally/spread';
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
 import type { Random } from '@core-tests/lab/cache/stats';
@@ -172,4 +178,89 @@ test('a spread takes a row back at the figures it holds, and never goes finer', 
   });
   expect(new SpreadFold('point').read().figures).toBe('exact');
   expect(SPREAD_AT_MOST).toBeGreaterThan(CELLS);
+});
+
+/** fivenum is R's fivenum of sorted `x`: Tukey's least, hinges, median and most. */
+function fivenum(x: readonly number[]): number[] {
+  const n = x.length;
+  const n4 = Math.floor((n + 3) / 2) / 2;
+  const at = (d: number) =>
+    0.5 * (x[Math.floor(d) - 1]! + x[Math.ceil(d) - 1]!);
+  return [1, n4, (n + 1) / 2, n + 1 - n4, n].map(at);
+}
+
+/** quantile is R's default quantile of sorted `x` at `p`, Excel's PERCENTILE.INC. */
+function quantile(x: readonly number[], p: number): number {
+  const index = 1 + (x.length - 1) * p;
+  const lo = Math.floor(index);
+  const [low, high] = [x[lo - 1]!, x[Math.ceil(index) - 1]!];
+  const h = index - lo;
+  return h > 0 && high !== low ? (1 - h) * low + h * high : low;
+}
+
+/** boxed is R's boxplot.stats of sorted `x`: its whisker ends, and the numbers past each. */
+function boxed(x: readonly number[]) {
+  const [, q1, , q3] = fivenum(x);
+  const reach = WHISKER_SPREADS * (q3! - q1!);
+  const within = x.filter((v) => v >= q1! - reach && v <= q3! + reach);
+  return {
+    whiskers: [within[0]!, within.at(-1)!],
+    below: x.filter((v) => v < within[0]!),
+    above: x.filter((v) => v > within.at(-1)!),
+  };
+}
+
+/** point is a number a spread holds exactly, as both its bounds. */
+const point = (x: number) => [x, x];
+
+test("a spread's box is R's boxplot of its numbers while exact", () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const length = 1 + Math.floor(random() * CELLS);
+    const cells = Array.from({ length }, () => cellOf(random));
+    // A few far out, so most seeds have numbers past a whisker.
+    cells.push(`${WHOLE_AT_MOST * seed}`, `-${WHOLE_AT_MOST * seed}`);
+    const fold = new SpreadFold('point');
+    for (const c of cells) fold.add(c);
+    // A fold counts -0 as 0.
+    const x = cells.flatMap((c) => parse(c, 'point') ?? []).map((v) => v + 0);
+    x.sort((a, b) => a - b);
+    const box = fold.snapshot().box!;
+    const r = boxed(x);
+    expect(box.five, `seed ${seed}`).toStrictEqual(fivenum(x).map(point));
+    expect(box.whiskers).toStrictEqual(r.whiskers.map(point));
+    expect([box.below, box.above]).toStrictEqual([
+      r.below.length,
+      r.above.length,
+    ]);
+    const span = SPAN_PERCENTILES.map((p) => point(quantile(x, p)));
+    expect(box.span).toStrictEqual(span);
+    expect(box.mean).toBe(fold.read().sum / x.length);
+  }
+});
+
+test("a coarsened spread's box holds the numbers R reads, to its figures", () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const cells = Array.from({ length: CELLS }, () => `${random() * 1e3}`);
+    const fold = new SpreadFold('point', CELLS / 8);
+    for (const c of cells) fold.add(c);
+    const x = cells.map(Number).sort((a, b) => a - b);
+    const { box, figures } = fold.snapshot();
+    expect(figures).not.toBe('exact');
+    const holds = ([low, high]: number[], v: number) => low! <= v && v <= high!;
+    fivenum(x).forEach((v, i) => expect(holds(box!.five[i]!, v)).toBe(true));
+    SPAN_PERCENTILES.forEach((p, i) =>
+      expect(holds(box!.span[i]!, quantile(x, p)), `seed ${seed}`).toBe(true),
+    );
+    const past = box!.below + box!.above;
+    const inside = x.filter(
+      (v) => v >= box!.whiskers[0]![0]! && v < box!.whiskers[1]![1]!,
+    );
+    expect(inside.length + past).toBe(CELLS);
+  }
+});
+
+test('a spread of no numbers has no box', () => {
+  expect(new SpreadFold('point').snapshot().box).toBeUndefined();
 });

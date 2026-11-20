@@ -17,6 +17,11 @@ import type { Skipped } from './skipped.ts';
 export const SPREAD_AT_MOST = 8_192;
 /** The most significant figures a bucket keeps once a spread stops being exact. */
 export const FIGURES_AT_MOST = 12;
+/** The percentiles a histogram and a box plot span by default: the 1st and the 99th. */
+export const SPAN_PERCENTILES = [0.01, 0.99] as const;
+/** How many hinge spreads past its box a whisker reaches, as R's boxplot draws. */
+export const WHISKER_SPREADS = 1.5;
+
 /** Whether a spread holds each number, or how many significant figures of it. */
 export type Figures = number | 'exact';
 
@@ -38,6 +43,31 @@ export interface Spreading {
   /** Their sum, rounded once. */
   sum: number;
   /** The cells that are blank or read as no number. */
+  skipped: Skipped;
+}
+
+/** A number a spread knows to the bucket it falls in: its least and most, equal when exact. */
+export type Within = [number, number];
+
+/** What a box plot draws of a spread, as R's boxplot reads it. */
+export interface Box {
+  mean: number;
+  /** Tukey's five, as R's fivenum: the least, the lower hinge, the median, the upper hinge, the most. */
+  five: Within[];
+  /** The most extreme numbers within WHISKER_SPREADS hinge spreads of the box, low then high. */
+  whiskers: Within[];
+  /** The rows past each whisker. */
+  below: number;
+  above: number;
+  /** The SPAN_PERCENTILES as R's quantile and Excel's PERCENTILE.INC read them. */
+  span: Within[];
+}
+
+/** What a snapshot sends: no box when no cell reads as a number. */
+export interface Spread {
+  numbers: number;
+  figures: Figures;
+  box?: Box;
   skipped: Skipped;
 }
 
@@ -145,6 +175,16 @@ export class SpreadFold {
     return fold;
   }
 
+  /**
+   * snapshot reads the fold as R reads its numbers. Coarsened, a number at a
+   * rank is its bucket's ends, and a bucket is past a whisker by its middle.
+   */
+  snapshot(): Spread {
+    const { buckets, numbers, sum, figures } = this.read();
+    const spread = { numbers, figures, skipped: { ...this.skipped } };
+    return numbers === 0 ? spread : { ...spread, box: boxOf(buckets, sum) };
+  }
+
   /** read is what the fold holds, as plain numbers. */
   read(): Spreading {
     const f = this.figures;
@@ -195,4 +235,49 @@ export class SpreadFold {
       this.buckets.set(to, (this.buckets.get(to) ?? 0) + rows);
     }
   }
+}
+
+/** boxOf is the box of `buckets`, least first, which hold at least a row and sum to `sum`. */
+function boxOf(buckets: readonly Bucket[], sum: number): Box {
+  const within = (b: Bucket): Within => [b.low, b.high];
+  const ends: number[] = [];
+  for (const b of buckets) ends.push((ends.at(-1) ?? 0) + b.rows);
+  const n = ends.at(-1)!;
+  // The bucket of the row at `rank`, counted from 1.
+  const at = (rank: number) =>
+    within(buckets[ends.findIndex((e) => e >= rank)]!);
+  // R's blend of the numbers either side of a rank, `h` of the way along.
+  const mix = (a: number, b: number, h: number) =>
+    h > 0 && b !== a ? (1 - h) * a + h * b : a;
+  const between = (a: Within, b: Within, h: number): Within => [
+    mix(a[0], b[0], h),
+    mix(a[1], b[1], h),
+  ];
+  const half = 1 / 2;
+  const tukey = (d: number) =>
+    between(at(Math.floor(d)), at(Math.ceil(d)), half);
+  const n4 = Math.floor((n + 3) / 2) / 2;
+  const five = [1, n4, (n + 1) / 2, n + 1 - n4, n].map(tukey);
+  const quantile = (p: number) => {
+    const index = 1 + (n - 1) * p;
+    const lo = Math.floor(index);
+    return between(at(lo), at(Math.ceil(index)), index - lo);
+  };
+  const middle = ([low, high]: Within) => (low + high) / 2;
+  const [q1, q3] = [middle(five[1]!), middle(five[3]!)];
+  const reach = WHISKER_SPREADS * (q3 - q1);
+  const inside = (b: Bucket) =>
+    middle(within(b)) >= q1 - reach && middle(within(b)) <= q3 + reach;
+  const first = buckets.findIndex(inside);
+  const last = buckets.findLastIndex(inside);
+  const past = (out: readonly Bucket[]) =>
+    out.reduce((rows, b) => rows + b.rows, 0);
+  return {
+    mean: sum / n,
+    five,
+    whiskers: [within(buckets[first]!), within(buckets[last]!)],
+    below: past(buckets.slice(0, first)),
+    above: past(buckets.slice(last + 1)),
+    span: SPAN_PERCENTILES.map(quantile),
+  };
 }
