@@ -37,6 +37,9 @@ const spreadOf = (at?: number): Omit<Spread, "levels"> => ({
   skipped: { blank: at === undefined ? 1 : 0, unparsed: 0 },
 });
 
+/** What a row's spread counts, where a test does not ask. */
+const COUNTED = { numbers: 1, figures: "exact" } as const;
+
 /** A plot's height in px, of more rows than a few boxes take. */
 const TALL = 300;
 
@@ -101,7 +104,7 @@ test("a box stands from hinge to hinge, its median across it and its whiskers to
       [100, 100],
     ],
   };
-  const box = boxes([{ label: "West", box: spread }], false, TALL);
+  const box = boxes([{ label: "West", box: spread, ...COUNTED }], false, TALL);
   expect(marks(box)).toStrictEqual([
     ["chart-whisker 0.1 0.8", "chart-box 0.2 0.6", "chart-median 0.3 0.3"],
   ]);
@@ -120,8 +123,10 @@ test("a mark past the span stands at its edge, and the rows a plot cannot hold a
       [100, 100],
     ],
   };
-  expect(marks(boxes([{ label: "a", box: wide }], false, TALL))[0]![0]).toBe("chart-whisker 0 1");
-  const many = Array.from({ length: 40 }, (_, i) => ({ label: `${i}`, box: boxAt(i) }));
+  expect(marks(boxes([{ label: "a", box: wide, ...COUNTED }], false, TALL))[0]![0]).toBe(
+    "chart-whisker 0 1",
+  );
+  const many = Array.from({ length: 40 }, (_, i) => ({ label: `${i}`, box: boxAt(i), ...COUNTED }));
   expect(boxes(many, false, TALL).querySelectorAll(".chart-box-track").length).toBeLessThan(
     rowsIn(TALL),
   );
@@ -136,11 +141,11 @@ test("a number past a whisker is a ring, the axis is labelled under the rows, an
     ],
     above: { rows: 3, buckets: [{ low: 90, high: 90, rows: 3 }] },
   };
-  const box = boxes([{ label: "a", box: past }], false, TALL);
+  const box = boxes([{ label: "a", box: past, ...COUNTED }], false, TALL);
   expect(marks(box)[0]!.at(-1)).toBe("chart-past 0.9 0.9");
   const ticks = [...box.querySelectorAll(".chart-box-axis .chart-tick")].map((t) => t.textContent);
   expect(ticks).toStrictEqual(["0", "50", "100"]);
-  const many = Array.from({ length: 40 }, (_, i) => ({ label: `${i}`, box: boxAt(i) }));
+  const many = Array.from({ length: 40 }, (_, i) => ({ label: `${i}`, box: boxAt(i), ...COUNTED }));
   const shown = rowsIn(TALL) - 2;
   const crowded = boxes(many, false, TALL);
   expect(crowded.querySelectorAll(".chart-box-track")).toHaveLength(shown);
@@ -165,7 +170,7 @@ test("a box plot's axis reaches whole spans past its span, two at most each side
     ],
     above: { rows: 1, buckets: [{ low: 900, high: 900, rows: 1 }] },
   };
-  const along = boxes([{ label: "a", box: far }], false, TALL);
+  const along = boxes([{ label: "a", box: far, ...COUNTED }], false, TALL);
   const plot = along.querySelector<HTMLElement>(".chart-boxes")!;
   expect(along.classList.contains("chart-scrolls")).toBe(true);
   expect([
@@ -176,7 +181,7 @@ test("a box plot's axis reaches whole spans past its span, two at most each side
   expect([ticks[0], ticks.at(-1)]).toStrictEqual(["-200", "300"]);
   expect(marks(plot)[0]!.at(-1)).toBe("chart-past 1 1");
   // Every number shows on an axis of its own, which reaches no further.
-  const all = boxes([{ label: "a", box: far }], true, TALL).querySelector<HTMLElement>(
+  const all = boxes([{ label: "a", box: far, ...COUNTED }], true, TALL).querySelector<HTMLElement>(
     ".chart-boxes",
   )!;
   expect(all.style.getPropertyValue("--spans")).toBe("1");
@@ -204,8 +209,8 @@ test("a row is worth its median, named by its value, its middle half, its whiske
     above: { rows: 2, buckets: [{ low: 90, high: 90, rows: 2 }] },
   };
   const rows = [
-    { label: "West", box: spread },
-    { label: "East", box: boxAt(5) },
+    { label: "West", box: spread, ...COUNTED },
+    { label: "East", box: boxAt(5), ...COUNTED },
   ];
   const drawn = boxes(rows, false, TALL);
   const targets = boxTargets(rows, drawn);

@@ -99,4 +99,15 @@ export const CHART_BOX: Check[] = [
       return /median of West .* middle half .* whiskers .* past them .* mean$/.test(said) ? "" : "the box says " + said;
     `,
   },
+  {
+    name: "a box plot's table lists a line per region with its numbers, R's five, mean and rows past its whiskers",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-box-table",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tbody tr")].map((tr) => tr.children[0].textContent);
+      return lines.join() === "${BY_MEDIAN.join()}" ? "" : "the table lists " + lines.join();
+    `,
+  },
 ];

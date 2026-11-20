@@ -4,7 +4,8 @@
  */
 
 import type { BoxTally } from "@engine";
-import type { Box, Within } from "@tally";
+
+import type { Box, Figures, Within } from "@tally";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { revealed } from "./histogram.ts";
@@ -16,10 +17,16 @@ import type { Axis } from "./axes.ts";
 import { barsBox } from "./bars.ts";
 import { row, rowsIn } from "./rows.ts";
 
+/** A spread as a box plot's tally sends it. */
+type Spreading = NonNullable<BoxTally["rest"]>;
+
 /** A row a box plot draws: what it names, and its box. */
 export interface Boxed {
   label: string;
   box: Box;
+  /** The rows whose cells read as numbers, and the figures its spread holds them to. */
+  numbers: number;
+  figures: Figures;
 }
 
 /**
@@ -28,16 +35,15 @@ export interface Boxed {
  * its column's one box, named `whole`. A value with no number has none.
  */
 export function boxedRows(tally: BoxTally, whole: string): Boxed[] {
-  const values = tally.values.flatMap(({ value, spread }) =>
-    spread.box === undefined ? [] : [{ label: value, box: spread.box }],
-  );
-  const rest = tally.rest?.box;
-  if (rest === undefined) return values;
-  return [...values, { label: values.length === 0 ? whole : m.chart_pie_other(), box: rest }];
+  const boxed = (label: string, { box, numbers, figures }: Spreading): Boxed[] =>
+    box === undefined ? [] : [{ label, box, numbers, figures }];
+  const values = tally.values.flatMap(({ value, spread }) => boxed(value, spread));
+  if (tally.rest === undefined) return values;
+  return [...values, ...boxed(values.length === 0 ? whole : m.chart_pie_other(), tally.rest)];
 }
 
 /** middle is where a number a spread knows to its bucket stands: exact, or its bucket's middle. */
-const middle = ([low, high]: Within): number => (low + high) / 2;
+export const middle = ([low, high]: Within): number => (low + high) / 2;
 
 /**
  * The most spans a box plot's axis reaches past its span on each side, so the

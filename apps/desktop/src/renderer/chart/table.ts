@@ -12,13 +12,15 @@
 
 import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { Groups, Sample, SpreadTally, StackTally, TimeTally } from "@engine";
+import type { BoxTally, Groups, Sample, SpreadTally, StackTally, TimeTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import type { Level, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
+import { middle } from "./box.ts";
+import type { Boxed } from "./box.ts";
 import { edgeWords } from "./histogram.ts";
 import { PER_WORDS, label } from "./periods.ts";
 import { PIE_SLICES_AT_MOST, slices, unsent, wholeOf } from "./pie.ts";
@@ -195,12 +197,44 @@ export function timed(
 }
 
 /** leftOut gives a line across `span` columns of the cells `tally` left out, or none. */
-function leftOut(tally: TimeTally | SpreadTally, span: number): HTMLElement[] {
+function leftOut(tally: TimeTally | SpreadTally | BoxTally, span: number): HTMLElement[] {
   const left = [blank(tally), notNumbers(tally)].filter((part) => part !== "").join(SEP);
   if (left === "") return [];
   const line = el("td", "chart-table-line", left);
   line.colSpan = span;
   return [row(line)];
+}
+
+/** The heads of a box plot's numbers, after its rows'. */
+const BOXED_HEADS = [
+  m.chart_table_rows,
+  m.chart_table_least,
+  m.chart_table_hinge_low,
+  m.chart_table_median,
+  m.chart_table_hinge_high,
+  m.chart_table_most,
+  m.chart_box_mean,
+  m.chart_table_past,
+];
+
+/**
+ * boxed gives a box plot's heads and rows: each row under column `by`, its
+ * numbers, R's five, mean and rows past its whiskers, then what `tally` left out.
+ */
+export function boxed(
+  rows: readonly Boxed[],
+  by: ChartColumn,
+  tally: BoxTally,
+): [HTMLElement[], HTMLElement[]] {
+  const heads = [
+    header(columnLabel(by.header, by.col), true),
+    ...BOXED_HEADS.map((w) => header(w(), false, true)),
+  ];
+  const lines = rows.map(({ label, box, numbers }) => {
+    const past = box.below.rows + box.above.rows;
+    return row(rowHead(label), ...[numbers, ...box.five.map(middle), box.mean, past].map(digits));
+  });
+  return [heads, [...lines, ...leftOut(tally, heads.length)]];
 }
 
 /**

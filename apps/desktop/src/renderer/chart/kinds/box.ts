@@ -3,6 +3,7 @@
 import type { Plot } from "@document";
 import { m } from "@paraglide/messages";
 import { boxTargets, boxedRows, boxes, fitBoxes } from "../box.ts";
+import { boxed, tableOf } from "../table.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -20,6 +21,12 @@ export const box: ChartKind<Extract<Plot, { t: "box" }>> = (plot) => ({
     const rows = boxedRows(tally, named(plot.of));
     if (rows.length === 0) return { ...undrawn, empty: true };
     const draw = (height: number) => boxes(rows, plot.span === "all", height);
-    return { ...undrawn, draw, fit: fitBoxes, targets: (drawn) => boxTargets(rows, drawn) };
+    return {
+      ...undrawn,
+      draw,
+      fit: fitBoxes,
+      targets: (drawn) => boxTargets(rows, drawn),
+      table: (called) => tableOf(boxed(rows, plot.by ?? plot.of, tally), called),
+    };
   },
 });
