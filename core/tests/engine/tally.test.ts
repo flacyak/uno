@@ -43,6 +43,7 @@ import {
   LEVEL_BATCH,
   SampleFold,
   SplitFold,
+  SpreadFold,
   TimeFold,
 } from '@tally';
 import {
@@ -157,6 +158,18 @@ const REVENUE_STACKED: Chart = {
   },
 };
 
+/** The fixture's units over their 1st to 99th percentile, and its revenue over every number. */
+const UNITS_SPREAD: Chart = {
+  ...REGION_ROWS,
+  id: 'c8',
+  plot: { t: 'histogram', of: column(UNITS), span: 'most' },
+};
+const REVENUE_SPREAD: Chart = {
+  ...REGION_ROWS,
+  id: 'c9',
+  plot: { t: 'histogram', of: column(REVENUE), span: 'all' },
+};
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -179,6 +192,11 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       fold.add(cell(r, by), cell(r, split), cells);
     }
     return { t: 'stack', plot, coverage, ...fold.snapshot(plot.order) };
+  }
+  if (plot.t === 'histogram') {
+    const fold = new SpreadFold('point');
+    for (let r = 0; r < rows; r++) fold.add(cell(r, plot.of));
+    return { t: 'spread', plot, coverage, ...fold.snapshot(plot.span) };
   }
   if (plot.t === 'time') {
     const reading = 'order' in plot ? plot.order : plot.unit;
@@ -618,6 +636,47 @@ test('an over-time chart folded a block at a time reads as the pure fold of its 
   } as const;
   tallies.attach({ ...PER_MONTH, plot }, HEADERS);
   expect(tallies.from()).toBe(0);
+});
+
+test('a histogram folded a block at a time reads as the pure spread of its numbers, and a change of span alone keeps its fold', () => {
+  const tallies = folded([UNITS_SPREAD, REVENUE_SPREAD]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [UNITS_SPREAD.id, pure(UNITS_SPREAD.plot)],
+    [REVENUE_SPREAD.id, pure(REVENUE_SPREAD.plot)],
+  ]);
+  const every: Chart = {
+    ...UNITS_SPREAD,
+    plot: { t: 'histogram', of: column(UNITS), span: 'all' },
+  };
+  tallies.attach(every, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [every.id, pure(every.plot)],
+  ]);
+  // Bars of the same column hold a fold of another key, so they fold anew.
+  tallies.attach({ ...every, plot: { t: 'bars', by: column(UNITS) } }, HEADERS);
+  expect(tallies.from()).toBe(0);
+});
+
+test('an edit to a number moves a histogram by its one row, and a save keeps the fold, which reads back with no pass', async () => {
+  const tallies = folded([UNITS_SPREAD]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, UNITS, '123456');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[UNITS_SPREAD.id, pure(UNITS_SPREAD.plot, sheet)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  expect(edited).not.toStrictEqual([
+    [UNITS_SPREAD.id, pure(UNITS_SPREAD.plot)],
+  ]);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(UNITS_SPREAD, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });
 
 test('an edit to a date moves an over-time chart by its one row, and a save keeps the fold, which reads back with no pass', async () => {

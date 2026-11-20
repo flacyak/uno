@@ -4,7 +4,7 @@
  */
 
 import type { Order, UnixUnit } from '@date';
-import type { Per } from '@tally';
+import type { Per, Span } from '@tally';
 
 /**
  * The most charts a workspace keeps, carried ones included. Sixteen windows
@@ -77,7 +77,9 @@ export type Plot =
   /** One point per row, x against y, both number columns. */
   | { t: 'scatter'; x: ChartColumn; y: ChartColumn }
   | TimePlot
-  | StackPlot;
+  | StackPlot
+  /** Rows per bin of the numbers of `of`, over the 1st to 99th percentile or every number. */
+  | { t: 'histogram'; of: ChartColumn; span: Span };
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

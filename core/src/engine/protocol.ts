@@ -18,6 +18,7 @@ import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
 import type { Groups, Per, Sample, Split, TimeLevel, Times } from '@tally';
+import type { Spread } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -313,6 +314,13 @@ export interface StackTally extends Split {
   coverage: Coverage;
 }
 
+/** A histogram's tally: its box, and its levels over its span. */
+export interface SpreadTally extends Spread {
+  t: 'spread';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
  * arrays, or why the source could not be read. Each names the plot it reads,
@@ -324,6 +332,7 @@ export type Tally =
   | SampleTally
   | TimeTally
   | StackTally
+  | SpreadTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**

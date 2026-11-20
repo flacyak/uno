@@ -42,6 +42,8 @@ describe('parsePlot', () => {
     { t: 'pie', by: NO_HEADER },
     { t: 'scatter', x: REVENUE, y: UNITS },
     { t: 'time', at: DATE, sum: REVENUE, per: 'week', unit: 's' },
+    { t: 'histogram', of: REVENUE, span: 'most' },
+    { t: 'histogram', of: UNITS, span: 'all' },
   ])('reads %j', (plot) => {
     expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });
@@ -66,6 +68,12 @@ describe('parsePlot', () => {
       'this build does not read "by"',
     ],
     [{ t: 'time', at: DATE, per: 'day' }, ONE_READING],
+    [{ t: 'histogram', of: REVENUE }, 'span is not most or all'],
+    [{ t: 'histogram', of: REVENUE, span: 'some' }, 'span is not most or all'],
+    [
+      { t: 'histogram', of: REVENUE, span: 'all', by: REGION },
+      'this build does not read "by"',
+    ],
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parsePlot(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
