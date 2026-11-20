@@ -23,6 +23,8 @@ export const FIGURES_AT_MOST = 12;
 export const SPAN_PERCENTILES = [0.01, 0.99] as const;
 /** How many hinge spreads past its box a whisker reaches, as R's boxplot draws. */
 export const WHISKER_SPREADS = 1.5;
+/** The most buckets past a whisker a snapshot sends on each side, more than a box's width draws apart. */
+export const PAST_SENT_AT_MOST = 128;
 
 /** Whether a spread holds each number, or how many significant figures of it. */
 export type Figures = number | 'exact';
@@ -51,6 +53,12 @@ export interface Spreading {
 /** A number a spread knows to the bucket it falls in: its least and most, equal when exact. */
 export type Within = [number, number];
 
+/** The rows past one whisker, and up to PAST_SENT_AT_MOST of their buckets, evenly through them. */
+export interface Past {
+  rows: number;
+  buckets: Bucket[];
+}
+
 /** What a box plot draws of a spread, as R's boxplot reads it. */
 export interface Box {
   mean: number;
@@ -58,9 +66,9 @@ export interface Box {
   five: Within[];
   /** The most extreme numbers within WHISKER_SPREADS hinge spreads of the box, low then high. */
   whiskers: Within[];
-  /** The rows past each whisker. */
-  below: number;
-  above: number;
+  /** The rows past each whisker, and their buckets, which a box plot draws as points. */
+  below: Past;
+  above: Past;
   /** The SPAN_PERCENTILES as R's quantile and Excel's PERCENTILE.INC read them. */
   span: Within[];
 }
@@ -283,8 +291,10 @@ function boxOf(buckets: readonly Bucket[], sum: number): Box {
     middle(within(b)) >= q1 - reach && middle(within(b)) <= q3 + reach;
   const first = buckets.findIndex(inside);
   const last = buckets.findLastIndex(inside);
-  const past = (out: readonly Bucket[]) =>
-    out.reduce((rows, b) => rows + b.rows, 0);
+  const past = (out: readonly Bucket[]): Past => ({
+    rows: out.reduce((rows, b) => rows + b.rows, 0),
+    buckets: evenly(out, PAST_SENT_AT_MOST),
+  });
   return {
     mean: sum / n,
     five,
@@ -293,4 +303,11 @@ function boxOf(buckets: readonly Bucket[], sum: number): Box {
     above: past(buckets.slice(last + 1)),
     span: SPAN_PERCENTILES.map(quantile),
   };
+}
+
+/** evenly is `xs`, or `atMost` of them evenly through, its ends among them. */
+function evenly<T>(xs: readonly T[], atMost: number): T[] {
+  if (xs.length <= atMost) return [...xs];
+  const step = (xs.length - 1) / (atMost - 1);
+  return Array.from({ length: atMost }, (_, i) => xs[Math.round(i * step)]!);
 }

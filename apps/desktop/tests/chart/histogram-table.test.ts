@@ -50,8 +50,8 @@ const TALLY: SpreadTally = {
       [1, 1],
       [45, 45],
     ],
-    below: 0,
-    above: 2,
+    below: { rows: 0, buckets: [] },
+    above: { rows: 2, buckets: [{ low: 90, high: 90, rows: 2 }] },
     span: [
       [10, 10],
       [35, 35],

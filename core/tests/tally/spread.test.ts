@@ -8,6 +8,7 @@ import { parse } from '@num';
 import type { Mark } from '@num';
 import {
   FIGURES_AT_MOST,
+  PAST_SENT_AT_MOST,
   SPAN_PERCENTILES,
   SPREAD_AT_MOST,
   SpreadFold,
@@ -229,10 +230,16 @@ test("a spread's box is R's boxplot of its numbers while exact", () => {
     const r = boxed(x);
     expect(box.five, `seed ${seed}`).toStrictEqual(fivenum(x).map(point));
     expect(box.whiskers).toStrictEqual(r.whiskers.map(point));
-    expect([box.below, box.above]).toStrictEqual([
+    expect([box.below.rows, box.above.rows]).toStrictEqual([
       r.below.length,
       r.above.length,
     ]);
+    expect(box.below.buckets).toStrictEqual(
+      sorted(r.below.map(String), 'point'),
+    );
+    expect(box.above.buckets).toStrictEqual(
+      sorted(r.above.map(String), 'point'),
+    );
     const span = SPAN_PERCENTILES.map((p) => point(quantile(x, p)));
     expect(box.span).toStrictEqual(span);
     expect(box.mean).toBe(fold.read().sum / x.length);
@@ -253,7 +260,7 @@ test("a coarsened spread's box holds the numbers R reads, to its figures", () =>
     SPAN_PERCENTILES.forEach((p, i) =>
       expect(holds(box!.span[i]!, quantile(x, p)), `seed ${seed}`).toBe(true),
     );
-    const past = box!.below + box!.above;
+    const past = box!.below.rows + box!.above.rows;
     const inside = x.filter(
       (v) => v >= box!.whiskers[0]![0]! && v < box!.whiskers[1]![1]!,
     );
@@ -263,4 +270,17 @@ test("a coarsened spread's box holds the numbers R reads, to its figures", () =>
 
 test('a spread of no numbers has no box', () => {
   expect(new SpreadFold('point').snapshot('most').box).toBeUndefined();
+});
+
+test('a spread sends its numbers past a whisker evenly, the furthest kept', () => {
+  const fold = new SpreadFold('point');
+  const far = PAST_SENT_AT_MOST * 2;
+  for (let i = 0; i < far; i++) fold.add(`${1e6 + i}`);
+  // Enough zeros that both hinges are 0, and every other number is past.
+  for (let i = 0; i < far * 4; i++) fold.add('0');
+  const { above } = fold.snapshot('most').box!;
+  expect(above.rows).toBe(far);
+  expect(above.buckets).toHaveLength(PAST_SENT_AT_MOST);
+  expect(above.buckets[0]!.low).toBe(1e6);
+  expect(above.buckets.at(-1)!.low).toBe(1e6 + far - 1);
 });
