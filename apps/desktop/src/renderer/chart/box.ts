@@ -198,3 +198,18 @@ export function boxTargets(rows: readonly Boxed[], drawn: HTMLElement): Targets 
   };
   return { all, under: among(all, ".chart-bar-row"), step, keys: ROWS_STEP };
 }
+
+/** boxedOver gives what a box plot's summary says past its rows: its highest and lowest medians. */
+export function boxedOver(rows: readonly Boxed[]): string {
+  const median = (at: Boxed) => num(middle(at.box.five[2]!));
+  const [top, bottom] = [rows[0]!, rows.at(-1)!];
+  if (rows.length === 1) return m.chart_summary_box_one({ median: median(top) });
+  // A blank value reads as the app's word for one.
+  const name = (at: Boxed) => (at.label === "" ? m.chart_blank_value() : at.label);
+  return m.chart_summary_box({
+    top: name(top),
+    high: median(top),
+    bottom: name(bottom),
+    low: median(bottom),
+  });
+}

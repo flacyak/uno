@@ -620,6 +620,8 @@
   "chart_table_hinge_high": "upper hinge",
   "chart_table_most": "most",
   "chart_table_past": "past whiskers",
+  "chart_summary_box": "The highest median is {top}'s, {high}, and the lowest {bottom}'s, {low}.",
+  "chart_summary_box_one": "Median {median}.",
   "chart_bin": "{from} to {to}",
   "chart_table_share": "share",
   "chart_table_aria": "Table",

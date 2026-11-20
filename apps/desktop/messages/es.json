@@ -640,6 +640,8 @@
   "chart_table_hinge_high": "bisagra superior",
   "chart_table_most": "máximo",
   "chart_table_past": "fuera de bigotes",
+  "chart_summary_box": "La mediana más alta es la de {top}, {high}, y la más baja la de {bottom}, {low}.",
+  "chart_summary_box_one": "Mediana {median}.",
   "chart_bin": "{from} a {to}",
   "chart_table_share": "proporción",
   "chart_table_aria": "Tabla",

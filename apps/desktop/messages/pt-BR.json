@@ -640,6 +640,8 @@
   "chart_table_hinge_high": "dobradiça superior",
   "chart_table_most": "máximo",
   "chart_table_past": "além dos bigodes",
+  "chart_summary_box": "A maior mediana é a de {top}, {high}, e a menor a de {bottom}, {low}.",
+  "chart_summary_box_one": "Mediana {median}.",
   "chart_bin": "{from} a {to}",
   "chart_table_share": "proporção",
   "chart_table_aria": "Tabela",
