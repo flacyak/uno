@@ -44,6 +44,7 @@ import {
   SampleFold,
   SplitFold,
   SpreadFold,
+  SpreadsFold,
   TimeFold,
 } from '@tally';
 import {
@@ -170,11 +171,16 @@ const REVENUE_SPREAD: Chart = {
   plot: { t: 'histogram', of: column(REVENUE), span: 'all' },
 };
 
-/** The fixture's units as one box. */
+/** The fixture's units as one box, and its revenue as a box per region. */
 const UNITS_BOX: Chart = {
   ...REGION_ROWS,
   id: 'c10',
   plot: { t: 'box', of: column(UNITS), span: 'most' },
+};
+const REVENUE_BOXES: Chart = {
+  ...REGION_ROWS,
+  id: 'c11',
+  plot: { t: 'box', of: column(REVENUE), by: column(REGION), span: 'most' },
 };
 
 /** A date in the fixture's span that no row of it holds. */
@@ -199,6 +205,17 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       fold.add(cell(r, by), cell(r, split), cells);
     }
     return { t: 'stack', plot, coverage, ...fold.snapshot(plot.order) };
+  }
+  if (plot.t === 'box' && plot.by !== undefined) {
+    const fold = new SpreadsFold('point');
+    for (let r = 0; r < rows; r++) fold.add(cell(r, plot.by), cell(r, plot.of));
+    return {
+      t: 'box',
+      plot,
+      coverage,
+      ...fold.snapshot(),
+      skipped: fold.skipped(),
+    };
   }
   if (plot.t === 'box') {
     const fold = new SpreadFold('point');
@@ -685,6 +702,31 @@ test("a box plot folded a block at a time reads as the pure spread of its number
   ]);
   tallies.attach({ ...UNITS_SPREAD, id: UNITS_BOX.id }, HEADERS);
   expect(tallies.from()).toBe(ROWS);
+});
+
+test('a box plot by a column folded a block at a time reads as the pure spread of each value', () => {
+  const tallies = folded([REVENUE_BOXES]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [REVENUE_BOXES.id, pure(REVENUE_BOXES.plot)],
+  ]);
+});
+
+test('an edit moves a box plot by a column by its one row, and a save keeps the fold, which reads back with no pass', async () => {
+  const tallies = folded([REVENUE_BOXES]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REVENUE, '123456');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[REVENUE_BOXES.id, pure(REVENUE_BOXES.plot, sheet)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(REVENUE_BOXES, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });
 
 test('an edit to a number moves a histogram by its one row, and a save keeps the fold, which reads back with no pass', async () => {

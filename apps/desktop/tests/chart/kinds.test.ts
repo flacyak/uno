@@ -302,3 +302,10 @@ test("an over-time chart's kind names its date column and how it reads it, for i
   expect(time({ t: "time", at: DATED.at, per: "auto", unit: "ms" }).dated?.reading).toBe("ms");
   expect(bars(ROWS).dated).toBeUndefined();
 });
+
+test("a box plot is titled by its column, and by both where it splits by another", () => {
+  const revenue = { col: 5, header: "revenue" };
+  const region = { col: 1, header: "region" };
+  expect(madeTitle({ t: "box", of: revenue, span: "most" })).toBe("revenue");
+  expect(madeTitle({ t: "box", of: revenue, by: region, span: "most" })).toBe("revenue per region");
+});

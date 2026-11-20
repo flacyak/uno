@@ -472,6 +472,7 @@
   "chart_remove_armed": "× ou Delete de novo remove o gráfico {title}",
   "chart_undo_hint": "Ctrl+Z desfaz as edições da grade · Esc volta para ela",
   "chart_edit": "Editar gráfico",
+  "chart_title_per": "{of} por {by}",
   "chart_title_rows": "linhas por {by}",
   "chart_title_sum": "soma de {sum} por {by}",
   "chart_title_stack_rows": "linhas por {by} e por {split}",

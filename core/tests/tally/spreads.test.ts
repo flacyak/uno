@@ -104,3 +104,15 @@ test('a spreads fold an edit took rows back from holds the rest, each row in its
     );
   }
 });
+
+test('a spreads fold counts the number cells left out, of every value and Other', () => {
+  const fold = new SpreadsFold('point');
+  for (const [value, cell] of [
+    ['a', ''],
+    ['b', 'n/a'],
+    ['a', '3'],
+    ['b', ''],
+  ] as const)
+    fold.add(value, cell);
+  expect(fold.skipped()).toStrictEqual({ blank: 2, unparsed: 1 });
+});

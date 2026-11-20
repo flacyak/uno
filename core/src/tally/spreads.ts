@@ -6,6 +6,7 @@ import type { Mark } from '@num';
 import { isMark, isRecord } from './saved.ts';
 import { SpreadFold } from './spread.ts';
 import type { Boxed, SavedSpread } from './spread.ts';
+import type { Skipped } from './skipped.ts';
 
 /** The most values a box plot by a column keeps a spread of; later values share Other's. */
 export const BOX_VALUES_AT_MOST = 32;
@@ -93,6 +94,15 @@ export class SpreadsFold {
     }
     fold.rest = rest;
     return fold;
+  }
+
+  /** skipped counts the number cells left out, of every value and Other. */
+  skipped(): Skipped {
+    const left = [...this.values.values(), this.rest].map(
+      (s) => s.boxed().skipped,
+    );
+    const sum = (key: keyof Skipped) => left.reduce((n, s) => n + s[key], 0);
+    return { blank: sum('blank'), unparsed: sum('unparsed') };
   }
 
   /** snapshot reads each value's spread, the highest median first, ties by value, and Other's. */

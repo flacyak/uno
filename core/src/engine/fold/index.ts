@@ -7,6 +7,7 @@ import { groupsFolder } from './groups.ts';
 import { sampleFolder } from './sample.ts';
 import { splitFolder } from './split.ts';
 import { spreadFolder } from './spread.ts';
+import { boxFolder } from './spreads.ts';
 import { timeFolder } from './time.ts';
 
 export { folderOf, markOf, placeOf } from './folder.ts';
@@ -20,5 +21,5 @@ export const FOLDERS: Folders = {
   time: timeFolder,
   stack: splitFolder,
   histogram: spreadFolder,
-  box: spreadFolder,
+  box: boxFolder,
 };

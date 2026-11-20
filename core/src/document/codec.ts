@@ -1100,7 +1100,7 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   time: ['t', 'at', 'sum', 'per', 'order', 'unit'],
   stack: ['t', 'by', 'split', 'sum', 'order'],
   histogram: ['t', 'of', 'span'],
-  box: ['t', 'of', 'span'],
+  box: ['t', 'of', 'by', 'span'],
 };
 
 /** What a histogram may span. */
@@ -1174,7 +1174,12 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'time') return parseOverTime(where, p);
   if (t === 'stack') return parseStacked(where, p);
   if (t === 'histogram' || t === 'box') {
-    return { t, of: column('of'), span: required(p, 'span', SPAN, where) };
+    const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
+    if (t === 'histogram' || p['by'] === undefined) return { t, of, span };
+    const by = column('by');
+    if (by.col === of.col)
+      throw new Error(`${where}: by names the column of names`);
+    return { t, of, by, span };
   }
   const sum = p['sum'] === undefined ? {} : { sum: column('sum') };
   if (t === 'pie') return { t, by: column('by'), ...sum };
