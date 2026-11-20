@@ -84,4 +84,19 @@ export const CHART_BOX: Check[] = [
       return rings[1].left - rings[0].right > 0 ? "" : "East's rings stand together";
     `,
   },
+  {
+    name: "the pointer on a region's row says its median, middle half, whiskers, rows past them and mean, and its row wears the cursor",
+    click: { selector: ".chart:first-child .chart-bar-row:nth-child(2) .chart-bar-label" },
+    shot: "chart-box-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      const row = win.querySelectorAll(".chart-bar-row")[1];
+      if (!(await until(() => row.classList.contains("cursor")))) return "West's row wears no cursor";
+      // The box stands over the rows' scroller, which stands over the window's edge.
+      const z = (at) => Number(getComputedStyle(at).zIndex) || 0;
+      if (z(win.querySelector(".chart-tip")) <= z(win.querySelector(".chart-along"))) return "the box stands under the rows";
+      const said = win.querySelector(".chart-tip-words").textContent;
+      return /median of West .* middle half .* whiskers .* past them .* mean$/.test(said) ? "" : "the box says " + said;
+    `,
+  },
 ];

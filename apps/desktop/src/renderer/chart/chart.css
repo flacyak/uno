@@ -496,6 +496,10 @@
   min-width: 100%;
 }
 
+.chart-boxes .chart-bar-row.cursor .chart-bar-label {
+  background: var(--accent-b);
+}
+
 .chart-boxes .chart-bar-label {
   position: sticky;
   left: var(--bars-inset);
@@ -959,6 +963,8 @@
   --key-length: 10px;
   --key-thick: 2px;
   position: absolute;
+  /* Over a plot's scroller, which stands over the window's right edge. */
+  z-index: 2;
   max-width: calc(100% - 2 * var(--tip-edge));
   display: flex;
   align-items: center;

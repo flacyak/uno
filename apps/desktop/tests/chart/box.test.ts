@@ -9,7 +9,7 @@ import { expect, test } from "vite-plus/test";
 
 import type { BoxTally } from "@engine";
 import { m } from "@paraglide/messages";
-import { boxedRows, boxes } from "@renderer/chart/box";
+import { boxTargets, boxedRows, boxes } from "@renderer/chart/box";
 import { rowsIn } from "@renderer/chart/rows";
 import type { Box, Spread } from "@tally";
 
@@ -180,4 +180,53 @@ test("a box plot's axis reaches whole spans past its span, two at most each side
     ".chart-boxes",
   )!;
   expect(all.style.getPropertyValue("--spans")).toBe("1");
+});
+
+test("a row is worth its median, named by its value, its middle half, its whiskers, the rows past them and its mean, and Down and Up step the rows", () => {
+  const spread: Box = {
+    ...boxAt(0),
+    mean: 33,
+    five: [
+      [0, 0],
+      [20, 20],
+      [30, 30],
+      [60, 60],
+      [100, 100],
+    ],
+    whiskers: [
+      [10, 10],
+      [80, 80],
+    ],
+    span: [
+      [0, 0],
+      [100, 100],
+    ],
+    above: { rows: 2, buckets: [{ low: 90, high: 90, rows: 2 }] },
+  };
+  const rows = [
+    { label: "West", box: spread },
+    { label: "East", box: boxAt(5) },
+  ];
+  const drawn = boxes(rows, false, TALL);
+  const targets = boxTargets(rows, drawn);
+  const said = targets.all[0]!.said().map((r) => `${r.value} ${r.label.textContent}`);
+  expect(said).toStrictEqual([
+    "30 median of West",
+    "20 to 60 middle half",
+    "10 to 80 whiskers",
+    "2 past them",
+    "33 mean",
+  ]);
+  expect(targets.all[0]!.at.classList.contains("chart-box")).toBe(true);
+  expect([
+    targets.step!("ArrowDown", undefined),
+    targets.step!("ArrowDown", 0),
+    targets.step!("ArrowDown", 1),
+  ]).toStrictEqual([0, 1, 1]);
+  expect([
+    targets.step!("ArrowUp", undefined),
+    targets.step!("ArrowUp", 0),
+    targets.step!("ArrowRight", 0),
+  ]).toStrictEqual([1, 0, undefined]);
+  expect(targets.under(drawn.querySelectorAll(".chart-bar-label")[1]!, 0, 0)).toBe(1);
 });

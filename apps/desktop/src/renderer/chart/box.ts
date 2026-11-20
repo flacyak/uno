@@ -7,6 +7,9 @@ import type { BoxTally } from "@engine";
 import type { Box, Within } from "@tally";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
+import { revealed } from "./histogram.ts";
+import { among } from "./tooltip.ts";
+import type { Reading, Targets } from "./tooltip.ts";
 import { el } from "@renderer/shell/util";
 import { axis, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
@@ -136,4 +139,56 @@ export function fitBoxes(along: HTMLElement): void {
   const spans = Number(plot.style.getPropertyValue("--spans"));
   plot.style.gridTemplateColumns = `${label}px ${room * spans}px`;
   along.scrollLeft = Number(plot.style.getPropertyValue("--span-at")) * room;
+}
+
+/** The keys a box plot's targets step past the tooltip's: to the next row and the one before. */
+const ROWS_STEP = ["ArrowDown", "ArrowUp"] as const;
+
+/**
+ * boxTargets gives the rows of `drawn`, as boxes drew `rows`: each worth its
+ * median, named by its value, its middle half, its whiskers, the rows past
+ * them and its mean. Down and Up step the rows as Right and Left do, and the
+ * row they step to scrolls its box into sight.
+ */
+export function boxTargets(rows: readonly Boxed[], drawn: HTMLElement): Targets {
+  const tracks = [...drawn.querySelectorAll(".chart-bar-row:has(.chart-box-track)")];
+  const all = tracks.map((track, i) => {
+    const { label, box } = rows[i]!;
+    const words = (text: string) => el("span", "", text);
+    const between = (low: Within, high: Within) =>
+      m.chart_bin({ from: num(middle(low)), to: num(middle(high)) });
+    const said = (): Reading[] => {
+      const median = el("span", "", `${m.chart_box_median()} `);
+      median.append(el("bdi", "from-file", label));
+      return [
+        { value: num(middle(box.five[2]!)), label: median },
+        { value: between(box.five[1]!, box.five[3]!), label: words(m.chart_box_middle()) },
+        {
+          value: between(box.whiskers[0]!, box.whiskers[1]!),
+          label: words(m.chart_box_whiskers()),
+        },
+        { value: num(box.below.rows + box.above.rows), label: words(m.chart_box_past()) },
+        { value: num(box.mean), label: words(m.chart_box_mean()) },
+      ];
+    };
+    const at = track.querySelector(".chart-box")!;
+    return {
+      mark: track,
+      at,
+      front: false,
+      key: "var(--accent)",
+      said,
+      reveal: () => revealed(at),
+    };
+  });
+  const step = (key: string, at: number | undefined): number | undefined => {
+    const to =
+      key === ROWS_STEP[0]
+        ? (at ?? -1) + 1
+        : key === ROWS_STEP[1]
+          ? (at ?? all.length) - 1
+          : undefined;
+    return to === undefined ? undefined : Math.min(Math.max(to, 0), all.length - 1);
+  };
+  return { all, under: among(all, ".chart-bar-row"), step, keys: ROWS_STEP };
 }
