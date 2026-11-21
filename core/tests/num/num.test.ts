@@ -6,6 +6,9 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { isNumber, markShown, parse, undress } from '@num';
+import type { Mark } from '@num';
+import { seeded } from '@core-tests/lab/cache/stats';
+import { mainParse } from './main.ts';
 
 // isNumber accepts plain and accounting-style numbers and refuses the rest,
 // including values Number() would accept.
@@ -170,4 +173,73 @@ describe('markShown names the decimal mark a value shows beyond doubt', () => {
       expect(markShown(input)).toBe(want);
     });
   }
+});
+
+// parse reads a plain decimal on a fast path. It must return what the full
+// path returns, bit for bit, for every value it takes and every one it hands
+// on.
+describe('parse reads a plain decimal as the full path does', () => {
+  /** Random strings of the fast path's shape, and of shapes beside it. */
+  const RANDOM = 200_000;
+  /** The most digits a random value has on either side of its mark. */
+  const DIGITS_AT_MOST = 20;
+  /** The share of random values that are whole, and that are negative. */
+  const WHOLE_SHARE = 0.2;
+  const NEGATIVE_SHARE = 0.5;
+  const MARKS: Mark[] = ['point', 'comma'];
+  const NEAR = [
+    '',
+    '-',
+    '.',
+    ',',
+    '-.5',
+    '5.',
+    '+5',
+    '1e3',
+    ' 5',
+    '5 ',
+    '1.234',
+    '1,234',
+    '1.234,5',
+    '1,234.5',
+    '(5)',
+    '5-',
+    '--5',
+    '00012.50',
+    '-0',
+    '-0.0',
+    '9'.repeat(400),
+    '0.' + '0'.repeat(400) + '1',
+    '9007199254740993',
+    '0.1000000000000000055511151231257827',
+  ];
+
+  test('on values beside its shape', () => {
+    for (const mark of MARKS)
+      for (const v of NEAR)
+        expect(parse(v, mark), `${mark} ${v}`).toBe(mainParse(v, mark));
+  });
+
+  test(`on ${RANDOM.toLocaleString('en-US')} random values of its shape`, () => {
+    const random = seeded(1);
+    const digits = () => {
+      let out = String(Math.floor(random() * 10));
+      const n = Math.floor(random() * DIGITS_AT_MOST);
+      for (let i = 0; i < n; i++) out += String(Math.floor(random() * 10));
+      return out;
+    };
+    const differ: string[] = [];
+    for (let i = 0; i < RANDOM; i++) {
+      const mark = MARKS[i % MARKS.length]!;
+      const sign = random() < NEGATIVE_SHARE ? '-' : '';
+      const point = mark === 'point' ? '.' : ',';
+      const v =
+        random() < WHOLE_SHARE
+          ? sign + digits()
+          : sign + digits() + point + digits();
+      if (!Object.is(parse(v, mark), mainParse(v, mark)))
+        differ.push(`${mark} ${v}`);
+    }
+    expect(differ).toEqual([]);
+  });
 });
