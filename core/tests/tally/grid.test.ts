@@ -8,6 +8,7 @@ import { describe, expect, test } from 'vite-plus/test';
 
 import {
   CELLS_AT_MOST,
+  CELLS_SENT_READING,
   ExactSum,
   GridFold,
   LEVEL_FINEST,
@@ -67,6 +68,26 @@ test('a summed cell is exact, whatever order its doubles came in', () => {
     exact.get(key)!.add(Number(cell));
   }
   expect(sum).toEqual(keys.map((k) => exact.get(k)!.value()));
+});
+
+test('a fold read at fewer cells merges them up a level at a time, exactly, and keeps its own', () => {
+  const rows = world(6);
+  const held = fold(rows, true);
+  const was = held.read();
+  const { level, keys, rows: counts, sum } = held.read(CELLS_SENT_READING);
+  expect(keys.length).toBeLessThanOrEqual(CELLS_SENT_READING);
+  expect(level).toBe(was.level - 1);
+  const exact = new Map<number, [number, ExactSum]>();
+  for (const [lat, lon, cell] of rows) {
+    const key = cellAt(Number(lat), Number(lon), level);
+    const [n, s] = exact.get(key) ?? [0, new ExactSum()];
+    s.add(Number(cell));
+    exact.set(key, [n + 1, s]);
+  }
+  expect([...keys]).toEqual([...exact.keys()].sort((a, b) => a - b));
+  expect(counts).toEqual(keys.map((k) => exact.get(k)![0]));
+  expect(sum).toEqual(keys.map((k) => exact.get(k)![1].value()));
+  expect(held.read()).toEqual(was);
 });
 
 test('an edit moves a fold by its one row', () => {
