@@ -1,9 +1,10 @@
 /**
  * @fileoverview The countries whose admin 1 layer is below the level ISO
- * 3166-2 names first: France's departments and Italy's provinces. Each
- * dissolves into its first level by one admin 1 field, and each value of
- * that field is one region: its ISO 3166-2 code, then the English and local
- * names Natural Earth does not write for it.
+ * 3166-2 names first: France's departments, Italy's provinces, Spain's
+ * provinces and Britain's local authorities. Each dissolves into its first
+ * level by one admin 1 field, and each value of that field is one region:
+ * its ISO 3166-2 code, then the English and local names Natural Earth does
+ * not write for it.
  */
 
 /** How one country's admin 1 features dissolve into its regions. */
@@ -61,6 +62,39 @@ export const DISSOLVES: Record<string, Dissolve> = {
       Umbria: ['IT-55'],
       "Valle d'Aosta": ['IT-23', 'Aosta Valley'],
       Veneto: ['IT-34'],
+    },
+  },
+  ES: {
+    field: 'region',
+    regions: {
+      Andalucía: ['ES-AN', 'Andalusia'],
+      Aragón: ['ES-AR'],
+      Asturias: ['ES-AS'],
+      'Canary Is.': ['ES-CN', 'Canary Islands', 'Canarias'],
+      Cantabria: ['ES-CB'],
+      'Castilla y León': ['ES-CL', 'Castile and León'],
+      'Castilla-La Mancha': ['ES-CM', 'Castile-La Mancha'],
+      Cataluña: ['ES-CT', 'Catalonia', 'Catalunya'],
+      Ceuta: ['ES-CE'],
+      Extremadura: ['ES-EX'],
+      'Foral de Navarra': ['ES-NC', 'Navarra', 'Navarre'],
+      Galicia: ['ES-GA'],
+      'Islas Baleares': ['ES-IB', 'Balearic Islands', 'Illes Balears'],
+      'La Rioja': ['ES-RI'],
+      Madrid: ['ES-MD', 'Comunidad de Madrid'],
+      Melilla: ['ES-ML'],
+      Murcia: ['ES-MC', 'Región de Murcia'],
+      'País Vasco': ['ES-PV', 'Basque Country', 'Euskadi'],
+      Valenciana: ['ES-VC', 'Comunidad Valenciana', 'Valencian Community'],
+    },
+  },
+  GB: {
+    field: 'geonunit',
+    regions: {
+      England: ['GB-ENG', 'Inglaterra'],
+      'Northern Ireland': ['GB-NIR', 'Irlanda del Norte', 'Irlanda do Norte'],
+      Scotland: ['GB-SCT', 'Escocia', 'Escócia'],
+      Wales: ['GB-WLS', 'Gales', 'País de Gales', 'Cymru'],
     },
   },
 };
