@@ -630,7 +630,7 @@
   gap: 4px;
   height: 100%;
   min-width: calc((var(--axes) - 1) * var(--pitch-least) + 2 * var(--edge));
-  padding: 10px var(--edge);
+  padding: var(--inset) var(--edge);
   font-size: 11px;
 }
 
@@ -649,6 +649,22 @@
   translate: -50% 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A label on an end axis wider than the room past it stands --inset, the
+ * caption's, inside the drawing's edge, so the window holds it and scrolls no
+ * further. It reaches a pitch the other way at most, clear of the label two
+ * axes in on its line, and ends in an ellipsis past that. */
+.chart-parallel-label:is(:first-child, :last-child) {
+  max-width: calc(100% / (var(--axes) - 1) + var(--edge) - var(--inset));
+}
+
+.chart-parallel-label:first-child {
+  translate: max(-50%, var(--inset) - var(--edge)) 0;
+}
+
+.chart-parallel-label:last-child {
+  translate: min(-50%, var(--edge) - var(--inset) - 100%) 0;
 }
 
 .chart-parallel-heads {

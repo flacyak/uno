@@ -511,7 +511,8 @@ const parallelColumns = {
   weight: (base, i) => base / 2 + ((i * 11) % 100),
   rating: (_, i) => 1 + (i % 5),
   returns: (_, i) => (i * 17) % 50,
-  margin: (base, i) => base * 2 - ((i * 19) % 300),
+  // A name longer than the room past the last axis, which its window keeps whole.
+  gross_margin: (base, i) => base * 2 - ((i * 19) % 300),
 };
 const parallelHeads = Object.keys(parallelColumns);
 const parallelRows = Array.from({ length: 1_000 }, (_, i) =>

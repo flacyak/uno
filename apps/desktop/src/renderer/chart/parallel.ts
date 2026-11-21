@@ -11,6 +11,7 @@ import { columnLabel } from "@renderer/grid/rows";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { revealed } from "./histogram.ts";
+import { BARS_INSET } from "./rows.ts";
 import { mark } from "./scatter.ts";
 import { ACCENT, HIT_RADIUS, column } from "./tooltip.ts";
 import type { Reading, Target, Targets } from "./tooltip.ts";
@@ -71,6 +72,7 @@ export function parallelLines(plot: ParallelPlot, tally: ParallelTally): HTMLEle
   const box = el("div", "chart-parallel");
   box.style.setProperty("--axes", `${count}`);
   box.style.setProperty("--pitch-least", `${AXIS_PITCH_LEAST}px`);
+  box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--line-opacity", `${LINE_OPACITY}`);
   const names = plot.axes.map(({ header, col }) => columnLabel(header, col));
   box.append(

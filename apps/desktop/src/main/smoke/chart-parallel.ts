@@ -62,6 +62,20 @@ export const CHART_PARALLEL: Check[] = [
     `,
   },
   {
+    name: "the narrow window scrolled to its end holds its last axis's name, clear of the name two axes in, and scrolls no further than its drawing",
+    script: `
+      const along = document.querySelector(${JSON.stringify(NARROW)});
+      along.scrollLeft = along.scrollWidth;
+      const box = along.querySelector(".chart-parallel").getBoundingClientRect();
+      const heads = [...along.querySelectorAll(".chart-parallel-heads .chart-parallel-label")];
+      const [name, before, sight] = [heads.at(-1), heads.at(-3), along].map((at) => at.getBoundingClientRect());
+      along.scrollLeft = 0;
+      if (name.right > sight.right + ${PX_SLACK}) return heads.at(-1).title + " ends at " + name.right + " past the window's " + sight.right;
+      if (name.left < before.right - ${PX_SLACK}) return heads.at(-1).title + " runs into " + heads.at(-3).title;
+      return along.scrollWidth <= box.width + ${PX_SLACK} ? "" : "the window scrolls " + along.scrollWidth + " px over a drawing " + box.width + " wide";
+    `,
+  },
+  {
     name: "a click on parallel coordinates puts the cursor on the line nearest it, drawn strong, and the box says its number at the axis nearest it and its row",
     click: { selector: NARROW },
     script: `
@@ -81,7 +95,7 @@ export const CHART_PARALLEL: Check[] = [
       const along = document.querySelector(${JSON.stringify(NARROW)});
       const win = along.closest(".chart");
       const said = () => win.querySelector(".chart-tip-words").textContent;
-      if (!(await until(() => / margin, /u.test(said())))) return "the box says " + said();
+      if (!(await until(() => / gross_margin, /u.test(said())))) return "the box says " + said();
       const [sight, tip, room] = [along, win.querySelector(".chart-tip"), win].map((at) => at.getBoundingClientRect());
       const last = win.querySelectorAll(".chart-parallel-axis")[${NARROW_AXES} - 1].getBoundingClientRect();
       if (last.left > sight.right + ${PX_SLACK} || last.left < sight.left - ${PX_SLACK}) return "the last axis stands at " + last.left + " out of a scroller from " + sight.left + " to " + sight.right;
