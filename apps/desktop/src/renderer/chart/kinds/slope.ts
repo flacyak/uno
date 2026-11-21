@@ -3,7 +3,8 @@
 import type { SlopePlot } from "@document";
 import type { ChartKind } from "../kind.ts";
 import { m } from "@paraglide/messages";
-import { fitSlopes, slopeTargets, sloped, slopes } from "../slope.ts";
+import { fitSlopes, slopeTargets, slopeTold, sloped, slopes } from "../slope.ts";
+import { sloping, tableOf } from "../table.ts";
 import { measuredTitle } from "./dots.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -21,5 +22,7 @@ export const slope: ChartKind<SlopePlot> = (plot) => ({
           draw: () => slopes(sloped(plot, tally)),
           fit: fitSlopes,
           targets: (drawn) => slopeTargets(sloped(plot, tally), drawn),
+          table: (called) => tableOf(sloping(plot, tally), called),
+          told: () => slopeTold(plot, tally),
         },
 });

@@ -87,4 +87,18 @@ export const CHART_SLOPE: Check[] = [
       return faded ? "" : "the other lines stand at full strength";
     `,
   },
+  {
+    name: "a slope chart's head names it with its two years, and its table lists each region's two ends and change, North's among them",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-slope-table",
+    script: `
+      const win = document.querySelector(".chart");
+      const title = win.querySelector(".chart-title").textContent;
+      if (title !== "sum of revenue per region, 2024 to 2025") return "the head says " + title;
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((cell) => cell.textContent.trim()).join(" | "));
+      const want = ["region | 2024 | 2025 | change | share", "South | 200 | 150 | -50 | -25%", "West | 150 | none |  | ", "North | 100 | 140 | 40 | 40%", "East | 80 | 90 | 10 | 13%"];
+      return lines.join(" / ") === want.join(" / ") ? "" : "the table reads " + lines.join(" / ");
+    `,
+  },
 ];

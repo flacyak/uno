@@ -16,6 +16,8 @@ import { TIP_GAP } from "./bars.ts";
 import { LEGEND_NAME_AT_MOST } from "./legend.ts";
 import { BARS_INSET } from "./rows.ts";
 import { rowSteps } from "./rows.ts";
+import { SUMMARY_VALUES } from "./summary.ts";
+import type { Told } from "./summary.ts";
 import { POINT_OPACITY, POINT_RADIUS, gridline, mark, percent } from "./scatter.ts";
 import { ACCENT, named } from "./tooltip.ts";
 import type { Reading, Targets } from "./tooltip.ts";
@@ -50,22 +52,27 @@ export interface Slopes {
 }
 
 /**
- * sloped gives the first SLOPES_AT_MOST of `tally`'s values as `plot`
- * measures them at each end: its rows, its sum, or its mean, none for an end
- * of no rows or of no number, and none at all for a value whose rows count
- * apart from their states, as its ends may lack some.
+ * endsOf gives each of `tally`'s values as `plot` measures it at each end: its
+ * rows, its sum, or its mean, none for an end of no rows or of no number, and
+ * none at all for a value whose rows count apart from their states, as its
+ * ends may lack some.
  */
-export function sloped(plot: SlopePlot, tally: SlopeTally): Slopes {
+export function endsOf(plot: SlopePlot, tally: SlopeTally): Sloped[] {
   const at = ({ rows, sum, numbers }: Ended): number | undefined => {
     if (rows === 0) return undefined;
     if (plot.of === undefined) return rows;
     if (plot.measure === "sum") return sum;
     return numbers === 0 ? undefined : sum / numbers;
   };
-  const rows = tally.values.map(({ value, ends, unsplit }): Sloped => ({
+  return tally.values.map(({ value, ends, unsplit }): Sloped => ({
     label: value,
     ends: unsplit ? [undefined, undefined] : [at(ends[0]), at(ends[1])],
   }));
+}
+
+/** sloped gives the first SLOPES_AT_MOST of `tally`'s values as endsOf measures them, and how many are left out. */
+export function sloped(plot: SlopePlot, tally: SlopeTally): Slopes {
+  const rows = endsOf(plot, tally);
   const more = Math.max(rows.length - SLOPES_AT_MOST, 0) + tally.others.values;
   return { rows: rows.slice(0, SLOPES_AT_MOST), states: [plot.from, plot.to], more };
 }
@@ -243,4 +250,18 @@ export function slopeTargets({ rows, states }: Slopes, drawn: HTMLElement): Targ
     return nearest;
   };
   return { all, under, ...rowSteps(all.length) };
+}
+
+/**
+ * slopeTold gives what a slope chart's summary says past its rows: its values
+ * in the order sent, each with its two ends, and how many come after the
+ * SUMMARY_VALUES named, with those the tally sent none of.
+ */
+export function slopeTold(plot: SlopePlot, tally: SlopeTally): Told {
+  const said = (at: number | undefined) => (at === undefined ? m.chart_slope_none() : num(at));
+  const each = endsOf(plot, tally).map(({ label, ends: [from, to] }) => {
+    const name = label === "" ? m.chart_blank_value() : label;
+    return `${name} ${m.chart_slope_from_to({ from: said(from), to: said(to) })}`;
+  });
+  return { span: "", each, more: Math.max(each.length - SUMMARY_VALUES, 0) + tally.others.values };
 }

@@ -561,6 +561,7 @@
   "chart_dots_none": "sem números",
   "chart_slope_in": "em {state}",
   "chart_slope_none": "nenhum",
+  "chart_slope_from_to": "{from} a {to}",
   "chart_dots_rows": [
     {
       "declarations": ["input count", "local plural = count: plural"],
@@ -655,6 +656,7 @@
   "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} e {y} de {yLeast} a {yMost}.",
   "chart_table_rows": "linhas",
   "chart_table_numbers": "números",
+  "chart_table_change": "variação",
   "chart_stack_total": "total",
   "chart_bar_moved": "{value} passa à posição {place} de {count}",
   "chart_summary_stack": "Dividido por {split} em {count} séries.",
