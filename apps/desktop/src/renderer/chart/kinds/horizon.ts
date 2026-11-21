@@ -5,7 +5,14 @@
  */
 
 import type { HorizonPlot } from "@document";
-import { heatSeries, horizonLevel, horizonRows, horizonTargets, timeSeries } from "../horizon.ts";
+import {
+  fitHatches,
+  heatSeries,
+  horizonLevel,
+  horizonRows,
+  horizonTargets,
+  timeSeries,
+} from "../horizon.ts";
 import type { Horizon } from "../horizon.ts";
 import type { Drawing, PlotRoom } from "../kind.ts";
 import { heatOver, spannedOver } from "../summary.ts";
@@ -50,6 +57,7 @@ function drawn(horizon: Horizon, summed: boolean, room: PlotRoom): Drawing {
     ...undrawn,
     empty: horizon.series.length === 0,
     draw: (height) => horizonRows(horizon, summed, room, height),
+    fit: fitHatches,
     targets: (box) => horizonTargets(horizon, summed, box),
   };
 }

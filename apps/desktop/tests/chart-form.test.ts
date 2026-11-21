@@ -198,7 +198,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a horizon, a histogram, a box plot, a beeswarm, a scatter and parallel coordinates, of three number columns, and opens on bars", () => {
+test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a horizon, a histogram, a box plot, a beeswarm, a scatter, parallel coordinates, of three number columns, and a chord, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -216,6 +216,7 @@ test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heat
     m.chart_kind_swarm(),
     m.chart_kind_scatter(),
     m.chart_kind_parallel(),
+    m.chart_kind_chord(),
   ];
   // The sales export has two number columns, and parallel coordinates take three.
   const parallel = m.chart_kind_parallel();
@@ -1043,6 +1044,50 @@ test("a beeswarm asks for the number column it is of and a column of strips, non
   expect(asked).toStrictEqual([inserting(swarmPlot), "closed"]);
   changing(swarmPlot);
   expect(chosen("kind", "of", "box-by")).toStrictEqual(["swarm", String(REVENUE), String(REGION)]);
+});
+
+test("a chord asks for From, To of another column, and Sum of, starts To on the first other column of names, and opens on its columns", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: REGION });
+  pick("kind", "chord");
+  expect(shown(box)).toStrictEqual([
+    m.chart_form_source(),
+    ...QUESTION_WORDS,
+    m.chart_form_from(),
+    m.chart_form_to(),
+    m.chart_form_sum(),
+    m.chart_form_title_field(),
+    m.chart_form_refresh(),
+  ]);
+  const REP = 2;
+  expect(chosen("flow-from", "flow-to")).toStrictEqual([String(REGION), String(REP)]);
+  // To never names From's column: From on rep moves To off it.
+  pick("flow-from", String(REP));
+  const off = [...select("flow-to").options]
+    .filter((made) => made.disabled)
+    .map((made) => made.value);
+  expect([off, select("flow-to").value]).toStrictEqual([[String(REP)], "0"]);
+  pick("flow-from", String(REGION));
+  pick("flow-to", String(CHANNEL));
+  pick("sum", String(REVENUE));
+  const chordPlot: Plot = {
+    t: "chord",
+    from: { col: REGION, header: "region" },
+    to: { col: CHANNEL, header: "channel" },
+    sum: { col: REVENUE, header: "revenue" },
+  };
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(chordPlot),
+  );
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(chordPlot), "closed"]);
+  changing(chordPlot);
+  expect(chosen("kind", "flow-from", "flow-to", "sum")).toStrictEqual([
+    "chord",
+    String(REGION),
+    String(CHANNEL),
+    String(REVENUE),
+  ]);
 });
 
 test("a heatmap asks for its dates, a size, its values' column and a sum, and makes one of By's values per period", async () => {

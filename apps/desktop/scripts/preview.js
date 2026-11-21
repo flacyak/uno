@@ -82,6 +82,10 @@
  *   chart form on it by Ctrl+Shift+G, steps its kind to Parallel coordinates,
  *   adds Leads and Conversions as its fourth and fifth axes, presses Enter,
  *   then clicks a line and presses Right twice. Goes to out/paralleled.gif.
+ * - `chorded`: opens an export of flights between nine airports, selects a
+ *   cell of origin, opens the chart form on it by Ctrl+Shift+G, steps its
+ *   kind to Chord, presses Enter, then clicks the ring and presses Home and
+ *   Down twice. Goes to out/chorded.gif.
  * - `moving`: carries the last of region's bars to the top by its label, then
  *   steps the cursor and moves a bar with Alt+Down and Alt+Up. Goes to
  *   out/moving.gif.
@@ -103,7 +107,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|heated|horizoned|stacked|histogram|box|swarmed|paralleled|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|heated|horizoned|stacked|histogram|box|swarmed|paralleled|chorded|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -171,6 +175,7 @@ const CHARTED = [
   "box",
   "swarmed",
   "paralleled",
+  "chorded",
   "moving",
   "dots",
   "sloped",
@@ -404,6 +409,23 @@ async function stageAds() {
   return csv;
 }
 
+/**
+ * stageFlights lays out the chorded story: an export of flights between nine
+ * airports each way, alone in its folder, each pair's flights growing with
+ * how busy both airports are, a little more from the busier. Returns its path.
+ */
+async function stageFlights() {
+  const busy = { ORD: 9, ATL: 8, DEN: 7, LAX: 6, JFK: 5, SFO: 4, SEA: 2, BOS: 2, MIA: 1 };
+  const flights = Object.entries(busy).flatMap(([from, out], i) =>
+    Object.entries(busy).flatMap(([to, into], j) =>
+      i === j ? [] : Array.from({ length: out * into + (i < j ? out : 0) }, () => `${from},${to}`),
+    ),
+  );
+  const csv = join(await freshDir("chorded"), "flights.csv");
+  await writeFile(csv, `${["origin,dest", ...flights].join("\n")}\n`);
+  return csv;
+}
+
 /** A date the fixture writes year first, and the same written day first. */
 const YEAR_FIRST = /^(\d{4})-(\d{2})-(\d{2}),/gmu;
 const DAY_FIRST = "$3/$2/$1,";
@@ -541,6 +563,7 @@ const staged = {
   box: () => stageCharts("box", []),
   swarmed: () => stageCharts("swarmed", []),
   paralleled: stageAds,
+  chorded: stageFlights,
   moving: () => stageCharts("moving", [REGION_BARS]),
   dots: () => stageCharts("dots", []),
   sloped: () => stageCharts("sloped", []),

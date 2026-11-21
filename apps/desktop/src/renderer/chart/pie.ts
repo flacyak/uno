@@ -177,35 +177,36 @@ function gap(turn: number, share: number): SVGElement {
 
 /**
  * words gives what a slice says: its value, the file's text, or Other, or the
- * app's word for the rows whose cell is blank, and its share.
+ * app's word for the rows whose cell is blank, and its share, where it has one.
  */
-function words(value: string | undefined, share: number): [HTMLElement, HTMLElement] {
+function words(value: string | undefined, share?: number): HTMLElement[] {
   const name =
     value === undefined
       ? el("span", "chart-slice-name", m.chart_pie_other())
       : value === ""
         ? el("span", "chart-slice-name chart-blank", m.chart_blank_value())
         : el("bdi", "chart-slice-name from-file", value);
-  return [name, el("span", "chart-slice-share", percent(share))];
+  return share === undefined ? [name] : [name, el("span", "chart-slice-share", percent(share))];
 }
 
 /**
- * label gives the label of a slice of `value`, or Other, `share` of the whole,
- * with where the middle of its arc, `turn` of the way round, stands on the
- * ring as --x and --y, for chart.css to stand it past there on its side.
+ * label gives the label of a slice of `value`, or Other, `share` of the whole
+ * where it says one, with where the middle of its arc, `turn` of the way
+ * round, stands on the ring as --x and --y, for chart.css to stand it past
+ * there on its side. A chord's arcs are labelled the same way.
  */
-function label(value: string | undefined, share: number, turn: number): HTMLElement {
+export function label(value: string | undefined, turn: number, share?: number): HTMLElement {
   const said = el("div", "chart-slice-label");
-  const [name, part] = words(value, share);
-  said.append(name, " ", part);
+  const [name, ...part] = words(value, share);
+  said.append(name!, ...part.flatMap((shown) => [" ", shown]));
   const [x, y] = onRing(turn);
   said.style.setProperty("--x", at(x));
   said.style.setProperty("--y", at(y));
   return said;
 }
 
-/** entry gives a slice's entry in the list: its colour, `key`, then what it says. */
-function entry(key: string, value: string | undefined, share: number): HTMLElement {
+/** entry gives a slice's or an arc's entry in the list: its colour, `key`, then what it says. */
+export function entry(key: string, value: string | undefined, share?: number): HTMLElement {
   const swatch = el("span", "chart-legend-key");
   swatch.style.setProperty("--key", key);
   const item = el("li");
@@ -242,7 +243,7 @@ export function pie(plot: Pie, groups: Groups): HTMLElement {
     // Each slice's gap stands where it starts, after the slice before it, the first's after the last.
     const prior = drawn.at(i - 1)?.size ?? size;
     gaps.push(gap(from, Math.min(size, prior) / whole));
-    labels.push(label(value, size / whole, (from + to) / 2));
+    labels.push(label(value, (from + to) / 2, size / whole));
     list.append(entry(key, value, size / whole));
   }
   if (drawn.length > 1) ring.append(...gaps);

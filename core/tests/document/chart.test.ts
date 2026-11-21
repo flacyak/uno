@@ -8,6 +8,7 @@ import { describe, expect, test } from 'vite-plus/test';
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
 import type {
   Chart,
+  ChordPlot,
   Plot,
   HeatPlot,
   SlopePlot,
@@ -18,6 +19,7 @@ import type {
   WeekPlot,
 } from '@document';
 import {
+  parseChord,
   parseOverTime,
   parsePlot,
   parseSlope,
@@ -73,6 +75,7 @@ describe('parsePlot', () => {
     { t: 'horizon', at: DATE, per: 'week', order: 'day' },
     { t: 'swarm', of: REVENUE, by: REGION },
     { t: 'parallel', axes: [REVENUE, REGION, DATE] },
+    { t: 'chord', from: REGION, to: DATE, sum: REVENUE },
     {
       t: 'horizon',
       at: DATE,
@@ -230,6 +233,31 @@ describe('parseParallel', () => {
     expect(() => parseParallel(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
+  });
+});
+
+describe('parseChord', () => {
+  const DEST = { col: 2, header: 'dest' };
+  test.each<ChordPlot>([
+    { t: 'chord', from: REGION, to: DEST },
+    { t: 'chord', from: REGION, to: DEST, sum: REVENUE },
+  ])('reads %j', (plot) => {
+    expect(parseChord(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'chord', to: DEST }, 'from: col is not a column number'],
+    [{ t: 'chord', from: REGION, to: REGION }, 'from and to name one column'],
+    [
+      { t: 'chord', from: REGION, to: DEST, sum: DEST },
+      'sum and to name one column',
+    ],
+    [
+      { t: 'chord', from: REGION, to: DEST, sum: 1 },
+      'sum: col is not a column number',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseChord(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });
 

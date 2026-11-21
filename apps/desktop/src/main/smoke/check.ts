@@ -66,6 +66,11 @@ export interface Check {
    * the run started with.
    */
   window?: { zoom?: number; width?: number };
+  /**
+   * Whether the page draws under forced colours for this check and its shot,
+   * as a high-contrast theme forces them, and as it did after.
+   */
+  forced?: boolean;
   /** A check over `Page`. Returns a message on failure, or "" on success. */
   run?: (page: Page) => Promise<string>;
   /**

@@ -15,7 +15,7 @@ import { el } from "@renderer/shell/util";
 import { DAY_HOURS, WEEK_DAYS } from "@tally";
 import type { PlotRoom } from "./kind.ts";
 import { dayName, hourName, weekHourName } from "./periods.ts";
-import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
+import { classOf, classesOver, scaleOf, wear } from "./ramp.ts";
 import { BARS_INSET } from "./rows.ts";
 import { TICK_GAP } from "./scatter.ts";
 import { among } from "./tooltip.ts";
@@ -117,9 +117,10 @@ export function weekGrid(tally: WeekTally, summed: boolean, room: PlotRoom): HTM
   for (const [i, { rows }] of slots.cells.entries()) {
     const cell = el("span", "chart-week-cell");
     const step = rows > 0 ? classOf(amounts[i]!, classes) : undefined;
-    if (step !== undefined) cell.dataset["step"] = `${step}`;
-    const fill = step === undefined ? undefined : fillOf(step);
-    if (fill !== undefined) cell.style.setProperty("--fill", fill);
+    if (step !== undefined) {
+      cell.dataset["step"] = `${step}`;
+      wear(cell, step);
+    }
     cells.append(cell);
   }
   const signed = amounts.some((amount) => amount < 0);
