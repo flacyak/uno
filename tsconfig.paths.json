@@ -31,6 +31,8 @@
       "@notation/*": ["./core/src/notation/*.ts"],
       "@num": ["./core/src/num/index.ts"],
       "@num/*": ["./core/src/num/*.ts"],
+      "@place": ["./core/src/place/index.ts"],
+      "@place/*": ["./core/src/place/*.ts"],
       "@pattern": ["./core/src/pattern/index.ts"],
       "@pattern/*": ["./core/src/pattern/*.ts"],
       "@plugin": ["./core/src/plugin/index.ts"],
