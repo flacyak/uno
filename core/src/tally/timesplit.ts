@@ -3,14 +3,23 @@
  * value of a text column and per period, every value at one period held.
  */
 
-import { readDate } from '@date';
+import { END_MINUTE, FIRST_MINUTE, readDate } from '@date';
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
 import type { SavedSum } from './exact.ts';
 import { Count, DISTINCT_AT_MOST, counted } from './groups.ts';
+import { isCount, isMark, isRecord } from './saved.ts';
+import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
 import { PAIRS_AT_MOST } from './split.ts';
-import { COARSER, HELD, keyAt, undate } from './time.ts';
+import {
+  COARSER,
+  HELD,
+  isReading,
+  keyAt,
+  restoredCount,
+  undate,
+} from './time.ts';
 import type { Held, Period, Undated } from './time.ts';
 
 /** One value's rows per period held, undated, and past the bound at years. */
@@ -134,6 +143,83 @@ export class TimeSplitFold {
       dates: { ...this.dates },
       skipped: { ...this.skipped },
     };
+  }
+
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none: a
+   * field out of range, a value or a period twice, an empty period, one past
+   * the years readDate reads, more values or cells than its bounds, or rows
+   * unsplit below years.
+   */
+  static restored(saved: unknown): TimeSplitFold | undefined {
+    if (!isRecord(saved) || !isRecord(saved['dates'])) return undefined;
+    const { reading, mark, held, groups, rest } = saved;
+    const level = HELD.findIndex((h) => h === held);
+    const dates = restoredSkipped(saved['dates']);
+    const other = saved['dates']['other'];
+    const skipped = restoredSkipped(saved['skipped']);
+    const fields =
+      isReading(reading) &&
+      (mark === undefined || isMark(mark)) &&
+      level >= 0 &&
+      isCount(other) &&
+      dates !== undefined &&
+      skipped !== undefined &&
+      isRecord(rest) &&
+      Array.isArray(groups) &&
+      groups.length <= DISTINCT_AT_MOST;
+    if (!fields) return undefined;
+    const fold = new TimeSplitFold(reading, mark);
+    fold.level = level;
+    const [least, most] = [
+      keyAt(FIRST_MINUTE, level),
+      keyAt(END_MINUTE - 1, level),
+    ];
+    const years = level === COARSER.length;
+    for (const g of groups as unknown[]) {
+      const read = isRecord(g) ? fold.restoredGroup(g, least, most) : undefined;
+      if (read === undefined || fold.groups.has(read[0])) return undefined;
+      if (!years && read[1].unsplit.rows > 0) return undefined;
+      fold.groups.set(...read);
+    }
+    const bound = years ? PAIRS_AT_MOST + 1 : PAIRS_AT_MOST;
+    const counted = restoredCount(rest['rows'], rest['sum'], mark);
+    if (counted === undefined || fold.cells > bound) return undefined;
+    Object.assign(fold.rest, counted);
+    Object.assign(fold.dates, dates, { other });
+    Object.assign(fold.skipped, skipped);
+    return fold;
+  }
+
+  /** restoredGroup is a value and its group as a save holds them, its keys from `least` to `most`, or undefined where it holds none. */
+  private restoredGroup(
+    g: Record<string, unknown>,
+    least: number,
+    most: number,
+  ): [string, Group] | undefined {
+    const { value, periods, undated, unsplit } = g;
+    if (typeof value !== 'string' || !Array.isArray(periods)) return undefined;
+    if (!isRecord(undated) || !isRecord(unsplit)) return undefined;
+    const group = new Group();
+    for (const p of periods as unknown[]) {
+      const [key, rows, sum]: unknown[] = Array.isArray(p) ? p : [];
+      const count = restoredCount(rows, sum, this.mark);
+      const placed =
+        Number.isSafeInteger(key) &&
+        Number(key) >= least &&
+        Number(key) <= most;
+      if (!placed || count === undefined || count.rows === 0) return undefined;
+      if (group.periods.has(Number(key))) return undefined;
+      group.periods.set(Number(key), count);
+      this.cells++;
+    }
+    const [none, past] = [undated, unsplit].map((c) =>
+      restoredCount(c['rows'], c['sum'], this.mark),
+    );
+    if (none === undefined || past === undefined) return undefined;
+    Object.assign(group.undated, none);
+    Object.assign(group.unsplit, past);
+    return [value, group];
   }
 
   /** read is what the fold holds, as plain numbers. */

@@ -631,6 +631,73 @@ test('a save that holds no week fold reads back as none', () => {
   expect(WeekFold.restored(throughJson(saved))?.saved()).toStrictEqual(saved);
 });
 
+test('a time split fold read back from its save folds on as the fold it was', () => {
+  const values = ['North', 'South', ''];
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const rows = Array.from({ length: DRAWS }, (): [string, string, string] => [
+      pick(values),
+      pick(DATES),
+      pick(CELLS),
+    ]);
+    for (const make of [
+      () => new TimeSplitFold('day'),
+      () => new TimeSplitFold('month', 'point'),
+      () => new TimeSplitFold('s', 'comma'),
+    ]) {
+      // An edit takes the first row back before the save, and puts it back after it.
+      const first = (fold: TimeSplitFold) => {
+        for (const r of rows.slice(0, HALF)) fold.add(...r);
+        fold.remove(...rows[0]!);
+      };
+      const then = (fold: TimeSplitFold) => {
+        for (const r of rows.slice(HALF)) fold.add(...r);
+        fold.add(...rows[0]!);
+      };
+      const [whole, before] = [make(), make()];
+      first(whole);
+      then(whole);
+      first(before);
+      const after = TimeSplitFold.restored(throughJson(before.saved()))!;
+      then(after);
+      expect(after.saved(), `seed ${seed}`).toStrictEqual(whole.saved());
+      expect(after.read(), `seed ${seed}`).toStrictEqual(whole.read());
+    }
+  }
+});
+
+test('a save that holds no time split fold reads back as none', () => {
+  const fold = new TimeSplitFold('day', 'point');
+  fold.add('North', '2024-03-04', '1');
+  const saved = fold.saved();
+  const group = saved.groups[0]!;
+  const [key, rows, sum] = group.periods[0]!;
+  const as = (g: object) => ({ ...saved, groups: [{ ...group, ...g }] });
+  const unsaved = [
+    undefined,
+    { ...saved, reading: 'week' },
+    { ...saved, mark: 'dot' },
+    { ...saved, held: 'week' },
+    { ...saved, dates: { blank: 0, unparsed: 0 } },
+    { ...saved, rest: { rows: 0 } },
+    { ...saved, groups: [group, group] },
+    as({ value: 1 }),
+    as({ periods: [[key, 0, sum]] }),
+    as({ periods: [[key, rows]] }),
+    as({ periods: [[key + 0.5, rows, sum]] }),
+    as({ periods: [group.periods[0], group.periods[0]] }),
+    as({ undated: { rows: -1, sum } }),
+    // Rows unsplit while hours are held, and a year past 9999.
+    as({ unsplit: { rows: 1, sum } }),
+    { ...as({ periods: [[8_030, 1, sum]] }), held: 'year' },
+  ];
+  for (const v of unsaved) expect(TimeSplitFold.restored(v)).toBeUndefined();
+  expect(TimeSplitFold.restored(throughJson(saved))?.saved()).toStrictEqual(
+    saved,
+  );
+});
+
 test('a time split fold saves each value with its periods in the order they began, its undated and unsplit rows, and the rest', () => {
   const fold = new TimeSplitFold('day', 'point');
   fold.add('North', '2024-03-04 14:05', '1.5');
