@@ -21,6 +21,7 @@ import type {
   Groups,
   Per,
   Sample,
+  Sampled,
   Split,
   Swarm,
   TimeLevel,
@@ -366,6 +367,13 @@ export interface BoxTally extends Spreads {
   skipped: Skipped;
 }
 
+/** Parallel coordinates' tally: a sample of rows with a number on each axis, each axis's extent over every row, and the rows left out. */
+export interface ParallelTally extends Sampled {
+  t: 'parallel';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /** A beeswarm's tally: each value's sampled rows, the most rows first, Other's, and every row's counts and extent. */
 export interface SwarmTally extends Swarm {
   t: 'swarm';
@@ -391,6 +399,7 @@ export type Tally =
   | SpreadTally
   | BoxTally
   | SwarmTally
+  | ParallelTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**

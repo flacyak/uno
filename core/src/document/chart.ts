@@ -91,6 +91,13 @@ export type HorizonPlot = {
   per: Per | 'auto';
 } & Reading;
 
+/** The least and the most number columns parallel coordinates draw an axis of. */
+export const PARALLEL_AXES_LEAST = 3;
+export const PARALLEL_AXES_AT_MOST = 8;
+
+/** Parallel coordinates: a line per sampled row across an axis per number column of `axes`, in their order. */
+export type ParallelPlot = { t: 'parallel'; axes: ChartColumn[] };
+
 /** A beeswarm: a dot per sampled row at its number in `of`, in a strip per value of `by` where it names one. */
 export type SwarmPlot = { t: 'swarm'; of: ChartColumn; by?: ChartColumn };
 

@@ -54,6 +54,7 @@ export type {
   SpreadTally,
   BoxTally,
   SwarmTally,
+  ParallelTally,
   MeanTally,
   SlopeTally,
   StackTally,

@@ -57,6 +57,8 @@ export {
   CHARTS_AT_MOST,
   DAY_MINUTES,
   HOUR_MINUTES,
+  PARALLEL_AXES_AT_MOST,
+  PARALLEL_AXES_LEAST,
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
 } from './chart.ts';
@@ -69,6 +71,7 @@ export type {
   DotsPlot,
   HeatPlot,
   HorizonPlot,
+  ParallelPlot,
   SwarmPlot,
   Plot,
   Reading,

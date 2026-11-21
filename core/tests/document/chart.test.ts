@@ -12,6 +12,7 @@ import type {
   HeatPlot,
   SlopePlot,
   StackPlot,
+  ParallelPlot,
   SwarmPlot,
   TimePlot,
   WeekPlot,
@@ -22,6 +23,7 @@ import {
   parseSlope,
   parseHeat,
   parseStacked,
+  parseParallel,
   parseSwarm,
   parseWeek,
 } from '@document/codec';
@@ -191,6 +193,40 @@ describe('parseOverTime', () => {
     [{ t: 'time', at: DATE, per: 'day', order: 'day', unit: 's' }, ONE_READING],
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parseOverTime(PLOT, plot)).toThrow(
+      new Error(`${PLOT}: ${said}`),
+    );
+  });
+});
+
+describe('parseParallel', () => {
+  const UNITS = { col: 3, header: 'units' };
+  test.each<ParallelPlot>([
+    { t: 'parallel', axes: [REVENUE, REGION, UNITS] },
+    {
+      t: 'parallel',
+      axes: Array.from({ length: 8 }, (_, col) => ({ col, header: `c${col}` })),
+    },
+  ])('reads %j', (plot) => {
+    expect(parseParallel(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'parallel' }, 'axes is not a list'],
+    [{ t: 'parallel', axes: [REVENUE, UNITS] }, 'axes are 3 to 8 columns'],
+    [
+      { t: 'parallel', axes: Array(9).fill(REVENUE) },
+      'axes are 3 to 8 columns',
+    ],
+    [
+      { t: 'parallel', axes: [REVENUE, UNITS, REVENUE] },
+      'axes name a column twice',
+    ],
+    [
+      { t: 'parallel', axes: [REVENUE, UNITS, 1] },
+      'axes: 2: col is not a column number',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseParallel(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
   });

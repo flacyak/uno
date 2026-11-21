@@ -33,12 +33,15 @@ import type {
   Reading,
   SlopePlot,
   StackPlot,
+  ParallelPlot,
   SwarmPlot,
   TimePlot,
   WeekPlot,
 } from './chart.ts';
 import {
   CHARTS_AT_MOST,
+  PARALLEL_AXES_AT_MOST,
+  PARALLEL_AXES_LEAST,
   PLACE_DIGITS,
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
@@ -1341,6 +1344,27 @@ export function parseSwarm(where: string, value: unknown): SwarmPlot {
   const by = columnOf(where, p, 'by');
   if (by.col === of.col) throw new Error(`${where}: by and of name one column`);
   return { t: 'swarm', of, by };
+}
+
+/**
+ * parseParallel reads parallel coordinates' plot: its `axes`, from
+ * PARALLEL_AXES_LEAST to PARALLEL_AXES_AT_MOST columns, no column twice.
+ */
+export function parseParallel(where: string, value: unknown): ParallelPlot {
+  const listed = asRecord(value)['axes'];
+  if (!Array.isArray(listed)) throw new Error(`${where}: axes is not a list`);
+  const count = listed.length;
+  if (count < PARALLEL_AXES_LEAST || count > PARALLEL_AXES_AT_MOST)
+    throw new Error(
+      `${where}: axes are ${PARALLEL_AXES_LEAST} to ${PARALLEL_AXES_AT_MOST} columns`,
+    );
+  // Each axis is read as a column under its place in the list.
+  const axes = listed.map((axis: unknown, i) =>
+    columnOf(`${where}: axes`, { [i]: axis }, String(i)),
+  );
+  if (new Set(axes.map(({ col }) => col)).size < count)
+    throw new Error(`${where}: axes name a column twice`);
+  return { t: 'parallel', axes };
 }
 
 /** readingOf reads how a plot's dates read: a column's `order` or a Unix `unit`, one of the two. */
