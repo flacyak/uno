@@ -190,7 +190,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a histogram, a box plot and a scatter, and opens on bars", () => {
+test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a horizon, a histogram, a box plot and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -202,6 +202,7 @@ test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heat
     m.chart_kind_time(),
     m.chart_kind_week(),
     m.chart_kind_heat(),
+    m.chart_kind_horizon(),
     m.chart_kind_histogram(),
     m.chart_kind_box(),
     m.chart_kind_scatter(),
@@ -779,11 +780,11 @@ test("a chart over time opened to change keeps its kind, size, sum and the order
   expect(asked).toStrictEqual([inserting(plot), "closed"]);
 });
 
-test("a source with no date column offers no chart over time and no week heatmap", () => {
+test("a source with no date column offers no chart over time, no heatmap and no horizon", () => {
   form(undefined, { t: "insert", col: 0 }, ADS);
-  const dated = ["time", "week", "heat"];
+  const dated = ["time", "week", "heat", "horizon"];
   const off = [...select("kind").options].filter((o) => dated.includes(o.value));
-  expect(off.map((o) => o.disabled)).toStrictEqual([true, true, true]);
+  expect(off.map((o) => o.disabled)).toStrictEqual([true, true, true, true]);
 });
 
 test("a week heatmap asks for its dates and a sum, and no size, and makes one that reads its dates as chosen", async () => {
@@ -1055,4 +1056,59 @@ test("a heatmap opened to change keeps its kind, its values' column, its size an
   press("Enter");
   await settle();
   expect(asked).toStrictEqual([inserting(plot), "closed"]);
+});
+
+test("a horizon asks for its dates, a size, its rows' column or none and a sum, and makes one by the column selected", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: REGION });
+  pick("kind", "horizon");
+  expect(shown(box)).toStrictEqual([
+    "source",
+    "compare",
+    "trend",
+    "spread",
+    "relate",
+    "dates",
+    "per",
+    "by",
+    "sum of",
+    "title",
+    "checks",
+  ]);
+  expect(select("rows-by").options[0]!.textContent).toBe(m.chart_form_rows_none());
+  expect(select("rows-by").value).toBe(String(REGION));
+  pick("per", "month");
+  press("Enter");
+  await settle();
+  const by = { col: REGION, header: "region" };
+  expect(asked).toStrictEqual([
+    inserting({ t: "horizon", at: DATE, by, per: "month", order: "month" }),
+    "closed",
+  ]);
+});
+
+test("a horizon of a date column selected draws one series, and one opened to change keeps its kind, its rows' column, its size and its sum", async () => {
+  const { asked } = form(undefined, { t: "insert", col: DATE.col });
+  pick("kind", "horizon");
+  expect(select("rows-by").value).toBe("");
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([
+    inserting({ t: "horizon", at: DATE, per: "auto", order: "month" }),
+    "closed",
+  ]);
+  const sum = { col: REVENUE, header: "revenue" };
+  const by = { col: REGION, header: "region" };
+  const plot: Plot = { t: "horizon", at: DATE, by, sum, per: "week", order: "day" };
+  const { asked: changed } = form(undefined, {
+    t: "change",
+    chart: { plot, title: "", refresh: BY_HAND },
+  });
+  expect([select("kind").value, select("rows-by").value, select("per").value]).toStrictEqual([
+    "horizon",
+    String(REGION),
+    "week",
+  ]);
+  press("Enter");
+  await settle();
+  expect(changed).toStrictEqual([inserting(plot), "closed"]);
 });

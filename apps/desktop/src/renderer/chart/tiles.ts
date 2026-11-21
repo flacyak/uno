@@ -32,6 +32,7 @@ export const QUESTIONS: readonly Question[] = [
       ["time", m.chart_kind_time],
       ["week", m.chart_kind_week],
       ["heat", m.chart_kind_heat],
+      ["horizon", m.chart_kind_horizon],
     ],
   },
   {
