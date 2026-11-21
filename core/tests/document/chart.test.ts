@@ -6,8 +6,13 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
-import type { Chart, Plot, StackPlot, TimePlot } from '@document';
-import { parseOverTime, parsePlot, parseStacked } from '@document/codec';
+import type { Chart, Plot, SlopePlot, StackPlot, TimePlot } from '@document';
+import {
+  parseOverTime,
+  parsePlot,
+  parseSlope,
+  parseStacked,
+} from '@document/codec';
 import { GROUPS_SENT } from '@tally';
 
 const WHERE = 'books.uno: view/charts.json: chart 1 of 1';
@@ -232,5 +237,63 @@ describe('parseChart', () => {
     expect(() => parseChart(WHERE, { ...BARS, [key]: value })).toThrow(
       new Error(`${WHERE} (c1): ${said}`),
     );
+  });
+});
+
+describe('parseSlope', () => {
+  const YEAR = { col: 0, header: 'year' };
+  test.each<SlopePlot>([
+    { t: 'slope', by: REGION, between: YEAR, from: '2024', to: '' },
+    {
+      t: 'slope',
+      by: REGION,
+      between: YEAR,
+      from: '2024',
+      to: '2025',
+      of: REVENUE,
+      measure: 'mean',
+    },
+  ])('reads %j', (plot) => {
+    expect(parseSlope(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[Record<string, unknown>, string]>([
+    [
+      { t: 'slope', by: REGION, between: YEAR, from: '2024', to: '2024' },
+      'from and to name one value',
+    ],
+    [
+      { t: 'slope', by: REGION, between: REGION, from: 'a', to: 'b' },
+      'between and by name one column',
+    ],
+    [
+      { t: 'slope', by: REGION, between: YEAR, from: 1, to: 'b' },
+      'from is not text',
+    ],
+    [
+      {
+        t: 'slope',
+        by: REGION,
+        between: YEAR,
+        from: 'a',
+        to: 'b',
+        of: YEAR,
+        measure: 'sum',
+      },
+      'of and between name one column',
+    ],
+    [
+      {
+        t: 'slope',
+        by: REGION,
+        between: YEAR,
+        from: 'a',
+        to: 'b',
+        of: REVENUE,
+      },
+      'measure is not sum or mean',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseSlope(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });

@@ -78,6 +78,21 @@ export type DotsPlot = { t: 'dots'; by: ChartColumn; order?: string[] } & (
   | { of: ChartColumn; measure: DotMeasure }
 );
 
+/**
+ * A slope chart: each value of `by` at two states, the values `from` and `to`
+ * of `between`, as its rows, or the sum or mean of `of`, on one scale.
+ */
+export type SlopePlot = {
+  t: 'slope';
+  by: ChartColumn;
+  between: ChartColumn;
+  from: string;
+  to: string;
+} & (
+  | { of?: undefined; measure?: undefined }
+  | { of: ChartColumn; measure: DotMeasure }
+);
+
 /** What a chart draws. This is all the engine needs to tally it. */
 export type Plot =
   /**

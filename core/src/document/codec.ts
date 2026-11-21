@@ -28,6 +28,7 @@ import type {
   DotMeasure,
   DotsPlot,
   Plot,
+  SlopePlot,
   StackPlot,
   TimePlot,
 } from './chart.ts';
@@ -1202,16 +1203,59 @@ export function parsePlot(where: string, value: unknown): Plot {
  */
 function parseDots(where: string, p: Record<string, unknown>): DotsPlot {
   const by = columnOf(where, p, 'by');
-  const moved = movedOf(where, p);
+  return {
+    t: 'dots',
+    by,
+    ...measuredOf(where, p, { by }),
+    ...movedOf(where, p),
+  };
+}
+
+/**
+ * measuredOf reads a column `of` numbers and the `measure` a plot takes of
+ * it, both or neither, refusing a column `named` names already.
+ */
+function measuredOf(
+  where: string,
+  p: Record<string, unknown>,
+  named: Readonly<Record<string, ChartColumn>>,
+):
+  | { of?: undefined; measure?: undefined }
+  | { of: ChartColumn; measure: DotMeasure } {
   if (p['of'] === undefined) {
     if (p['measure'] !== undefined)
       throw new Error(`${where}: measure names no column of numbers`);
-    return { t: 'dots', by, ...moved };
+    return {};
   }
   const of = columnOf(where, p, 'of');
-  if (of.col === by.col) throw new Error(`${where}: of and by name one column`);
-  const measure = required(p, 'measure', MEASURE, where);
-  return { t: 'dots', by, of, measure, ...moved };
+  for (const [key, column] of Object.entries(named)) {
+    if (of.col === column.col)
+      throw new Error(`${where}: of and ${key} name one column`);
+  }
+  return { of, measure: required(p, 'measure', MEASURE, where) };
+}
+
+/**
+ * parseSlope reads a slope chart: its `by`, the column `between` whose values
+ * `from` and `to` name its two states, and what it measures, as a dot plot.
+ */
+export function parseSlope(
+  where: string,
+  p: Record<string, unknown>,
+): SlopePlot {
+  const [by, between] = [
+    columnOf(where, p, 'by'),
+    columnOf(where, p, 'between'),
+  ];
+  if (between.col === by.col)
+    throw new Error(`${where}: between and by name one column`);
+  const [from, to] = [
+    required(p, 'from', TEXT, where),
+    required(p, 'to', TEXT, where),
+  ];
+  if (from === to) throw new Error(`${where}: from and to name one value`);
+  const measured = measuredOf(where, p, { by, between });
+  return { t: 'slope', by, between, from, to, ...measured };
 }
 
 /** columnOf reads the column `p` names at `key`. */
