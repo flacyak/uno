@@ -247,6 +247,18 @@ const REGION_SWARM: Chart = {
   id: 'c13',
   plot: { t: 'swarm', of: column(REVENUE), by: column(REGION) },
 };
+/**
+ * The fixture's units, revenue and units again on parallel axes: it has two
+ * number columns, and a fold, unlike the record, takes a column twice.
+ */
+const PARALLEL: Chart = {
+  ...REGION_ROWS,
+  id: 'c15',
+  plot: {
+    t: 'parallel',
+    axes: [column(UNITS), column(REVENUE), column(UNITS)],
+  },
+};
 const REVENUE_SWARM: Chart = {
   ...REGION_ROWS,
   id: 'c14',
@@ -354,6 +366,13 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       coverage,
       ...fold.slope(ends, plot.measure === 'mean'),
     };
+  }
+  if (plot.t === 'parallel') {
+    const fold = new SampleFold(plot.axes.map(() => 'point'));
+    for (let r = 0; r < rows; r++) {
+      fold.add(0, r, ...plot.axes.map((axis) => cell(r, axis)));
+    }
+    return { t: 'parallel', plot, coverage, ...fold.snapshot() };
   }
   if (plot.t === 'swarm') {
     const fold = new SwarmFold('point');
@@ -1938,6 +1957,27 @@ test('a beeswarm folded a block at a time reads as the pure fold of its samples,
   reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
   reopened.attach(REGION_SWARM, HEADERS);
   reopened.attach(REVENUE_SWARM, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test('parallel coordinates folded a block at a time read as the pure sample of their axes, move by an edit, and read back from a save with no pass', async () => {
+  const tallies = folded([PARALLEL, UNITS_REVENUE]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [PARALLEL.id, pure(PARALLEL.plot)],
+    [UNITS_REVENUE.id, pure(UNITS_REVENUE.plot)],
+  ]);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REVENUE, '-1');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[PARALLEL.id, pure(PARALLEL.plot, sheet)]];
+  expect(tallies.read(ROWS, true).slice(0, 1)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(PARALLEL, HEADERS);
   expect(reopened.from()).toBe(ROWS);
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });

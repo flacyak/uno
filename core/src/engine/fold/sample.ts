@@ -1,16 +1,17 @@
 /**
  * @fileoverview The folder of a sample of number columns, with the least and
- * most of every block: a scatter's, of one column against another.
+ * most of every block: a scatter's, of one column against another, and
+ * parallel coordinates', of three to eight.
  */
 
-import type { Plot } from '@document';
+import type { ParallelPlot, Plot } from '@document';
 import type { Mark } from '@num';
 import { SampleFold, pointsOf, restoredPoints, savedPoints } from '@tally';
 import type { Coverage, Tally } from '../protocol.ts';
 import { markOf, placeOf } from './folder.ts';
 import type { Block, Folder, MakeFolder } from './folder.ts';
 
-/** How a sample saves and what a chart hears of it, such as a scatter's points. */
+/** How a sample saves and what a chart hears of it: a scatter's points, or parallel coordinates' axes. */
 interface Heard {
   saved(fold: SampleFold): object;
   restored(saved: unknown): SampleFold | undefined;
@@ -29,6 +30,18 @@ const POINTS: Heard = {
   }),
 };
 
+/** Parallel coordinates save and hear a number per axis. */
+const AXES: Heard = {
+  saved: (fold) => fold.saved(),
+  restored: (saved) => SampleFold.restored(saved),
+  tally: (fold, plot, coverage) => ({
+    t: 'parallel',
+    plot,
+    coverage,
+    ...fold.snapshot(),
+  }),
+};
+
 /** sampleFolder folds a plot's rows as points of `x` against `y`. */
 export const sampleFolder: MakeFolder<Extract<Plot, { t: 'scatter' }>> = (
   plot,
@@ -40,6 +53,21 @@ export const sampleFolder: MakeFolder<Extract<Plot, { t: 'scatter' }>> = (
   if (x === undefined) return plot.x.header;
   if (y === undefined) return plot.y.header;
   return sampled([x, y], marks, POINTS);
+};
+
+/** parallelFolder folds a plot's rows as a number on each of its axes. */
+export const parallelFolder: MakeFolder<ParallelPlot> = (
+  plot,
+  headers,
+  marks,
+) => {
+  const cols: number[] = [];
+  for (const axis of plot.axes) {
+    const at = placeOf(axis, headers);
+    if (at === undefined) return axis.header;
+    cols.push(at);
+  }
+  return sampled(cols, marks, AXES);
 };
 
 /** sampled is the folder of the numbers of `cols`, holding `sample`, saved and heard as `heard` says. */

@@ -4,7 +4,7 @@
 
 import type { Folders } from './folder.ts';
 import { dotsFolder, groupsFolder } from './groups.ts';
-import { sampleFolder } from './sample.ts';
+import { parallelFolder, sampleFolder } from './sample.ts';
 import { splitFolder } from './split.ts';
 import { spreadFolder } from './spread.ts';
 import { swarmFolder } from './swarm.ts';
@@ -31,4 +31,5 @@ export const FOLDERS: Folders = {
   heat: timeSplitFolder,
   horizon: horizonFolder,
   swarm: swarmFolder,
+  parallel: parallelFolder,
 };

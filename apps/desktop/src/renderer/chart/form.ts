@@ -385,10 +385,18 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column; the form makes no parallel coordinates yet.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t === "parallel" ? "scatter" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
-    else if (plot.t === "time" || plot.t === "week" || plot.t === "heat" || plot.t === "horizon") {
+    else if (plot.t === "parallel") {
+      const [x, y] = plot.axes;
+      this.offer(this.placeAt(x), [undefined, x, y]);
+    } else if (
+      plot.t === "time" ||
+      plot.t === "week" ||
+      plot.t === "heat" ||
+      plot.t === "horizon"
+    ) {
       if (plot.t !== "week") this.per.value = plot.per;
       const by = plot.t === "heat" || plot.t === "horizon" ? this.placed(plot.by) : undefined;
       const unused = [undefined, undefined, undefined, undefined, undefined];
