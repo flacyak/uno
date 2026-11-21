@@ -504,6 +504,7 @@
   "chart_kind_pie": "Pie",
   "chart_kind_scatter": "Scatter",
   "chart_kind_time": "Over time",
+  "chart_kind_week": "Week heatmap",
   "chart_form_by": "by",
   "chart_form_sum": "sum of",
   "chart_form_sum_none": "none, count rows",

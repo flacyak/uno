@@ -190,7 +190,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a dot plot, a slope, a pie, a chart over time, a histogram, a box plot and a scatter, and opens on bars", () => {
+test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a histogram, a box plot and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -200,6 +200,7 @@ test("it offers bars, a dot plot, a slope, a pie, a chart over time, a histogram
     m.chart_kind_slope(),
     m.chart_kind_pie(),
     m.chart_kind_time(),
+    m.chart_kind_week(),
     m.chart_kind_histogram(),
     m.chart_kind_box(),
     m.chart_kind_scatter(),
@@ -777,10 +778,47 @@ test("a chart over time opened to change keeps its kind, size, sum and the order
   expect(asked).toStrictEqual([inserting(plot), "closed"]);
 });
 
-test("a source with no date column offers no chart over time", () => {
+test("a source with no date column offers no chart over time and no week heatmap", () => {
   form(undefined, { t: "insert", col: 0 }, ADS);
-  const time = [...select("kind").options].find((o) => o.value === "time")!;
-  expect(time.disabled).toBe(true);
+  const off = [...select("kind").options].filter((o) => o.value === "time" || o.value === "week");
+  expect(off.map((o) => o.disabled)).toStrictEqual([true, true]);
+});
+
+test("a week heatmap asks for its dates and a sum, and no size, and makes one that reads its dates as chosen", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: DATE.col });
+  pick("kind", "week");
+  expect(shown(box)).toStrictEqual([
+    "source",
+    "compare",
+    "trend",
+    "spread",
+    "relate",
+    "dates",
+    "sum of",
+    "title",
+    "checks",
+  ]);
+  const title = box.querySelector<HTMLInputElement>('input[type="text"]')!;
+  expect(title.placeholder).toBe("rows per hour of the week of date");
+  pick("sum", String(REVENUE));
+  press("Enter");
+  await settle();
+  const sum = { col: REVENUE, header: "revenue" };
+  expect(asked).toStrictEqual([inserting({ t: "week", at: DATE, sum, order: "month" }), "closed"]);
+});
+
+test("a week heatmap opened to change keeps its kind, its sum and the order it reads its dates in", async () => {
+  const sum = { col: REVENUE, header: "revenue" };
+  const plot: Plot = { t: "week", at: DATE, sum, order: "day" };
+  const { asked } = form(undefined, { t: "change", chart: { plot, title: "", refresh: BY_HAND } });
+  expect([select("kind").value, select("at").value, select("order").value]).toStrictEqual([
+    "week",
+    "0",
+    "day",
+  ]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(plot), "closed"]);
 });
 
 /** A source of dates written year last, the first of whose cells reads both ways, decided by none or by its sample. */

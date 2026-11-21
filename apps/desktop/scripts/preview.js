@@ -54,6 +54,10 @@
  * - `aside`: arrows the selection from rep under the top chart window, which
  *   fades, presses a cell through it, and arrows back out, which brings it
  *   back. Goes to out/aside.gif.
+ * - `weekly`: selects a date of the fixture written with a time of day,
+ *   opens the chart form on it by Ctrl+Shift+G, steps its kind to Week
+ *   heatmap, presses Enter, then clicks an hour's cell and steps to the next
+ *   day's with Down. Goes to out/weekly.gif.
  * - `dates`: selects a date of the fixture written day first, opens the
  *   chart form on it by Ctrl+Shift+G, reads its dates day first, sets it per
  *   week and presses Enter for a window of its weeks. Goes to out/dates.gif.
@@ -84,7 +88,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|histogram|box|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|stacked|histogram|box|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -143,6 +147,7 @@ const CHARTED = [
   "focus",
   "aside",
   "dates",
+  "weekly",
   "stacked",
   "histogram",
   "box",
@@ -388,6 +393,33 @@ async function stageDates() {
   return uno;
 }
 
+/**
+ * The hours the weekly story's rows are written at, in turn: 09:00 to 17:00,
+ * each as often as it stands near 13:00, so the hours peak at lunch.
+ */
+const LUNCH = 13;
+const PEAK = 5;
+const PEAKED = Array.from({ length: 9 }, (_, i) => 9 + i).flatMap((hour) =>
+  Array.from({ length: PEAK - Math.abs(hour - LUNCH) }, () => hour),
+);
+
+/**
+ * stageWeekly lays out the weekly story: the fixture's workspace with each
+ * date written with a time of day, row by row through a working day that peaks at lunch. Returns
+ * the .uno to open.
+ */
+async function stageWeekly() {
+  const uno = await stageCharts("weekly", []);
+  const csv = join(dirname(uno), "sales-q3.csv");
+  let row = 0;
+  const timed = (await readFile(csv, "utf8")).replace(YEAR_FIRST, (_, y, mo, d) => {
+    const hour = PEAKED[row++ % PEAKED.length];
+    return `${y}-${mo}-${d} ${String(hour).padStart(2, "0")}:30,`;
+  });
+  await writeFile(csv, timed);
+  return uno;
+}
+
 /** The object the refresh story's workspace points at, in the stand-in bucket. */
 const REFRESH_KEY = "2025/ads-q3.csv";
 
@@ -474,6 +506,7 @@ const staged = {
   command: () => stageCharts("command", []),
   menu: () => stageCharts("menu", []),
   dates: stageDates,
+  weekly: stageWeekly,
   stacked: () => stageCharts("stacked", []),
   histogram: () => stageCharts("histogram", []),
   box: () => stageCharts("box", []),

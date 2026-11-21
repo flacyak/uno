@@ -26,7 +26,13 @@ export const QUESTIONS: readonly Question[] = [
       ["pie", m.chart_kind_pie],
     ],
   },
-  { words: m.chart_kinds_trend, kinds: [["time", m.chart_kind_time]] },
+  {
+    words: m.chart_kinds_trend,
+    kinds: [
+      ["time", m.chart_kind_time],
+      ["week", m.chart_kind_week],
+    ],
+  },
   {
     words: m.chart_kinds_spread,
     kinds: [

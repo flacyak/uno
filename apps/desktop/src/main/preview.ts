@@ -326,6 +326,23 @@ const TO_REGION = 2;
  */
 const MOVING = { carry: 600, cursor: 4_000, down: 5_400, up: 8_000, end: 10_400 };
 /**
+ * The weekly story's beats: a date selected, the chart form opened on it, its
+ * kind stepped from Over time to Week heatmap, Enter, a click on an hour's
+ * cell, and Down to the next day's.
+ */
+const WEEKLY = {
+  column: 500,
+  open: 2_400,
+  kind: 4_600,
+  enter: 7_000,
+  cursor: 12_000,
+  down: 14_400,
+  stop: 17_400,
+};
+/** Wednesday 13:00, the weekly story's first cell: its day's place by 24, and its hour, from 1 for nth-child. */
+const WEDNESDAY_ONE = 3 * 24 + 13 + 1;
+
+/**
  * The dots story's beats: region selected, the chart form opened on it, its
  * kind stepped from Bars to Dot plot, Of stepped to revenue, Enter, a click on
  * a region's row, and Alt+Up.
@@ -1009,6 +1026,7 @@ const STORIES: Record<string, Story> = {
   box: { end: BOX.stop, script: playBox },
   moving: { end: MOVING.end, script: playMoving },
   dots: { end: DOTS.stop, script: playDots },
+  weekly: { end: WEEKLY.stop, script: playWeekly },
   sloped: { end: SLOPED.stop, script: playSloped },
   dotted: { end: DOTTED.end, script: playDotted },
   change: { end: CHANGE.end, script: playChange },
@@ -1275,6 +1293,35 @@ async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
   await at(BOX.down);
   press(win, "Down");
   await at(BOX.stop);
+}
+
+/**
+ * playWeekly performs the weekly story: a date selected, the form opened on
+ * it by Ctrl+Shift+G, its kind stepped to Week heatmap, Enter, a click on
+ * Wednesday 13:00 for what it says, and Down to Thursday's.
+ */
+async function playWeekly(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(WEEKLY.column);
+  // The gutter comes first, so the date is a row's second cell.
+  await pressOn("tbody tr:nth-child(3) td:nth-child(2)");
+  await glideTo(KEYED_REST);
+  await at(WEEKLY.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(WEEKLY.kind);
+  // The keys open in Dates, after the kinds, and Right steps Over time to Week heatmap.
+  press(win, "Tab", ["shift"]);
+  press(win, "Right");
+  await at(WEEKLY.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-week-cell")', "the week heatmap never drew");
+  await at(WEEKLY.cursor);
+  await pressOn(`.chart .chart-week-cell:nth-child(${WEDNESDAY_ONE})`);
+  await at(WEEKLY.down);
+  press(win, "Down");
+  await at(WEEKLY.stop);
 }
 
 /**

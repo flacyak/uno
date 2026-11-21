@@ -520,6 +520,7 @@
   "chart_kind_pie": "Circular",
   "chart_kind_scatter": "Dispersión",
   "chart_kind_time": "En el tiempo",
+  "chart_kind_week": "Mapa de calor semanal",
   "chart_form_by": "por",
   "chart_form_sum": "suma de",
   "chart_form_sum_none": "ninguna, contar filas",

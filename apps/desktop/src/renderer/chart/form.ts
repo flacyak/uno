@@ -21,7 +21,16 @@ import {
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
 } from "@document";
-import type { Chart, ChartColumn, DotMeasure, Plot, SlopePlot, TimePlot } from "@document";
+import type {
+  Chart,
+  ChartColumn,
+  DotMeasure,
+  Plot,
+  Reading,
+  SlopePlot,
+  TimePlot,
+  WeekPlot,
+} from "@document";
 import type { Span } from "@tally";
 import { civilFromDays, readDate } from "@date";
 import type { Order, UnixUnit } from "@date";
@@ -191,7 +200,7 @@ export class ChartForm {
   /** The values a person moved among the rows of the bars or dots the form opened on, kept while their column stays. */
   private readonly moved: { by: ChartColumn; order: string[] } | undefined;
   /** How the chart opened on reads its dates, which it keeps while its date column stays. */
-  private readonly read: TimePlot | undefined;
+  private readonly read: TimePlot | WeekPlot | undefined;
   /** The fields an over-time chart asks for before Sum of, and those bars and a pie ask for. */
   /** How the date column's dates written year last read, where it writes such. */
   private readonly order = select("order");
@@ -227,7 +236,8 @@ export class ChartForm {
   ) {
     this.source = active;
     const changes = opening.t === "change";
-    this.read = changes && opening.chart.plot.t === "time" ? opening.chart.plot : undefined;
+    const plotted = changes ? opening.chart.plot : undefined;
+    this.read = plotted?.t === "time" || plotted?.t === "week" ? plotted : undefined;
     const was = opening.t === "change" ? opening.chart.plot : undefined;
     this.span = was?.t === "histogram" || was?.t === "box" ? was.span : "most";
     this.states = was?.t === "slope" ? was : undefined;
@@ -365,8 +375,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column; the form makes no week heatmap yet.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t === "week" ? "time" : plot.t;
+    // A stacked chart is bars split by a column.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time" || plot.t === "week") {
       if (plot.t === "time") this.per.value = plot.per;
@@ -398,7 +408,7 @@ export class ChartForm {
 
   /** first gives the column select the kind chosen asks for first. */
   private first(): HTMLSelectElement {
-    if (this.kind.value === "time") return this.at;
+    if (this.kind.value === "time" || this.kind.value === "week") return this.at;
     if (this.kind.value === "histogram" || this.kind.value === "box") return this.of;
     return this.kind.value === "scatter" ? this.x : this.by;
   }
@@ -467,12 +477,14 @@ export class ChartForm {
     const scatters = numbers.length >= SCATTER_COLUMNS;
     this.kind.disable("scatter", !scatters);
     if (!scatters && this.kind.value === "scatter") this.kind.value = "bars";
-    this.kind.disable("time", dates.length === 0);
+    for (const t of ["time", "week"]) {
+      this.kind.disable(t, dates.length === 0);
+      if (dates.length === 0 && this.kind.value === t) this.kind.value = "bars";
+    }
     for (const t of ["histogram", "box"]) {
       this.kind.disable(t, numbers.length === 0);
       if (numbers.length === 0 && this.kind.value === t) this.kind.value = "bars";
     }
-    if (dates.length === 0 && this.kind.value === "time") this.kind.value = "bars";
     // A date column selected in the grid opens the form on a chart over time of it.
     if (this.opening.t === "insert" && this.kind.value === "bars" && dates.includes(by)) {
       this.kind.value = "time";
@@ -483,13 +495,15 @@ export class ChartForm {
   /** ask shows the fields the kind chosen asks for, and the title it makes. */
   private ask(): void {
     const t = this.kind.value;
-    for (const line of this.timed) line.hidden = t !== "time";
+    for (const line of this.timed) line.hidden = t !== "time" && t !== "week";
     const { order, unit } = this.source.band.columns[Number(this.at.value)] ?? {};
     this.timed[1]!.hidden ||= order === undefined || unit !== undefined;
+    // A week has its hours, so a week heatmap asks for no size.
+    this.timed[2]!.hidden ||= t === "week";
     const spreads = t === "histogram" || t === "box";
     this.spread.hidden = !spreads;
     this.boxed.hidden = t !== "box";
-    this.grouped[0]!.hidden = t === "scatter" || t === "time" || spreads;
+    this.grouped[0]!.hidden = t === "scatter" || t === "time" || t === "week" || spreads;
     this.grouped[1]!.hidden = t === "scatter" || t === "dots" || t === "slope" || spreads;
     const measures = t === "dots" || t === "slope";
     this.dotted[0]!.hidden = !measures;
@@ -518,6 +532,7 @@ export class ChartForm {
       return { t: "scatter", x: this.column(this.x.value), y: this.column(this.y.value) };
     }
     if (this.kind.value === "time") return this.overTime();
+    if (this.kind.value === "week") return this.weekly();
     const of = this.column(this.of.value);
     if (this.kind.value === "histogram") return { t: "histogram", of, span: this.span };
     if (this.kind.value === "box") {
@@ -628,10 +643,21 @@ export class ChartForm {
     const at = this.column(this.at.value);
     const per = PERS.find(([size]) => size === this.per.value)?.[0] ?? "auto";
     const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
+    return { t: "time", at, per, ...sum, ...this.reading(at) };
+  }
+
+  /** weekly gives a week heatmap of `at`, summing Sum of if it names a column, its dates read as an over-time chart's. */
+  private weekly(): WeekPlot {
+    const at = this.column(this.at.value);
+    const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
+    return { t: "week", at, ...sum, ...this.reading(at) };
+  }
+
+  /** reading gives how `at`'s dates read: as Unix time where the column is that, or else in the order chosen. */
+  private reading(at: ChartColumn): Reading {
     const unit = this.source.band.columns[at.col]?.unit;
-    if (unit !== undefined) return { t: "time", at, per, ...sum, unit };
-    const order = ORDERS.find(([reading]) => reading === this.order.value)?.[0] ?? "day";
-    return { t: "time", at, per, ...sum, order };
+    if (unit !== undefined) return { unit };
+    return { order: ORDERS.find(([reading]) => reading === this.order.value)?.[0] ?? "day" };
   }
 
   /** column gives the source's column whose option has `value`, as a chart reads it. */

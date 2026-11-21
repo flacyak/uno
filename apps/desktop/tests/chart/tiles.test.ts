@@ -30,7 +30,7 @@ test("each question is a row of its kinds' tiles, one radio group the form names
       m.chart_kind_slope(),
       m.chart_kind_pie(),
     ],
-    [m.chart_kinds_trend(), m.chart_kind_time()],
+    [m.chart_kinds_trend(), m.chart_kind_time(), m.chart_kind_week()],
     [m.chart_kinds_spread(), m.chart_kind_histogram(), m.chart_kind_box()],
     [m.chart_kinds_relate(), m.chart_kind_scatter()],
   ]);
