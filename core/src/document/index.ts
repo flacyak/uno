@@ -68,9 +68,11 @@ export type {
   DotMeasure,
   DotsPlot,
   Plot,
+  Reading,
   SlopePlot,
   StackPlot,
   TimePlot,
+  WeekPlot,
 } from './chart.ts';
 export {
   formatFor,

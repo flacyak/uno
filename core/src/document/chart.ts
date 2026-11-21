@@ -52,6 +52,19 @@ export type TimePlot = {
   per: Per | 'auto';
 } & ({ order: Order } | { unit: UnixUnit });
 
+/** How a chart's dates read: in a column's `order`, or as Unix time in a `unit`. */
+export type Reading = { order: Order } | { unit: UnixUnit };
+
+/**
+ * A week heatmap: rows, or the sum of `sum`, per hour of the week of `at`,
+ * Sunday first, its dates read as the chart was made.
+ */
+export type WeekPlot = {
+  t: 'week';
+  at: ChartColumn;
+  sum?: ChartColumn;
+} & Reading;
+
 /**
  * A stacked bar chart: rows, or the sum of `sum`, per value of `by`, each
  * bar split by the value of `split` in the same row.

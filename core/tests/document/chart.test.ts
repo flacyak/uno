@@ -6,12 +6,20 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
-import type { Chart, Plot, SlopePlot, StackPlot, TimePlot } from '@document';
+import type {
+  Chart,
+  Plot,
+  SlopePlot,
+  StackPlot,
+  TimePlot,
+  WeekPlot,
+} from '@document';
 import {
   parseOverTime,
   parsePlot,
   parseSlope,
   parseStacked,
+  parseWeek,
 } from '@document/codec';
 import { GROUPS_SENT } from '@tally';
 
@@ -165,6 +173,29 @@ describe('parseOverTime', () => {
     expect(() => parseOverTime(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
+  });
+});
+
+describe('parseWeek', () => {
+  test.each<WeekPlot>([
+    { t: 'week', at: DATE, order: 'month' },
+    { t: 'week', at: DATE, sum: REVENUE, order: 'day' },
+    { t: 'week', at: DATE, unit: 's' },
+  ])('reads %j', (plot) => {
+    expect(parseWeek(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'week', order: 'day' }, 'at: col is not a column number'],
+    [
+      { t: 'week', at: DATE, sum: 4, order: 'day' },
+      'sum: col is not a column number',
+    ],
+    [{ t: 'week', at: DATE, order: 'either' }, 'order is not day or month'],
+    [{ t: 'week', at: DATE }, ONE_READING],
+    [{ t: 'week', at: DATE, order: 'day', unit: 'ms' }, ONE_READING],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseWeek(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });
 
