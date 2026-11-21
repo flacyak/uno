@@ -184,7 +184,7 @@ test('a save that holds no mean fold reads back as none', () => {
   );
 });
 
-test('a split fold saves each count in the order it began, with its exact sum', () => {
+test('a split fold saves each count in the order it began, with its exact sum, its cells that read as numbers and its blank ones', () => {
   const fold = new SplitFold('point');
   fold.add('East', 'web', '1.5');
   fold.add('East', 'direct', 'n/a');
@@ -202,23 +202,23 @@ test('a split fold saves each count in the order it began, with its exact sum', 
       {
         value: 'East',
         cells: [
-          ['web', 2, sum(1.5)],
-          ['direct', 1, none],
+          ['web', 2, sum(1.5), 1, 1],
+          ['direct', 1, none, 0, 0],
         ],
-        unsplit: { rows: 0, sum: none },
+        unsplit: { rows: 0, sum: none, numbers: 0, blank: 0 },
       },
       {
         value: 'West',
-        cells: [['web', 1, sum(-2)]],
-        unsplit: { rows: 0, sum: none },
+        cells: [['web', 1, sum(-2), 1, 0]],
+        unsplit: { rows: 0, sum: none, numbers: 0, blank: 0 },
       },
     ],
-    rest: { rows: 0, sum: none },
+    rest: { rows: 0, sum: none, numbers: 0, blank: 0 },
     totals: [
-      ['web', 3, sum(1.5, -2)],
-      ['direct', 1, none],
+      ['web', 3, sum(1.5, -2), 2, 1],
+      ['direct', 1, none, 0, 0],
     ],
-    totalsRest: { rows: 0, sum: none },
+    totalsRest: { rows: 0, sum: none, numbers: 0, blank: 0 },
     skipped: { blank: 1, unparsed: 1 },
   });
   const counted = new SplitFold();
@@ -305,8 +305,12 @@ test('a save that holds no split fold reads back as none', () => {
     { ...saved, groups: [group, group] },
     { ...saved, groups: [{ ...group, cells: [cell, cell] }] },
     { ...saved, groups: [{ ...group, cells: [] }] },
-    { ...saved, groups: [{ ...group, cells: [['web', 0, cell[2]]] }] },
+    { ...saved, groups: [{ ...group, cells: [['web', 0, cell[2], 0, 0]] }] },
     { ...saved, groups: [{ ...group, cells: [['web', 1]] }] },
+    // A sum saved before cells counted their numbers, and more numbers and blanks than rows.
+    { ...saved, groups: [{ ...group, cells: [['web', 1, cell[2]]] }] },
+    { ...saved, groups: [{ ...group, cells: [['web', 1, cell[2], 1, 1]] }] },
+    { ...saved, rest: { rows: 0, sum: cell[2] } },
     { ...saved, totals: [[1, 1, cell[2]]] },
     {
       ...saved,
@@ -684,7 +688,7 @@ const GOLDEN = {
   groups: '2ae37431f8e378df8ef90b5aa4776174d479cc156f24f3a898676c88cdd7c6cd',
   sample: '82b28cba5c4ad68f0358cb3c9b9cfbe9e4aaecbb4f143ca0412395470acb6432',
   time: '2df69fd36bdc14b0210c23556d82b8f16274974e471b7d7464b59c1c25e34b15',
-  split: '10134ed7db0713a75f0bbebee410afa91ef190bbc0d7ef23fed72bf12fd9191c',
+  split: '3ab387dbb1edb3cd98458b6895bbeecccaf155215b4003996b8682126067ba66',
   spread: 'e623684be52f441a3afae50186f5f68a0d942ccb3b267715a208bd1734956c67',
   spreads: '4d692394f8b2ad5f577c4016013a381dc2662741743816ab00b57a35dc29e6d1',
   mean: '46fe0e11379d829a37ab6ee93bbfb3c25da30cff2630076375e3aca28605c4f9',

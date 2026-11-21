@@ -302,3 +302,32 @@ test('a split snapshot sends the values a person moved first, and the rest large
   expect(values.length).toBe(GROUPS_SENT);
   expect(others.values).toBe(1);
 });
+
+test("a summing split fold moved by edits counts each cell's numbers and blanks as its rows do", () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const cell = () => pick(['', 'n/a', '1.5', '-2']);
+    const row = (): Row => [pick(VALUES), pick(SERIES), cell()];
+    const rows = Array.from({ length: ROWS }, row);
+    const fold = summed(rows);
+    for (let edit = 0; edit < ROWS; edit++) {
+      const r = Math.floor(random() * ROWS);
+      fold.remove(...rows[r]!);
+      rows[r] = row();
+      fold.add(...rows[r]);
+    }
+    for (const { value, cells } of fold.saved().groups) {
+      for (const [series, , , numbers, blank] of cells) {
+        const own = rows.filter(([v, s]) => v === value && s === series);
+        const read = own.filter(
+          ([, , c = '']) => parse(c, 'point') !== undefined,
+        );
+        expect([numbers, blank], `seed ${seed}`).toStrictEqual([
+          read.length,
+          own.filter(([, , c]) => c === '').length,
+        ]);
+      }
+    }
+  }
+});

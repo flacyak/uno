@@ -67,16 +67,30 @@ export interface Split {
   skipped: Skipped;
 }
 
-/** One count as a save writes it: its rows, and their sum when summed. */
+/**
+ * One count as a save writes it: its rows, and when summed their sum, the
+ * cells that read as numbers, for a mean, and the blank ones.
+ */
 export interface SavedTally {
   rows: number;
   sum?: SavedSum;
+  numbers?: number;
+  blank?: number;
 }
 
 /** One cell or series total as a save writes it, its series first. */
 export type SavedCell =
   | [series: string, rows: number]
-  | [series: string, rows: number, sum: SavedSum];
+  | [
+      series: string,
+      rows: number,
+      sum: SavedSum,
+      numbers: number,
+      blank: number,
+    ];
+
+/** A summed cell as a fold reads it: its number, or that it is blank or no number. */
+type Read = number | 'blank' | 'unparsed';
 
 /**
  * SavedSplit is every bit of a SplitFold, as a save writes it: the mark it
@@ -102,7 +116,9 @@ class Group {
  * SplitFold counts a column's rows per value, and each value's rows per
  * series, the cell of a second column. Rows are added and taken back one at
  * a time, so an edit moves a fold by the row it changed. When it sums, it
- * parses each row's cell in a third column once, for its cell and its total.
+ * parses each row's cell in a third column once, for its cell and its total,
+ * and each count counts its cells that read as numbers, for a mean, and its
+ * blank ones, so two series' cells say what they left out.
  * A value gets a group as in GroupsFold, and other values count in the rest.
  * Inside a group, a series gets a cell while fewer than PAIRS_AT_MOST cells
  * exist and the group's unsplit is empty; other rows of the value count in
@@ -127,52 +143,55 @@ export class SplitFold {
 
   /** add counts a row of `value` in `series`, whose summed cell is `cell`. */
   add(value: string, series: string, cell = ''): void {
-    const x = this.parsed(cell, 1);
+    const read = this.parsed(cell, 1);
     const fresh = roomIn(this.groups, this.rest);
     const group = placed(this.groups, value, fresh, () => new Group());
-    if (group === undefined) tallied(this.rest, x, 1);
+    if (group === undefined) tallied(this.rest, read, 1);
     else {
       const room = this.pairs < PAIRS_AT_MOST && group.unsplit.rows === 0;
       const held = placed(group.cells, series, room, () => new Count());
       // A cell made now has no rows, as an emptied one is deleted.
       if (held?.rows === 0) this.pairs++;
-      tallied(held ?? group.unsplit, x, 1);
+      tallied(held ?? group.unsplit, read, 1);
     }
     const named = roomIn(this.totals, this.totalsRest);
     const total = placed(this.totals, series, named, () => new Count());
-    tallied(total ?? this.totalsRest, x, 1);
+    tallied(total ?? this.totalsRest, read, 1);
   }
 
   /** remove takes back a row that add counted, and any place it emptied. */
   remove(value: string, series: string, cell = ''): void {
-    const x = this.parsed(cell, -1);
+    const read = this.parsed(cell, -1);
     const group = this.groups.get(value);
-    if (group === undefined) tallied(this.rest, x, -1);
+    if (group === undefined) tallied(this.rest, read, -1);
     else {
-      if (taken(group.cells, series, group.unsplit, x)) this.pairs--;
+      if (taken(group.cells, series, group.unsplit, read)) this.pairs--;
       if (group.cells.size === 0 && group.unsplit.rows === 0)
         this.groups.delete(value);
     }
-    taken(this.totals, series, this.totalsRest, x);
+    taken(this.totals, series, this.totalsRest, read);
   }
 
-  /** parsed is `cell` as a number where the fold sums, counting one left out. */
-  private parsed(cell: string, sign: 1 | -1): number | undefined {
+  /** parsed reads `cell` where the fold sums, counting one left out. */
+  private parsed(cell: string, sign: 1 | -1): Read | undefined {
     if (this.mark === undefined) return undefined;
     const x = parse(cell, this.mark);
-    if (x === undefined && cell === '') this.skipped.blank += sign;
-    else if (x === undefined) this.skipped.unparsed += sign;
-    return x;
+    if (x !== undefined) return x;
+    const left = cell === '' ? 'blank' : 'unparsed';
+    this.skipped[left] += sign;
+    return left;
   }
 
   /** saved is what the fold holds, which `restored` reads back as it was. */
   saved(): SavedSplit {
     const summed = this.mark !== undefined;
-    const tally = ({ rows, sum }: Count): SavedTally =>
-      summed ? { rows, sum: sum.saved() } : { rows };
+    const tally = ({ rows, sum, numbers, blank }: Count): SavedTally =>
+      summed ? { rows, sum: sum.saved(), numbers, blank } : { rows };
     const cells = (held: Map<string, Count>) =>
       [...held].map(([series, c]): SavedCell =>
-        summed ? [series, c.rows, c.sum.saved()] : [series, c.rows],
+        summed
+          ? [series, c.rows, c.sum.saved(), c.numbers, c.blank]
+          : [series, c.rows],
       );
     return {
       mark: this.mark,
@@ -202,7 +221,12 @@ export class SplitFold {
     const fold = mark === undefined ? new SplitFold() : new SplitFold(mark);
     const summed = mark !== undefined;
     const tally = (v: unknown, into: Count) =>
-      isRecord(v) && restoredCell([v['rows'], v['sum']], summed, into);
+      isRecord(v) &&
+      restoredCell(
+        [v['rows'], v['sum'], v['numbers'], v['blank']],
+        summed,
+        into,
+      );
     const cells = (v: unknown, into: Map<string, Count>) =>
       Array.isArray(v) &&
       v.length <= DISTINCT_AT_MOST &&
@@ -298,18 +322,23 @@ function merged(counts: Count[]): Measured {
   return measured(all);
 }
 
-/** tallied adds a row to `to`, or takes one back, with `x` its number if any. */
-function tallied(to: Count, x: number | undefined, sign: 1 | -1): void {
+/** tallied adds a row to `to`, or takes one back, with its summed cell `read`, if any. */
+function tallied(to: Count, read: Read | undefined, sign: 1 | -1): void {
   to.rows += sign;
-  if (x !== undefined) to.sum.add(sign * x);
+  if (read === 'blank') to.blank += sign;
+  if (typeof read !== 'number') return;
+  to.sum.add(sign * read);
+  to.numbers += sign;
 }
 
 /**
  * restoredCell reads a saved count into `into`, and says whether it is one:
- * whole rows, and where the fold sums, an exact sum.
+ * whole rows, and where the fold sums, an exact sum, its numbers and its
+ * blanks, together none past its rows. A sum saved before counts kept their
+ * numbers is none.
  */
 function restoredCell(
-  [rows, sum]: unknown[],
+  [rows, sum, numbers, blank]: unknown[],
   summed: boolean,
   into: Count,
 ): boolean {
@@ -317,8 +346,12 @@ function restoredCell(
   into.rows = rows;
   if (!summed) return true;
   const restored = ExactSum.restored(sum);
-  if (restored === undefined) return false;
+  if (restored === undefined || !isCount(numbers) || !isCount(blank))
+    return false;
+  if (numbers + blank > rows) return false;
   into.sum = restored;
+  into.numbers = numbers;
+  into.blank = blank;
   return true;
 }
 
@@ -350,9 +383,9 @@ function taken(
   cells: Map<string, Count>,
   key: string,
   rest: Count,
-  x: number | undefined,
+  read: Read | undefined,
 ): boolean {
   const cell = cells.get(key) ?? rest;
-  tallied(cell, x, -1);
+  tallied(cell, read, -1);
   return cell.rows === 0 && cell !== rest && cells.delete(key);
 }

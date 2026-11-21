@@ -114,11 +114,15 @@ export interface SavedGroups {
   skipped: Skipped;
 }
 
-/** Rows counted together, their cells added exactly, and those read as numbers. */
+/**
+ * Rows counted together, their cells added exactly, those read as numbers,
+ * and the blank ones, which a split fold keeps per cell.
+ */
 export class Count {
   rows = 0;
   sum = new ExactSum();
   numbers = 0;
+  blank = 0;
 }
 
 /**
