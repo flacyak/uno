@@ -9,6 +9,7 @@ import { splitFolder } from './split.ts';
 import { spreadFolder } from './spread.ts';
 import { boxFolder } from './spreads.ts';
 import { timeFolder } from './time.ts';
+import { weekFolder } from './week.ts';
 
 export { folderOf, markOf, placeOf } from './folder.ts';
 export type { Block, Folder, Folders, MakeFolder } from './folder.ts';
@@ -24,4 +25,5 @@ export const FOLDERS: Folders = {
   box: boxFolder,
   dots: dotsFolder,
   slope: splitFolder,
+  week: weekFolder,
 };

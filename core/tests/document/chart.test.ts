@@ -62,6 +62,7 @@ describe('parsePlot', () => {
     { t: 'dots', by: REGION },
     { t: 'dots', by: REGION, of: REVENUE, measure: 'mean' },
     { t: 'dots', by: REGION, of: UNITS, measure: 'sum', order: ['East'] },
+    { t: 'week', at: DATE, sum: REVENUE, unit: 'ms' },
   ])('reads %j', (plot) => {
     expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });
@@ -77,6 +78,10 @@ describe('parsePlot', () => {
       'this build does not read "colour"',
     ],
     [{ t: 'pie', by: REGION, x: REVENUE }, 'this build does not read "x"'],
+    [
+      { t: 'week', at: DATE, per: 'day', order: 'day' },
+      'this build does not read "per"',
+    ],
     [
       { t: 'scatter', x: REVENUE, y: UNITS, by: REGION },
       'this build does not read "by"',

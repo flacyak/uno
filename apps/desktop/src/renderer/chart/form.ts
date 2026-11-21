@@ -365,11 +365,11 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column; the form makes no week heatmap yet.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t === "week" ? "time" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
-    else if (plot.t === "time") {
-      this.per.value = plot.per;
+    else if (plot.t === "time" || plot.t === "week") {
+      if (plot.t === "time") this.per.value = plot.per;
       this.offer(this.placeAt(plot.at), [plot.sum, undefined, undefined, plot.at]);
     } else if (plot.t === "stack") {
       this.offer(this.placeAt(plot.by), [plot.sum, undefined, undefined, undefined, plot.split]);

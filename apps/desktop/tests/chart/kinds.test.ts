@@ -18,6 +18,7 @@ import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
 import { dots } from "@renderer/chart/kinds/dots";
 import { slope } from "@renderer/chart/kinds/slope";
+import { week } from "@renderer/chart/kinds/week";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
@@ -180,7 +181,26 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots, slope });
+  expect(KINDS).toStrictEqual({
+    bars,
+    pie,
+    scatter,
+    time,
+    stack,
+    histogram,
+    box,
+    dots,
+    slope,
+    week,
+  });
+});
+
+test("a week heatmap's kind reads its dates as its plot says, and its numbers from its sum", () => {
+  const at = { col: 0, header: "ordered" };
+  const kind = week({ t: "week", at, sum: REVENUE, unit: "s" });
+  expect(kind.dated).toStrictEqual({ at, reading: "s" });
+  expect([kind.numbered, kind.valued]).toStrictEqual([[REVENUE], [at]]);
+  expect(week({ t: "week", at, order: "day" }).numbered).toStrictEqual([]);
 });
 
 test("a slope chart's kind titles what it measures per value and its two states", () => {

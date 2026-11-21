@@ -57,6 +57,7 @@ export type {
   SlopeTally,
   StackTally,
   TimeTally,
+  WeekTally,
   SignIns,
   Skipped,
   SourceRef,

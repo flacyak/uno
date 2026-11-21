@@ -67,7 +67,8 @@ function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
   if (plot.t === "box") return [plot.of, plot.by];
   if (plot.t === "dots") return [plot.by, plot.of];
   if (plot.t === "slope") return [plot.by, plot.between, plot.of];
-  return plot.t === "time" ? [plot.at, plot.sum] : [plot.by, plot.sum];
+  if (plot.t === "time" || plot.t === "week") return [plot.at, plot.sum];
+  return [plot.by, plot.sum];
 }
 
 /** Returns whether two plots draw one kind from the same columns, a dot plot's at one measure. */

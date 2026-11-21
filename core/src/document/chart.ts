@@ -124,7 +124,8 @@ export type Plot =
   /** A box of the numbers of `of`, or one per value of `by`, as R's boxplot draws them. */
   | { t: 'box'; of: ChartColumn; by?: ChartColumn; span: Span }
   | DotsPlot
-  | SlopePlot;
+  | SlopePlot
+  | WeekPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

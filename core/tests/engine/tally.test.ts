@@ -46,6 +46,7 @@ import {
   SpreadFold,
   SpreadsFold,
   TimeFold,
+  WeekFold,
 } from '@tally';
 import {
   CHANNEL,
@@ -141,6 +142,17 @@ const REVENUE_WEEKLY: Chart = {
     per: 'week',
     order: 'day',
   },
+};
+/** The fixture's rows per hour of the week, and its revenue the same way. */
+const WEEKLY: Chart = {
+  ...REGION_ROWS,
+  id: 'c8',
+  plot: { t: 'week', at: column(DATES), order: 'day' },
+};
+const REVENUE_WEEK: Chart = {
+  ...REGION_ROWS,
+  id: 'c9',
+  plot: { t: 'week', at: column(DATES), sum: column(REVENUE), order: 'day' },
 };
 /** The fixture's rows per region by channel, and its revenue the same way. */
 const STACKED: Chart = {
@@ -262,6 +274,15 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       fold.add(cell(r, at), sum === undefined ? '' : cell(r, sum));
     }
     return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
+  }
+  if (plot.t === 'week') {
+    const reading = 'order' in plot ? plot.order : plot.unit;
+    const { at, sum } = plot;
+    const fold = new WeekFold(reading, sum === undefined ? undefined : 'point');
+    for (let r = 0; r < rows; r++) {
+      fold.add(cell(r, at), sum === undefined ? '' : cell(r, sum));
+    }
+    return { t: 'week', plot, coverage, ...fold.snapshot() };
   }
   if (plot.t === 'slope') {
     const fold = new SplitFold(plot.of === undefined ? undefined : 'point');
@@ -717,6 +738,40 @@ test('an over-time chart folded a block at a time reads as the pure fold of its 
   } as const;
   tallies.attach({ ...PER_MONTH, plot }, HEADERS);
   expect(tallies.from()).toBe(0);
+});
+
+test("a week heatmap folded a block at a time reads as the pure fold of its dates' hours of the week, and shares no fold with an over-time chart of them", () => {
+  const tallies = folded([WEEKLY, REVENUE_WEEK]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [WEEKLY.id, pure(WEEKLY.plot)],
+    [REVENUE_WEEK.id, pure(REVENUE_WEEK.plot)],
+  ]);
+  const time: Plot = {
+    t: 'time',
+    at: column(DATES),
+    per: 'hour',
+    order: 'day',
+  };
+  tallies.attach({ ...WEEKLY, plot: time }, HEADERS);
+  expect(tallies.from()).toBe(0);
+});
+
+test('an edit to a date moves a week heatmap by its one row, and a save keeps the fold, which reads back with no pass', async () => {
+  const tallies = folded([REVENUE_WEEK]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, DATES, LATER);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[REVENUE_WEEK.id, pure(REVENUE_WEEK.plot, sheet)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(REVENUE_WEEK, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });
 
 test('a histogram folded a block at a time reads as the pure spread of its numbers, and a change of span alone keeps its fold', () => {
