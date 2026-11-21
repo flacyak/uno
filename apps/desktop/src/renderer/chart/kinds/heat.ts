@@ -5,6 +5,8 @@ import { m } from "@paraglide/messages";
 import { heatGrid, heatLevel, heatTargets } from "../heat.ts";
 import type { ChartKind } from "../kind.ts";
 import { PER_WORDS } from "../periods.ts";
+import { heatOver } from "../summary.ts";
+import { heated, tableOf } from "../table.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -35,6 +37,8 @@ export const heat: ChartKind<HeatPlot> = (plot) => ({
       ...undrawn,
       draw: (height) => heatGrid(tally, level, summed, room, height),
       targets: (drawn) => heatTargets(tally, level, summed, drawn),
+      table: (called) => tableOf(heated(plot, tally, level), called),
+      told: () => heatOver(tally, level, summed),
     };
   },
 });

@@ -13,6 +13,7 @@
 import type {
   ChartColumn,
   DotsPlot,
+  HeatPlot,
   Plot,
   SlopePlot,
   StackPlot,
@@ -29,12 +30,13 @@ import type {
   StackTally,
   TimeTally,
   WeekTally,
+  HeatTally,
 } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import type { Level, TimeLevel } from "@tally";
+import type { Level, SplitLevel, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
 import { middle } from "./box.ts";
 import { measuresOf } from "./dots.ts";
@@ -245,9 +247,56 @@ export function weekly({ sum }: WeekPlot, tally: WeekTally): [HTMLElement[], HTM
   return [heads, [...rows, ...leftOut(tally, heads.length)]];
 }
 
+/**
+ * heated gives a heatmap's heads and rows: a row per value sent and period of
+ * `level`, empty ones too, with its rows and its sum where the plot sums; a
+ * row per value of its rows with no date; and a line of the values not sent
+ * and the cells left out.
+ */
+export function heated(
+  plot: HeatPlot,
+  tally: HeatTally,
+  level: SplitLevel,
+): [HTMLElement[], HTMLElement[]] {
+  const { by, sum } = plot;
+  const heads = [
+    header(columnLabel(by.header, by.col), true),
+    header(PER_WORDS[level.per](), false),
+  ];
+  heads.push(header(m.chart_table_rows(), false, true));
+  if (sum !== undefined) heads.push(header(columnLabel(sum.header, sum.col), true, true));
+  const cells = (rows: number, summed: number): HTMLElement[] =>
+    sum === undefined ? [digits(rows)] : [digits(rows), digits(summed)];
+  const rows = tally.values.flatMap(({ value }, i) =>
+    level.rows[i]!.map((n, p) =>
+      row(
+        rowHead(value),
+        rowNamed(label(level.per, level.from + p, true)),
+        ...cells(n, level.sum[i]?.[p] ?? 0),
+      ),
+    ),
+  );
+  for (const { value, undated } of tally.values.filter((v) => v.undated.rows > 0)) {
+    rows.push(
+      row(rowHead(value), rowNamed(m.chart_table_undated()), ...cells(undated.rows, undated.sum)),
+    );
+  }
+  const { others } = tally;
+  if (others.values > 0) {
+    const more = el(
+      "td",
+      "chart-table-line",
+      `${m.chart_bars_more({ count: num(others.values) })} · ${m.rows_count({ count: others.rows })}`,
+    );
+    more.colSpan = heads.length;
+    rows.push(row(more));
+  }
+  return [heads, [...rows, ...leftOut(tally, heads.length)]];
+}
+
 /** leftOut gives a line across `span` columns of the cells `tally` left out, or none. */
 function leftOut(
-  tally: TimeTally | WeekTally | SpreadTally | BoxTally | DotsTally | SlopeTally,
+  tally: TimeTally | WeekTally | HeatTally | SpreadTally | BoxTally | DotsTally | SlopeTally,
   span: number,
 ): HTMLElement[] {
   const left = [blank(tally), notNumbers(tally)].filter((part) => part !== "").join(SEP);

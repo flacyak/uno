@@ -92,4 +92,18 @@ export const CHART_HEAT: Check[] = [
       return said === "12 North, December 2024" ? "" : "the box says " + said;
     `,
   },
+  {
+    name: "a heatmap's head says what it measures per region per month, and its table lists each region's months, North's December's twelve rows among them",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-heat-table",
+    script: `
+      const win = document.querySelector(".chart");
+      const title = win.querySelector(".chart-title").textContent;
+      if (title !== "rows per region per month of ordered") return "the head says " + title;
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((c) => c.textContent).join(" | "));
+      if (lines[0] !== "region | month | rows") return "the table's head reads " + lines[0];
+      return lines.includes("North | Dec 2024 | 12") ? "" : "North's December is not 12 rows: " + lines.slice(1, 4).join(" / ");
+    `,
+  },
 ];
