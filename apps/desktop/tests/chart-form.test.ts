@@ -190,7 +190,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a histogram, a box plot and a scatter, and opens on bars", () => {
+test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a histogram, a box plot and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -201,6 +201,7 @@ test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heat
     m.chart_kind_pie(),
     m.chart_kind_time(),
     m.chart_kind_week(),
+    m.chart_kind_heat(),
     m.chart_kind_histogram(),
     m.chart_kind_box(),
     m.chart_kind_scatter(),
@@ -780,8 +781,9 @@ test("a chart over time opened to change keeps its kind, size, sum and the order
 
 test("a source with no date column offers no chart over time and no week heatmap", () => {
   form(undefined, { t: "insert", col: 0 }, ADS);
-  const off = [...select("kind").options].filter((o) => o.value === "time" || o.value === "week");
-  expect(off.map((o) => o.disabled)).toStrictEqual([true, true]);
+  const dated = ["time", "week", "heat"];
+  const off = [...select("kind").options].filter((o) => dated.includes(o.value));
+  expect(off.map((o) => o.disabled)).toStrictEqual([true, true, true]);
 });
 
 test("a week heatmap asks for its dates and a sum, and no size, and makes one that reads its dates as chosen", async () => {
@@ -1004,4 +1006,53 @@ test("a box plot's form opens on its columns, and keeps its span", () => {
   const of = { col: REVENUE, header: "revenue" };
   changing({ t: "box", of, by: { col: REGION, header: "region" }, span: "all" });
   expect(chosen("kind", "of", "box-by")).toStrictEqual(["box", String(REVENUE), String(REGION)]);
+});
+
+test("a heatmap asks for its dates, a size, its values' column and a sum, and makes one of By's values per period", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: REGION });
+  pick("kind", "heat");
+  expect(shown(box)).toStrictEqual([
+    "source",
+    "compare",
+    "trend",
+    "spread",
+    "relate",
+    "dates",
+    "per",
+    "by",
+    "sum of",
+    "title",
+    "checks",
+  ]);
+  pick("per", "month");
+  pick("sum", String(REVENUE));
+  press("Enter");
+  await settle();
+  const sum = { col: REVENUE, header: "revenue" };
+  const by = { col: REGION, header: "region" };
+  expect(asked).toStrictEqual([
+    inserting({ t: "heat", by, at: DATE, sum, per: "month", order: "month" }),
+    "closed",
+  ]);
+});
+
+test("a heatmap opened to change keeps its kind, its values' column, its size and its sum", async () => {
+  const sum = { col: REVENUE, header: "revenue" };
+  const plot: Plot = {
+    t: "heat",
+    by: { col: REGION, header: "region" },
+    at: DATE,
+    sum,
+    per: "week",
+    order: "day",
+  };
+  const { asked } = form(undefined, { t: "change", chart: { plot, title: "", refresh: BY_HAND } });
+  expect([select("kind").value, select("by").value, select("per").value]).toStrictEqual([
+    "heat",
+    String(REGION),
+    "week",
+  ]);
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(plot), "closed"]);
 });

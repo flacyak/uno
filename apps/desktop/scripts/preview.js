@@ -58,6 +58,10 @@
  *   opens the chart form on it by Ctrl+Shift+G, steps its kind to Week
  *   heatmap, presses Enter, then clicks an hour's cell and steps to the next
  *   day's with Down. Goes to out/weekly.gif.
+ * - `heated`: selects region, opens the chart form on it by Ctrl+Shift+G,
+ *   steps its kind to Heatmap, presses Enter for a heatmap of each region's
+ *   weeks, then clicks a week's cell and steps to the next region's with
+ *   Down. Goes to out/heated.gif.
  * - `dates`: selects a date of the fixture written day first, opens the
  *   chart form on it by Ctrl+Shift+G, reads its dates day first, sets it per
  *   week and presses Enter for a window of its weeks. Goes to out/dates.gif.
@@ -88,7 +92,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|stacked|histogram|box|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|heated|stacked|histogram|box|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -148,6 +152,7 @@ const CHARTED = [
   "aside",
   "dates",
   "weekly",
+  "heated",
   "stacked",
   "histogram",
   "box",
@@ -507,6 +512,7 @@ const staged = {
   menu: () => stageCharts("menu", []),
   dates: stageDates,
   weekly: stageWeekly,
+  heated: () => stageCharts("heated", []),
   stacked: () => stageCharts("stacked", []),
   histogram: () => stageCharts("histogram", []),
   box: () => stageCharts("box", []),

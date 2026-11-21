@@ -31,6 +31,7 @@ export const QUESTIONS: readonly Question[] = [
     kinds: [
       ["time", m.chart_kind_time],
       ["week", m.chart_kind_week],
+      ["heat", m.chart_kind_heat],
     ],
   },
   {

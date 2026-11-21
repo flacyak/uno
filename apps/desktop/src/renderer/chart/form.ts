@@ -25,6 +25,7 @@ import type {
   Chart,
   ChartColumn,
   DotMeasure,
+  HeatPlot,
   Plot,
   Reading,
   SlopePlot,
@@ -200,7 +201,7 @@ export class ChartForm {
   /** The values a person moved among the rows of the bars or dots the form opened on, kept while their column stays. */
   private readonly moved: { by: ChartColumn; order: string[] } | undefined;
   /** How the chart opened on reads its dates, which it keeps while its date column stays. */
-  private readonly read: TimePlot | WeekPlot | undefined;
+  private readonly read: TimePlot | WeekPlot | HeatPlot | undefined;
   /** The fields an over-time chart asks for before Sum of, and those bars and a pie ask for. */
   /** How the date column's dates written year last read, where it writes such. */
   private readonly order = select("order");
@@ -237,7 +238,8 @@ export class ChartForm {
     this.source = active;
     const changes = opening.t === "change";
     const plotted = changes ? opening.chart.plot : undefined;
-    this.read = plotted?.t === "time" || plotted?.t === "week" ? plotted : undefined;
+    const dated = plotted?.t === "time" || plotted?.t === "week" || plotted?.t === "heat";
+    this.read = dated ? plotted : undefined;
     const was = opening.t === "change" ? opening.chart.plot : undefined;
     this.span = was?.t === "histogram" || was?.t === "box" ? was.span : "most";
     this.states = was?.t === "slope" ? was : undefined;
@@ -375,12 +377,13 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column; the form makes no heatmap over periods yet.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t === "heat" ? "time" : plot.t;
+    // A stacked chart is bars split by a column.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time" || plot.t === "week" || plot.t === "heat") {
       if (plot.t !== "week") this.per.value = plot.per;
-      this.offer(this.placeAt(plot.at), [plot.sum, undefined, undefined, plot.at]);
+      const by = plot.t === "heat" ? this.placed(plot.by) : undefined;
+      this.offer(by ?? this.placeAt(plot.at), [plot.sum, undefined, undefined, plot.at]);
     } else if (plot.t === "stack") {
       this.offer(this.placeAt(plot.by), [plot.sum, undefined, undefined, undefined, plot.split]);
     } else if (plot.t === "histogram" || plot.t === "box") {
@@ -477,7 +480,7 @@ export class ChartForm {
     const scatters = numbers.length >= SCATTER_COLUMNS;
     this.kind.disable("scatter", !scatters);
     if (!scatters && this.kind.value === "scatter") this.kind.value = "bars";
-    for (const t of ["time", "week"]) {
+    for (const t of ["time", "week", "heat"]) {
       this.kind.disable(t, dates.length === 0);
       if (dates.length === 0 && this.kind.value === t) this.kind.value = "bars";
     }
@@ -495,7 +498,7 @@ export class ChartForm {
   /** ask shows the fields the kind chosen asks for, and the title it makes. */
   private ask(): void {
     const t = this.kind.value;
-    for (const line of this.timed) line.hidden = t !== "time" && t !== "week";
+    for (const line of this.timed) line.hidden = t !== "time" && t !== "week" && t !== "heat";
     const { order, unit } = this.source.band.columns[Number(this.at.value)] ?? {};
     this.timed[1]!.hidden ||= order === undefined || unit !== undefined;
     // A week has its hours, so a week heatmap asks for no size.
@@ -533,6 +536,7 @@ export class ChartForm {
     }
     if (this.kind.value === "time") return this.overTime();
     if (this.kind.value === "week") return this.weekly();
+    if (this.kind.value === "heat") return this.heated();
     const of = this.column(this.of.value);
     if (this.kind.value === "histogram") return { t: "histogram", of, span: this.span };
     if (this.kind.value === "box") {
@@ -651,6 +655,14 @@ export class ChartForm {
     const at = this.column(this.at.value);
     const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
     return { t: "week", at, ...sum, ...this.reading(at) };
+  }
+
+  /** heated gives a heatmap of By's values per Per's size of `at`, summing Sum of if it names a column. */
+  private heated(): HeatPlot {
+    const [by, at] = [this.column(this.by.value), this.column(this.at.value)];
+    const per = PERS.find(([size]) => size === this.per.value)?.[0] ?? "auto";
+    const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
+    return { t: "heat", by, at, ...sum, per, ...this.reading(at) };
   }
 
   /** reading gives how `at`'s dates read: as Unix time where the column is that, or else in the order chosen. */

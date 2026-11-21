@@ -343,6 +343,25 @@ const WEEKLY = {
 const WEDNESDAY_ONE = 3 * 24 + 13 + 1;
 
 /**
+ * The heated story's beats: region selected, the chart form opened on it, its
+ * kind stepped from Bars to Heatmap, Enter, a click on a week's cell, and Down
+ * to the next region's.
+ */
+const HEATED = {
+  column: 500,
+  open: 2_400,
+  kind: 4_600,
+  enter: 7_800,
+  cursor: 12_000,
+  down: 14_400,
+  stop: 17_400,
+};
+/** How many Rights step the kinds from Bars to Heatmap, past Dot plot, Slope, Pie, Over time and Week heatmap. */
+const TO_HEAT = 6;
+/** The first region's fifth week, the heated story's first cell, from 1 for nth-child. */
+const FIFTH_WEEK = 5;
+
+/**
  * The dots story's beats: region selected, the chart form opened on it, its
  * kind stepped from Bars to Dot plot, Of stepped to revenue, Enter, a click on
  * a region's row, and Alt+Up.
@@ -1027,6 +1046,7 @@ const STORIES: Record<string, Story> = {
   moving: { end: MOVING.end, script: playMoving },
   dots: { end: DOTS.stop, script: playDots },
   weekly: { end: WEEKLY.stop, script: playWeekly },
+  heated: { end: HEATED.stop, script: playHeated },
   sloped: { end: SLOPED.stop, script: playSloped },
   dotted: { end: DOTTED.end, script: playDotted },
   change: { end: CHANGE.end, script: playChange },
@@ -1293,6 +1313,34 @@ async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
   await at(BOX.down);
   press(win, "Down");
   await at(BOX.stop);
+}
+
+/**
+ * playHeated performs the heated story: region selected, the form opened on it
+ * by Ctrl+Shift+G, its kind stepped to Heatmap, Enter, a click on the first
+ * region's fifth week for what it says, and Down to the next region's.
+ */
+async function playHeated(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(HEATED.column);
+  await pressOn(REGION_CELL);
+  await glideTo(KEYED_REST);
+  await at(HEATED.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(HEATED.kind);
+  // The keys open in By, after the kinds, and Right steps Bars to Heatmap.
+  press(win, "Tab", ["shift"]);
+  await presses(win, "Right", TO_HEAT, KIND_STEP_MS);
+  await at(HEATED.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-heat-cell")', "the heatmap never drew");
+  await at(HEATED.cursor);
+  await pressOn(`.chart .chart-heat-cell:nth-child(${FIFTH_WEEK})`);
+  await at(HEATED.down);
+  press(win, "Down");
+  await at(HEATED.stop);
 }
 
 /**
