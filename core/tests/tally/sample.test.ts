@@ -200,6 +200,7 @@ test('a sample fold keeps a number of each of any number of columns', () => {
   const unparsed = Math.ceil(ROWS / BLANK_EVERY);
   const last = ROWS - 1;
   expect(fold.snapshot()).toStrictEqual({
+    rows: sampled,
     values: sampled.map((r) => [r, -r - 0.5, 2 * r]),
     plotted: ROWS - unparsed,
     least: [1, -last - 0.5, 2],

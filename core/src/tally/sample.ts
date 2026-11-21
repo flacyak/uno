@@ -33,6 +33,8 @@ export interface Marks {
 
 /** Sample of any number of columns, with a number of each in place of x and y. */
 export interface Sampled extends Omit<Sample, 'x' | 'y' | 'least' | 'most'> {
+  /** The sampled rows with a number in every column, in rank order: row i's numbers are values[i]. */
+  rows: number[];
   values: number[][];
   least: number[];
   most: number[];
@@ -278,12 +280,13 @@ export class SampleFold {
 
   /** snapshot reads the fold as plain numbers. */
   snapshot(): Sampled {
-    const values = this.kept.first().map(([, v]) => [...v]);
+    const first = this.kept.first();
     const [least, most] = this.extent();
     const none = this.marks.map(() => 0);
     const seen = this.plotted > 0;
     return {
-      values,
+      rows: first.map(([row]) => row),
+      values: first.map(([, v]) => [...v]),
       plotted: this.plotted,
       least: seen ? least : none,
       most: seen ? most : none,

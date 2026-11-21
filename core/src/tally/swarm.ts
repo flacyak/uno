@@ -23,7 +23,10 @@ export interface Strip {
 }
 
 /** What a beeswarm's fold sends: each value's strip, the most rows first, Other's where a row is in it, and every row's counts and extent. */
-export interface Swarm extends Omit<Sampled, 'values' | 'least' | 'most'> {
+export interface Swarm extends Omit<
+  Sampled,
+  'rows' | 'values' | 'least' | 'most'
+> {
   strips: Strip[];
   rest?: Strip;
   least: number;
