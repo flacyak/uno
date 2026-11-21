@@ -70,7 +70,7 @@ export interface Axis {
  * decimal gives `digit` times ten to the `exponent`, written out and read back,
  * so 3 tenths is 0.3, where 3 * 0.1 is 0.30000000000000004.
  */
-function decimal(digit: number, exponent: number): number {
+export function decimal(digit: number, exponent: number): number {
   return Number(`${digit}e${exponent}`);
 }
 

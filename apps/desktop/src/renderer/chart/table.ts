@@ -10,7 +10,16 @@
  * file's text, set as text alone, and a number is in the app's language.
  */
 
-import type { ChartColumn, DotsPlot, Plot, SlopePlot, StackPlot, TimePlot } from "@document";
+import type {
+  ChartColumn,
+  DotsPlot,
+  HeatPlot,
+  Plot,
+  SlopePlot,
+  StackPlot,
+  TimePlot,
+  WeekPlot,
+} from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
 import type {
   BoxTally,
@@ -20,20 +29,23 @@ import type {
   SpreadTally,
   StackTally,
   TimeTally,
+  WeekTally,
+  HeatTally,
 } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import type { Level, TimeLevel } from "@tally";
+import type { Level, SplitLevel, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
 import { middle } from "./box.ts";
 import { measuresOf } from "./dots.ts";
 import { endsOf } from "./slope.ts";
+import { slotsOf } from "./week.ts";
 import type { DotsTally } from "./dots.ts";
 import type { Boxed } from "./box.ts";
 import { edgeWords } from "./histogram.ts";
-import { PER_WORDS, label } from "./periods.ts";
+import { PER_WORDS, clockName, dayName, label } from "./periods.ts";
 import { PIE_SLICES_AT_MOST, slices, unsent, wholeOf } from "./pie.ts";
 
 /** What a tally measures of a value, or of the values it leaves out: their rows and their sum. */
@@ -190,7 +202,7 @@ function rowNamed(text: string): HTMLTableCellElement {
  * line of the summed column's cells it could not add.
  */
 export function timed(
-  { sum }: TimePlot,
+  { sum }: Pick<TimePlot, "sum">,
   tally: TimeTally,
   level: TimeLevel,
 ): [HTMLElement[], HTMLElement[]] {
@@ -207,9 +219,84 @@ export function timed(
   return [heads, [...rows, ...leftOut(tally, heads.length)]];
 }
 
+/**
+ * weekly gives a week heatmap's heads and rows: a row per hour of the week,
+ * Sunday 00:00 first, empty ones too, under its day and hour, or per day in a
+ * grid of days, with its rows and its sum where the plot sums; one for the
+ * rows with no date, where there are any; and a line of the cells left out.
+ */
+export function weekly({ sum }: WeekPlot, tally: WeekTally): [HTMLElement[], HTMLElement[]] {
+  const { across, cells: slots } = slotsOf(tally);
+  const named = across > 1 ? [PER_WORDS.day(), PER_WORDS.hour()] : [PER_WORDS.day()];
+  const heads = named.map((word) => header(word, false));
+  heads.push(header(m.chart_table_rows(), false, true));
+  if (sum !== undefined) heads.push(header(columnLabel(sum.header, sum.col), true, true));
+  const cells = (rows: number, summed: number): HTMLElement[] =>
+    sum === undefined ? [digits(rows)] : [digits(rows), digits(summed)];
+  const rows = slots.map(({ rows, sum: summed }, i) => {
+    const day = rowNamed(dayName(Math.floor(i / across), "long"));
+    const hour = across > 1 ? [rowNamed(clockName(i % across))] : [];
+    return row(day, ...hour, ...cells(rows, summed));
+  });
+  const { undated } = tally;
+  if (undated.rows > 0) {
+    const none = rowNamed(m.chart_table_undated());
+    none.colSpan = named.length;
+    rows.push(row(none, ...cells(undated.rows, undated.sum)));
+  }
+  return [heads, [...rows, ...leftOut(tally, heads.length)]];
+}
+
+/**
+ * heated gives a heatmap's heads and rows: a row per value sent and period of
+ * `level`, empty ones too, with its rows and its sum where the plot sums; a
+ * row per value of its rows with no date; and a line of the values not sent
+ * and the cells left out.
+ */
+export function heated(
+  plot: Pick<HeatPlot, "by" | "sum">,
+  tally: HeatTally,
+  level: SplitLevel,
+): [HTMLElement[], HTMLElement[]] {
+  const { by, sum } = plot;
+  const heads = [
+    header(columnLabel(by.header, by.col), true),
+    header(PER_WORDS[level.per](), false),
+  ];
+  heads.push(header(m.chart_table_rows(), false, true));
+  if (sum !== undefined) heads.push(header(columnLabel(sum.header, sum.col), true, true));
+  const cells = (rows: number, summed: number): HTMLElement[] =>
+    sum === undefined ? [digits(rows)] : [digits(rows), digits(summed)];
+  const rows = tally.values.flatMap(({ value }, i) =>
+    level.rows[i]!.map((n, p) =>
+      row(
+        rowHead(value),
+        rowNamed(label(level.per, level.from + p, true)),
+        ...cells(n, level.sum[i]?.[p] ?? 0),
+      ),
+    ),
+  );
+  for (const { value, undated } of tally.values.filter((v) => v.undated.rows > 0)) {
+    rows.push(
+      row(rowHead(value), rowNamed(m.chart_table_undated()), ...cells(undated.rows, undated.sum)),
+    );
+  }
+  const { others } = tally;
+  if (others.values > 0) {
+    const more = el(
+      "td",
+      "chart-table-line",
+      `${m.chart_bars_more({ count: num(others.values) })} · ${m.rows_count({ count: others.rows })}`,
+    );
+    more.colSpan = heads.length;
+    rows.push(row(more));
+  }
+  return [heads, [...rows, ...leftOut(tally, heads.length)]];
+}
+
 /** leftOut gives a line across `span` columns of the cells `tally` left out, or none. */
 function leftOut(
-  tally: TimeTally | SpreadTally | BoxTally | DotsTally | SlopeTally,
+  tally: TimeTally | WeekTally | HeatTally | SpreadTally | BoxTally | DotsTally | SlopeTally,
   span: number,
 ): HTMLElement[] {
   const left = [blank(tally), notNumbers(tally)].filter((part) => part !== "").join(SEP);

@@ -67,10 +67,14 @@ export type {
   ChartPlace,
   DotMeasure,
   DotsPlot,
+  HeatPlot,
+  HorizonPlot,
   Plot,
+  Reading,
   SlopePlot,
   StackPlot,
   TimePlot,
+  WeekPlot,
 } from './chart.ts';
 export {
   formatFor,

@@ -27,10 +27,14 @@ import type {
   ChartPlace,
   DotMeasure,
   DotsPlot,
+  HeatPlot,
+  HorizonPlot,
   Plot,
+  Reading,
   SlopePlot,
   StackPlot,
   TimePlot,
+  WeekPlot,
 } from './chart.ts';
 import {
   CHARTS_AT_MOST,
@@ -1106,6 +1110,9 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   box: ['t', 'of', 'by', 'span'],
   dots: ['t', 'by', 'of', 'measure', 'order'],
   slope: ['t', 'by', 'between', 'from', 'to', 'of', 'measure'],
+  week: ['t', 'at', 'sum', 'order', 'unit'],
+  heat: ['t', 'by', 'at', 'sum', 'per', 'order', 'unit'],
+  horizon: ['t', 'at', 'by', 'sum', 'per', 'order', 'unit'],
 };
 
 /** What a dot plot's dots may stand at. */
@@ -1186,6 +1193,9 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'stack') return parseStacked(where, p);
   if (t === 'dots') return parseDots(where, p);
   if (t === 'slope') return parseSlope(where, p);
+  if (t === 'week') return parseWeek(where, p);
+  if (t === 'heat') return parseHeat(where, p);
+  if (t === 'horizon') return parseHorizon(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };
@@ -1282,12 +1292,50 @@ export function parseOverTime(where: string, value: unknown): TimePlot {
   const per = required(p, 'per', PER_SIZE, where);
   const at = columnOf(where, p, 'at');
   const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  return { t: 'time', at, ...sum, per, ...readingOf(where, p) };
+}
+
+/**
+ * parseWeek reads a week heatmap's plot: its date column `at`, a `sum` it
+ * may name, and how its dates read, as an over-time chart's do.
+ */
+export function parseWeek(where: string, value: unknown): WeekPlot {
+  const p = asRecord(value);
+  const at = columnOf(where, p, 'at');
+  const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  return { t: 'week', at, ...sum, ...readingOf(where, p) };
+}
+
+/**
+ * parseHeat reads a heatmap over periods' plot: the column `by` whose values
+ * are its rows, its date column `at`, a `sum` it may name, its size `per`,
+ * and how its dates read, as an over-time chart's do.
+ */
+export function parseHeat(where: string, value: unknown): HeatPlot {
+  const p = asRecord(value);
+  const [by, at] = [columnOf(where, p, 'by'), columnOf(where, p, 'at')];
+  if (by.col === at.col) throw new Error(`${where}: by and at name one column`);
+  const per = required(p, 'per', PER_SIZE, where);
+  const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  return { t: 'heat', by, at, ...sum, per, ...readingOf(where, p) };
+}
+
+/** parseHorizon reads a horizon chart's plot: a heatmap's, its `by` optional. */
+export function parseHorizon(where: string, value: unknown): HorizonPlot {
+  const p = asRecord(value);
+  if (p['by'] !== undefined) return { ...parseHeat(where, p), t: 'horizon' };
+  const per = required(p, 'per', PER_SIZE, where);
+  const at = columnOf(where, p, 'at');
+  const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  return { t: 'horizon', at, ...sum, per, ...readingOf(where, p) };
+}
+
+/** readingOf reads how a plot's dates read: a column's `order` or a Unix `unit`, one of the two. */
+function readingOf(where: string, p: Record<string, unknown>): Reading {
   const order = optional(p, 'order', ORDER, where);
   const unit = optional(p, 'unit', UNIT, where);
-  if (order !== undefined && unit === undefined)
-    return { t: 'time', at, ...sum, per, order };
-  if (unit !== undefined && order === undefined)
-    return { t: 'time', at, ...sum, per, unit };
+  if (order !== undefined && unit === undefined) return { order };
+  if (unit !== undefined && order === undefined) return { unit };
   throw new Error(
     `${where}: order or unit, one of the two, says how dates read`,
   );

@@ -6,12 +6,22 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
-import type { Chart, Plot, SlopePlot, StackPlot, TimePlot } from '@document';
+import type {
+  Chart,
+  Plot,
+  HeatPlot,
+  SlopePlot,
+  StackPlot,
+  TimePlot,
+  WeekPlot,
+} from '@document';
 import {
   parseOverTime,
   parsePlot,
   parseSlope,
+  parseHeat,
   parseStacked,
+  parseWeek,
 } from '@document/codec';
 import { GROUPS_SENT } from '@tally';
 
@@ -54,6 +64,17 @@ describe('parsePlot', () => {
     { t: 'dots', by: REGION },
     { t: 'dots', by: REGION, of: REVENUE, measure: 'mean' },
     { t: 'dots', by: REGION, of: UNITS, measure: 'sum', order: ['East'] },
+    { t: 'week', at: DATE, sum: REVENUE, unit: 'ms' },
+    { t: 'heat', by: REGION, at: DATE, per: 'day', order: 'month' },
+    { t: 'horizon', at: DATE, per: 'week', order: 'day' },
+    {
+      t: 'horizon',
+      at: DATE,
+      by: REGION,
+      sum: REVENUE,
+      per: 'auto',
+      unit: 's',
+    },
   ])('reads %j', (plot) => {
     expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });
@@ -69,6 +90,10 @@ describe('parsePlot', () => {
       'this build does not read "colour"',
     ],
     [{ t: 'pie', by: REGION, x: REVENUE }, 'this build does not read "x"'],
+    [
+      { t: 'week', at: DATE, per: 'day', order: 'day' },
+      'this build does not read "per"',
+    ],
     [
       { t: 'scatter', x: REVENUE, y: UNITS, by: REGION },
       'this build does not read "by"',
@@ -165,6 +190,56 @@ describe('parseOverTime', () => {
     expect(() => parseOverTime(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
+  });
+});
+
+describe('parseHeat', () => {
+  test.each<HeatPlot>([
+    { t: 'heat', by: REGION, at: DATE, per: 'month', order: 'day' },
+    { t: 'heat', by: REGION, at: DATE, sum: REVENUE, per: 'auto', unit: 'ms' },
+  ])('reads %j', (plot) => {
+    expect(parseHeat(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [
+      { t: 'heat', at: DATE, per: 'day', order: 'day' },
+      'by: col is not a column number',
+    ],
+    [
+      { t: 'heat', by: REGION, at: REGION, per: 'day', order: 'day' },
+      'by and at name one column',
+    ],
+    [
+      { t: 'heat', by: REGION, at: DATE, order: 'day' },
+      `per is not one of ${PERS}`,
+    ],
+    [{ t: 'heat', by: REGION, at: DATE, per: 'day' }, ONE_READING],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseHeat(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
+  });
+});
+
+describe('parseWeek', () => {
+  test.each<WeekPlot>([
+    { t: 'week', at: DATE, order: 'month' },
+    { t: 'week', at: DATE, sum: REVENUE, order: 'day' },
+    { t: 'week', at: DATE, unit: 's' },
+  ])('reads %j', (plot) => {
+    expect(parseWeek(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'week', order: 'day' }, 'at: col is not a column number'],
+    [
+      { t: 'week', at: DATE, sum: 4, order: 'day' },
+      'sum: col is not a column number',
+    ],
+    [{ t: 'week', at: DATE, order: 'either' }, 'order is not day or month'],
+    [{ t: 'week', at: DATE }, ONE_READING],
+    [{ t: 'week', at: DATE, order: 'day', unit: 'ms' }, ONE_READING],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseWeek(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });
 

@@ -50,6 +50,7 @@ export {
   LEVEL_BATCH,
   PER,
   TimeFold,
+  sizer,
   sundayOf,
 } from './time.ts';
 export type {
@@ -62,4 +63,16 @@ export type {
   Times,
   Undated,
 } from './time.ts';
+export { DAY_HOURS, WEEK_DAYS, WEEK_HOURS, WeekFold } from './week.ts';
+export type { SavedWeek, Week } from './week.ts';
+export { SPLIT_VALUES_SENT, TimeSplitFold } from './timesplit.ts';
+export type {
+  Ranked,
+  SavedTimeSplit,
+  SentValue,
+  SplitLevel,
+  TimeSplitSnapshot,
+  TimeSplits,
+  ValuePeriods,
+} from './timesplit.ts';
 export type { Skipped } from './skipped.ts';

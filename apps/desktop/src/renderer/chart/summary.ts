@@ -10,14 +10,16 @@
  */
 
 import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
-import type { Group, Groups, Sample, StackTally } from "@engine";
+import type { Group, Groups, HeatTally, Sample, StackTally, WeekTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent, places } from "@renderer/locale";
-import type { Box, Level, TimeLevel } from "@tally";
+import { WEEK_DAYS } from "@tally";
+import type { Box, Level, SplitLevel, TimeLevel } from "@tally";
 import { edgeWords } from "./histogram.ts";
-import { fullName } from "./periods.ts";
+import { dayName, fullName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
+import { amountsOf, slotsOf } from "./week.ts";
 
 /** How many values a summary names before it counts the rest: three, as a sentence reads. */
 export const SUMMARY_VALUES = 3;
@@ -112,7 +114,7 @@ export function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: Sample): T
  * `plot` measures it: its first period and its last, and the one that holds
  * the most, with what it holds.
  */
-export function spannedOver({ sum }: TimePlot, level: TimeLevel): Told {
+export function spannedOver({ sum }: Pick<TimePlot, "sum">, level: TimeLevel): Told {
   const sizes = sum === undefined ? level.rows : level.sum;
   const most = sizes.reduce((at, size, i) => (size > sizes[at]! ? i : at), 0);
   const name = (i: number): string => fullName(level.per, level.from + i);
@@ -122,6 +124,41 @@ export function spannedOver({ sum }: TimePlot, level: TimeLevel): Told {
     to: name(level.span - 1),
     most: name(most),
     value,
+  });
+  return { span, each: [], more: 0 };
+}
+
+/**
+ * weekOver gives what a week heatmap's summary says of `tally`, past its rows:
+ * its days, and the hour of the most rows, or the largest sum where `summed`.
+ */
+export function weekOver(tally: WeekTally, summed: boolean): Told {
+  const slots = slotsOf(tally);
+  const sizes = amountsOf(slots, summed);
+  const most = sizes.reduce((at, size, i) => (size > sizes[at]! ? i : at), 0);
+  const [from, to] = [dayName(0, "long"), dayName(WEEK_DAYS - 1, "long")];
+  const value = num(sizes[most]!);
+  const span = m.chart_summary_time({ from, to, most: slots.nameOf(most), value });
+  return { span, each: [], more: 0 };
+}
+
+/**
+ * heatOver gives what a heatmap's summary says of `level` of `tally`, past its
+ * rows: its first and last period, and the value and period of the most rows,
+ * or the largest sum where `summed`.
+ */
+export function heatOver(tally: HeatTally, level: SplitLevel, summed: boolean): Told {
+  const sizes = (summed ? level.sum : level.rows).flatMap((each, i) =>
+    each.map((size, p) => ({ size, i, p })),
+  );
+  const most = sizes.reduce((at, cell) => (cell.size > at.size ? cell : at), sizes[0]!);
+  const name = (p: number): string => fullName(level.per, level.from + p);
+  const value = tally.values[most.i]!.value || m.chart_blank_value();
+  const span = m.chart_summary_time({
+    from: name(0),
+    to: name(level.span - 1),
+    most: `${value}, ${name(most.p)}`,
+    value: num(most.size),
   });
   return { span, each: [], more: 0 };
 }

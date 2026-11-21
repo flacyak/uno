@@ -52,6 +52,45 @@ export type TimePlot = {
   per: Per | 'auto';
 } & ({ order: Order } | { unit: UnixUnit });
 
+/** How a chart's dates read: in a column's `order`, or as Unix time in a `unit`. */
+export type Reading = { order: Order } | { unit: UnixUnit };
+
+/**
+ * A week heatmap: rows, or the sum of `sum`, per hour of the week of `at`,
+ * Sunday first, its dates read as the chart was made.
+ */
+export type WeekPlot = {
+  t: 'week';
+  at: ChartColumn;
+  sum?: ChartColumn;
+} & Reading;
+
+/**
+ * A heatmap over periods: rows, or the sum of `sum`, per value of `by` and
+ * per period of `at`, at the size `per` or the finest that fits, its dates
+ * read as the chart was made.
+ */
+export type HeatPlot = {
+  t: 'heat';
+  by: ChartColumn;
+  at: ChartColumn;
+  sum?: ChartColumn;
+  per: Per | 'auto';
+} & Reading;
+
+/**
+ * A horizon chart: rows, or the sum of `sum`, per period of `at`, a row of
+ * folded bands per value of `by` where it names one, at the size `per` or the
+ * finest that fits, its dates read as the chart was made.
+ */
+export type HorizonPlot = {
+  t: 'horizon';
+  at: ChartColumn;
+  by?: ChartColumn;
+  sum?: ChartColumn;
+  per: Per | 'auto';
+} & Reading;
+
 /**
  * A stacked bar chart: rows, or the sum of `sum`, per value of `by`, each
  * bar split by the value of `split` in the same row.
@@ -111,7 +150,10 @@ export type Plot =
   /** A box of the numbers of `of`, or one per value of `by`, as R's boxplot draws them. */
   | { t: 'box'; of: ChartColumn; by?: ChartColumn; span: Span }
   | DotsPlot
-  | SlopePlot;
+  | SlopePlot
+  | WeekPlot
+  | HeatPlot
+  | HorizonPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

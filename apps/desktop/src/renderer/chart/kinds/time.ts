@@ -16,8 +16,8 @@ import { periodTargets } from "../tooltip.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
-/** title gives the title an over-time plot makes, per its size or over its span. */
-function title({ at, sum, per }: TimePlot): string {
+/** timeTitle gives the title an over-time plot makes, per its size or over its span, as a horizon chart of one series does. */
+export function timeTitle({ at, sum, per }: Pick<TimePlot, "at" | "sum" | "per">): string {
   const dates = named(at);
   if (per === "auto") {
     return sum === undefined
@@ -48,7 +48,7 @@ function narrowed(plot: TimePlot, drawn: Fitted): string {
 
 /** time is what a window does with an over-time chart's plot. */
 export const time: ChartKind<TimePlot> = (plot) => ({
-  title: () => title(plot),
+  title: () => timeTitle(plot),
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.at],
   dated: { at: plot.at, reading: "order" in plot ? plot.order : plot.unit },

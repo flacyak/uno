@@ -18,6 +18,9 @@ import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
 import { dots } from "@renderer/chart/kinds/dots";
 import { slope } from "@renderer/chart/kinds/slope";
+import { heat } from "@renderer/chart/kinds/heat";
+import { horizon } from "@renderer/chart/kinds/horizon";
+import { week } from "@renderer/chart/kinds/week";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
@@ -180,7 +183,28 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots, slope });
+  expect(KINDS).toStrictEqual({
+    bars,
+    pie,
+    scatter,
+    time,
+    stack,
+    histogram,
+    box,
+    dots,
+    slope,
+    week,
+    heat,
+    horizon,
+  });
+});
+
+test("a week heatmap's kind reads its dates as its plot says, and its numbers from its sum", () => {
+  const at = { col: 0, header: "ordered" };
+  const kind = week({ t: "week", at, sum: REVENUE, unit: "s" });
+  expect(kind.dated).toStrictEqual({ at, reading: "s" });
+  expect([kind.numbered, kind.valued]).toStrictEqual([[REVENUE], [at]]);
+  expect(week({ t: "week", at, order: "day" }).numbered).toStrictEqual([]);
 });
 
 test("a slope chart's kind titles what it measures per value and its two states", () => {
@@ -335,4 +359,33 @@ test("a box plot is titled by its column, and by both where it splits by another
   const region = { col: 1, header: "region" };
   expect(madeTitle({ t: "box", of: revenue, span: "most" })).toBe("revenue");
   expect(madeTitle({ t: "box", of: revenue, by: region, span: "most" })).toBe("revenue per region");
+});
+
+test("a heatmap over periods' kind titles what it measures per value, per its size or over its dates", async () => {
+  const at = { col: 0, header: "ordered" };
+  const plot = { t: "heat", by: REGION, at, per: "month", order: "day" } as const;
+  expect(heat(plot).title()).toBe("rows per region per month of ordered");
+  expect(heat({ ...plot, sum: REVENUE, per: "auto" }).title()).toBe(
+    "sum of revenue per region over ordered",
+  );
+  await setLocale("es", { reload: false });
+  expect(heat({ ...plot, sum: REVENUE }).title()).toBe(
+    "suma de revenue por region por mes de ordered",
+  );
+  await setLocale(baseLocale, { reload: false });
+});
+
+test("a horizon chart's kind titles what it measures as an over-time chart does, or per value as a heatmap does", async () => {
+  const at = { col: 0, header: "ordered" };
+  const plot = { t: "horizon", at, per: "month", order: "day" } as const;
+  expect(horizon(plot).title()).toBe("rows per month of ordered");
+  expect(horizon({ ...plot, sum: REVENUE, per: "auto" }).title()).toBe(
+    "sum of revenue over ordered",
+  );
+  expect(horizon({ ...plot, by: REGION }).title()).toBe("rows per region per month of ordered");
+  await setLocale("es", { reload: false });
+  expect(horizon({ ...plot, by: REGION, sum: REVENUE }).title()).toBe(
+    "suma de revenue por region por mes de ordered",
+  );
+  await setLocale(baseLocale, { reload: false });
 });

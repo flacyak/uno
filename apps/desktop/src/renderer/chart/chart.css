@@ -1131,6 +1131,27 @@
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
+/* A week heatmap's cell under the cursor is ringed in the ink, over the gaps beside it. */
+.chart-week-cell.cursor {
+  outline: 2px solid var(--ink);
+}
+
+.chart-heat-cell.cursor {
+  outline: 2px solid var(--ink);
+}
+
+/* A horizon chart's period under the cursor is ringed the same, however
+ * narrow the row's stretch makes it. */
+.chart-horizon-period {
+  fill: transparent;
+}
+
+.chart-horizon-period.cursor {
+  stroke: var(--ink);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
 .chart-slice.cursor {
   fill: color-mix(in srgb, var(--key) 80%, var(--ink));
 }
@@ -1267,6 +1288,15 @@
   .chart-point.cursor,
   .chart-slice.cursor {
     fill: Highlight;
+  }
+
+  .chart-week-cell.cursor,
+  .chart-heat-cell.cursor {
+    outline-color: Highlight;
+  }
+
+  .chart-horizon-period.cursor {
+    stroke: Highlight;
   }
 }
 
@@ -1537,4 +1567,126 @@
   position: absolute;
   inset: 0;
   visibility: hidden;
+}
+
+/* A week heatmap, from week.ts: a cell per hour of the week, a row per day
+ * from Sunday and a column per hour, the dataviz skill's 2 px of the window's
+ * ground apart, with the days' names in a column before them, each centred on
+ * its row, and the hours' under them, each centred on its column. A cell
+ * wears its class's step of the ramp, the accent's above zero and the pole's
+ * below, and an hour of no rows, or of a sum of zero, the gridline's rule. */
+.chart-week {
+  display: grid;
+  grid-template: auto minmax(0, 1fr) auto / auto minmax(0, 1fr);
+  gap: var(--tick-gap);
+  height: 100%;
+  padding: var(--inset);
+}
+
+.chart-week-days {
+  display: grid;
+  grid-template-rows: repeat(var(--days), minmax(0, 1fr));
+  row-gap: var(--gap);
+  align-items: center;
+}
+
+.chart-week-cells {
+  display: grid;
+  grid-template: repeat(var(--days), minmax(0, 1fr)) / repeat(var(--hours), minmax(0, 1fr));
+  gap: var(--gap);
+}
+
+.chart-week-hours {
+  display: grid;
+  grid-area: 3 / 2;
+  grid-template-columns: repeat(var(--hours), minmax(0, 1fr));
+  column-gap: var(--gap);
+}
+
+.chart-week-hours .chart-tick {
+  grid-row: 1;
+  grid-column: var(--hour);
+  justify-self: center;
+}
+
+.chart-week-cell,
+.chart-heat-cell {
+  border-radius: 2px;
+  background: var(--fill, var(--rule));
+}
+
+/* A heatmap over periods, from heat.ts: on bars' rows, a strip of cells per
+ * value, a share each of the track, the dataviz skill's 2 px apart, as tall as
+ * a bar; and the legend over them in the track's column. */
+.chart-heat-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--span), minmax(0, 1fr));
+  gap: var(--bar-gap);
+  height: 100%;
+}
+
+.chart-heat,
+.chart-horizon {
+  grid-template-rows: auto;
+}
+
+/* A horizon chart's rows of folded bands, from horizon.ts, a bar tall, over
+ * the track beside a value; a chart of one series names none, so its track
+ * takes the whole plot. */
+.chart-horizon-row {
+  grid-column: 2;
+  height: var(--bar-thick);
+}
+
+.chart-horizon.alone {
+  column-gap: 0;
+}
+
+.chart-horizon-bands {
+  display: block;
+  overflow: visible;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-heat-legend {
+  align-self: end;
+}
+
+/* The periods' labels in the row under the cells, each centred under its
+ * period and kept within the cells, as a box plot's axis keeps its labels. */
+.chart-heat-periods .chart-ticks.x {
+  align-self: start;
+  margin-top: 0;
+}
+
+.chart-heat-periods .chart-ticks.x .chart-tick {
+  left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
+}
+
+/* A scale's legend, from ramp.ts, over the cells it keys: a 10 px swatch per
+ * class, least first, and the breaks between them written under them in the
+ * ticks' ink: the first from its edge on, the last up to its edge, so both
+ * stand inside the legend, and each between centred on its edge. */
+.chart-scale {
+  position: relative;
+  display: flex;
+  grid-column: 2;
+  justify-self: start;
+  height: calc(10px + var(--tick-gap) + 1lh);
+  font-size: 11px;
+}
+
+.chart-swatch {
+  width: var(--swatch);
+  height: 10px;
+  background: var(--fill);
+}
+
+.chart-scale .chart-tick {
+  position: absolute;
+  bottom: 0;
+  left: calc(var(--at) * var(--swatch));
+  translate: calc(var(--toward) * -100%) 0;
 }

@@ -139,3 +139,54 @@ export function scatterBesides(p: Palette): Pair[] {
   const slots = p.chart.slice(0, SCATTER_SERIES_AT_MOST);
   return slots.flatMap((a, i) => slots.slice(i + 1).map((b): Pair => [a, b]));
 }
+
+/** OKLab back to linear light (Ottosson, 2020), the inverses of LAB and CONES. */
+const UNLAB: Matrix = [
+  [1, 0.3963377774, 0.2158037573],
+  [1, -0.1055613458, -0.0638541728],
+  [1, -0.0894841775, -1.291485548],
+];
+const UNCONES: Matrix = [
+  [4.0767416621, -3.3077115913, 0.2309699292],
+  [-1.2684380046, 2.6097574011, -0.3413193965],
+  [-0.0041960863, -0.7034186147, 1.707614701],
+];
+
+/** The most a channel of a hex colour holds. */
+const CHANNEL_MOST = 255;
+
+/** Linear light as a hex colour, kept to the screen's range. */
+function hexOf(rgb: readonly number[]): string {
+  const channel = (c: number): string => {
+    const kept = Math.min(Math.max(c, 0), 1);
+    const encoded = kept <= 0.0031308 ? 12.92 * kept : 1.055 * kept ** (1 / 2.4) - 0.055;
+    return Math.round(encoded * CHANNEL_MOST)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${rgb.map(channel).join("")}`;
+}
+
+/** What CSS's `color-mix(in oklab, a share%, b)` paints, for opaque colours. */
+export function mixed(a: string, b: string, share: number): string {
+  const [x, y] = [oklab(linear(a)), oklab(linear(b))];
+  const lab = x.map((v, i) => v * share + y[i]! * (1 - share));
+  return hexOf(
+    times(
+      UNCONES,
+      times(UNLAB, lab).map((c) => c ** 3),
+    ),
+  );
+}
+
+/** A colour's OKLCH hue, in degrees. */
+export function hueOf(hex: string): number {
+  const [, a, b] = oklab(linear(hex));
+  return (Math.atan2(b!, a!) * 180) / Math.PI;
+}
+
+/** How far apart two colours stand to the eye that tells them apart least. */
+export function apartToAny(a: string, b: string): number {
+  const blind = Object.values(BLINDNESSES).map((m) => apartTo(m, a, b));
+  return Math.min(apart(a, b), ...blind);
+}

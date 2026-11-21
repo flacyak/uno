@@ -40,7 +40,7 @@ const YEAR_MONTHS = 12;
  * Each held period but the year, as the key of the next coarser one, by
  * HELD's place. A key counts its periods since 1970-01-01 00:00.
  */
-const COARSER: ReadonlyArray<(key: number) => number> = [
+export const COARSER: ReadonlyArray<(key: number) => number> = [
   (hour) => Math.floor(hour / DAY_HOURS),
   (day) => {
     const { year, month } = civilFromDays(day);
@@ -50,7 +50,7 @@ const COARSER: ReadonlyArray<(key: number) => number> = [
 ];
 
 /** The key of the period at HELD's place `level` that `minute` falls in. */
-function keyAt(minute: number, level: number): number {
+export function keyAt(minute: number, level: number): number {
   let key = Math.floor(minute / HOUR_MINUTES);
   for (let i = 0; i < level; i++) key = COARSER[i]!(key);
   return key;
@@ -85,6 +85,24 @@ const SIZES: Record<Per, [Held, (key: number) => number]> = {
   quarter: ['month', (month) => Math.floor(month / QUARTER_MONTHS)],
   year: ['year', (year) => year],
 };
+
+/**
+ * sizer gives the key of the period of size `per` that a period held at
+ * HELD's place `level` falls in, from that period's key, or undefined where
+ * `per` is finer than the period held.
+ */
+export function sizer(
+  per: Per,
+  level: number,
+): ((key: number) => number) | undefined {
+  const [madeFrom, step] = SIZES[per];
+  const made = HELD.indexOf(madeFrom);
+  if (made < level) return undefined;
+  return (key) => {
+    for (let i = level; i < made; i++) key = COARSER[i]!(key);
+    return step(key);
+  };
+}
 
 /** sundayOf is the days from 1970-01-01 to the Sunday that labels `week`. */
 export function sundayOf(week: number): number {
@@ -305,13 +323,8 @@ export class TimeFold {
    * snapshot shows it.
    */
   batch(per: Per, offset: number): TimeLevel | undefined {
-    const [madeFrom, step] = SIZES[per];
-    const made = HELD.indexOf(madeFrom);
-    if (made < this.level || this.periods.size === 0) return undefined;
-    const keyOf = (key: number) => {
-      for (let i = this.level; i < made; i++) key = COARSER[i]!(key);
-      return step(key);
-    };
+    const keyOf = sizer(per, this.level);
+    if (keyOf === undefined || this.periods.size === 0) return undefined;
     const held = [...this.periods.keys()];
     const from = keyOf(Math.min(...held));
     const span = keyOf(Math.max(...held)) - from + 1;
@@ -350,7 +363,7 @@ export class TimeFold {
   private count(date: string, cell: string, sign: 1 | -1): void {
     const minute = readDate(date, this.reading);
     if (minute === undefined) {
-      this.undate(date, sign);
+      undate(this.dates, date, this.reading, sign);
       counted(this.undated, cell, sign, this.mark, this.skipped);
       return;
     }
@@ -365,19 +378,6 @@ export class TimeFold {
     if (period.rows === 0) this.periods.delete(key);
     while (this.periods.size > HELD_AT_MOST && this.level < COARSER.length) {
       this.coarsen();
-    }
-  }
-
-  /** undate counts a date cell left out, or takes one back. */
-  private undate(date: string, sign: 1 | -1): void {
-    if (date === '') {
-      this.dates.blank += sign;
-      return;
-    }
-    this.dates.unparsed += sign;
-    const other = OTHER[this.reading];
-    if (other !== undefined && readDate(date, other) !== undefined) {
-      this.dates.other += sign;
     }
   }
 
@@ -398,13 +398,34 @@ export class TimeFold {
   }
 }
 
+/**
+ * undate counts in `dates` a date cell that does not read as `reading`, or
+ * takes one back, and whether it reads in the other order.
+ */
+export function undate(
+  dates: Undated,
+  date: string,
+  reading: Order | UnixUnit,
+  sign: 1 | -1,
+): void {
+  if (date === '') {
+    dates.blank += sign;
+    return;
+  }
+  dates.unparsed += sign;
+  const other = OTHER[reading];
+  if (other !== undefined && readDate(date, other) !== undefined) {
+    dates.other += sign;
+  }
+}
+
 /** isReading says whether `v` is how a fold reads dates. */
-function isReading(v: unknown): v is Order | UnixUnit {
+export function isReading(v: unknown): v is Order | UnixUnit {
   return typeof v === 'string' && Object.hasOwn(OTHER, v);
 }
 
 /** The count a save holds of `rows`, and of `sum` where `mark` sums. */
-function restoredCount(
+export function restoredCount(
   rows: unknown,
   sum: unknown,
   mark: Mark | undefined,
