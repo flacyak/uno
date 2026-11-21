@@ -69,6 +69,7 @@ export type {
   DotsPlot,
   HeatPlot,
   HorizonPlot,
+  SwarmPlot,
   Plot,
   Reading,
   SlopePlot,

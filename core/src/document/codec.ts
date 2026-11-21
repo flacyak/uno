@@ -33,6 +33,7 @@ import type {
   Reading,
   SlopePlot,
   StackPlot,
+  SwarmPlot,
   TimePlot,
   WeekPlot,
 } from './chart.ts';
@@ -1328,6 +1329,16 @@ export function parseHorizon(where: string, value: unknown): HorizonPlot {
   const at = columnOf(where, p, 'at');
   const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
   return { t: 'horizon', at, ...sum, per, ...readingOf(where, p) };
+}
+
+/** parseSwarm reads a beeswarm's plot: its column `of` numbers, and a column `by` of strips it may name. */
+export function parseSwarm(where: string, value: unknown): SwarmPlot {
+  const p = asRecord(value);
+  const of = columnOf(where, p, 'of');
+  if (p['by'] === undefined) return { t: 'swarm', of };
+  const by = columnOf(where, p, 'by');
+  if (by.col === of.col) throw new Error(`${where}: by and of name one column`);
+  return { t: 'swarm', of, by };
 }
 
 /** readingOf reads how a plot's dates read: a column's `order` or a Unix `unit`, one of the two. */

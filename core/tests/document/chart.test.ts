@@ -12,6 +12,7 @@ import type {
   HeatPlot,
   SlopePlot,
   StackPlot,
+  SwarmPlot,
   TimePlot,
   WeekPlot,
 } from '@document';
@@ -21,6 +22,7 @@ import {
   parseSlope,
   parseHeat,
   parseStacked,
+  parseSwarm,
   parseWeek,
 } from '@document/codec';
 import { GROUPS_SENT } from '@tally';
@@ -190,6 +192,23 @@ describe('parseOverTime', () => {
     expect(() => parseOverTime(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
+  });
+});
+
+describe('parseSwarm', () => {
+  test.each<SwarmPlot>([
+    { t: 'swarm', of: REVENUE },
+    { t: 'swarm', of: REVENUE, by: REGION },
+  ])('reads %j', (plot) => {
+    expect(parseSwarm(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'swarm', by: REGION }, 'of: col is not a column number'],
+    [{ t: 'swarm', of: REVENUE, by: REVENUE }, 'by and of name one column'],
+    [{ t: 'swarm', of: REVENUE, by: 1 }, 'by: col is not a column number'],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseSwarm(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });
 

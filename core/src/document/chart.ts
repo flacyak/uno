@@ -91,6 +91,9 @@ export type HorizonPlot = {
   per: Per | 'auto';
 } & Reading;
 
+/** A beeswarm: a dot per sampled row at its number in `of`, in a strip per value of `by` where it names one. */
+export type SwarmPlot = { t: 'swarm'; of: ChartColumn; by?: ChartColumn };
+
 /**
  * A stacked bar chart: rows, or the sum of `sum`, per value of `by`, each
  * bar split by the value of `split` in the same row.

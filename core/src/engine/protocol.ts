@@ -17,7 +17,15 @@ import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
-import type { Groups, Per, Sample, Split, TimeLevel, Times } from '@tally';
+import type {
+  Groups,
+  Per,
+  Sample,
+  Split,
+  Swarm,
+  TimeLevel,
+  Times,
+} from '@tally';
 import type { MeanGroup, Skipped, Slope, Spread, Spreads } from '@tally';
 import type { TimeSplitSnapshot, Week } from '@tally';
 
@@ -358,6 +366,13 @@ export interface BoxTally extends Spreads {
   skipped: Skipped;
 }
 
+/** A beeswarm's tally: each value's sampled rows, the most rows first, Other's, and every row's counts and extent. */
+export interface SwarmTally extends Swarm {
+  t: 'swarm';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
  * arrays, or why the source could not be read. Each names the plot it reads,
@@ -375,6 +390,7 @@ export type Tally =
   | StackTally
   | SpreadTally
   | BoxTally
+  | SwarmTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**
