@@ -5,7 +5,7 @@
 import type { Mark } from '@num';
 import { parse } from '@num';
 
-import { byRank } from './rank.ts';
+import { Ranked } from './rank.ts';
 import { isCount, isMark, isRecord } from './saved.ts';
 import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
@@ -15,9 +15,6 @@ import type { Skipped } from './skipped.ts';
  * where they crowd reads as density. As doubles they come to 64 KB.
  */
 export const SCATTER_POINTS_AT_MOST = 4_096;
-// A fold keeps twice the sample before it lets go of the rows ranked past
-// it, so each sort of the kept rows is spread over a sample's worth of adds.
-const KEPT_AT_MOST = 2 * SCATTER_POINTS_AT_MOST;
 // A page holds the least and most of this many blocks in 8 KB, so a fold of
 // one block stays small, and one of every block holds 32 bytes a block.
 const PAGE_BLOCKS = 256;
@@ -148,9 +145,7 @@ class Page {
 export class SampleFold {
   readonly marks: readonly Mark[];
   /** Each kept row's numbers, or undefined when the row is left out. */
-  private readonly kept = new Map<number, number[] | undefined>();
-  /** The row ranked last when kept was last cut. No row past it is sampled. */
-  private last: number | undefined;
+  private readonly kept: Ranked<number[]>;
   private plotted = 0;
   private readonly skipped: Skipped = { blank: 0, unparsed: 0 };
   /** Each block's least and most, by the first block of their page. */
@@ -158,15 +153,16 @@ export class SampleFold {
   /** The blocks whose least or most an edit took back. */
   private readonly stales = new Set<number>();
 
-  constructor(marks: readonly Mark[]) {
+  constructor(marks: readonly Mark[], atMost = SCATTER_POINTS_AT_MOST) {
     this.marks = [...marks];
+    this.kept = new Ranked(atMost);
   }
 
   /** add folds `row` of `block`, whose cells are `cells`, a column each. */
   add(block: number, row: number, ...cells: string[]): void {
     const values = this.count(cells, 1);
     if (values !== undefined) this.page(block).widen(block, values, values);
-    this.keep(row, values);
+    this.kept.keep(row, values);
   }
 
   /**
@@ -203,7 +199,7 @@ export class SampleFold {
     this.plotted += other.plotted;
     this.skipped.blank += other.skipped.blank;
     this.skipped.unparsed += other.skipped.unparsed;
-    for (const [row, values] of other.kept) this.keep(row, values);
+    for (const [row, values] of other.kept.kept()) this.kept.keep(row, values);
     for (const [first, page] of other.pages) {
       const mine = this.page(first);
       for (let at = first; at < first + PAGE_BLOCKS; at++) {
@@ -226,16 +222,17 @@ export class SampleFold {
 
   /** saved is what the fold holds, with each page's least and most. */
   saved(): SavedSampled {
-    const kept = [...this.kept].map(([row, v]) =>
-      v === undefined ? [row] : [row, ...v],
-    );
+    const kept = this.kept
+      .kept()
+      .map(([row, v]) => (v === undefined ? [row] : [row, ...v]));
     const pages = [...this.pages].flatMap(([first, page]) => {
       const [least, most] = extentOf([page], this.marks.length);
       const [leastOf, mostOf] = [page.least[0]!, page.most[0]!];
       const span = 1 + leastOf.findLastIndex((v, i) => v <= mostOf[i]!);
       return least[0]! <= most[0]! ? [{ first, span, least, most }] : [];
     });
-    const { last, plotted } = this;
+    const { last } = this.kept;
+    const { plotted } = this;
     const skipped = { ...this.skipped };
     const counts = { last, plotted, skipped, stale: this.stale() };
     return { marks: [...this.marks], kept, ...counts, pages };
@@ -246,7 +243,10 @@ export class SampleFold {
    * Each block of a page holds the page's least and most, so the page is
    * coarse: an edit that takes its least or most folds each block again.
    */
-  static restored(saved: unknown): SampleFold | undefined {
+  static restored(
+    saved: unknown,
+    atMost = SCATTER_POINTS_AT_MOST,
+  ): SampleFold | undefined {
     if (!isRecord(saved) || !Array.isArray(saved['marks'])) return undefined;
     const marks: unknown[] = saved['marks'];
     const { kept, last, plotted, stale, pages } = saved;
@@ -255,16 +255,16 @@ export class SampleFold {
       return undefined;
     if (!isCount(plotted) || !(last === undefined || isCount(last)))
       return undefined;
-    if (!Array.isArray(kept) || kept.length > KEPT_AT_MOST) return undefined;
+    if (!Array.isArray(kept) || kept.length > 2 * atMost) return undefined;
     const columns = marks.length;
     if (!kept.every((k) => isKept(k, columns))) return undefined;
     if (!Array.isArray(stale) || !stale.every(isCount)) return undefined;
     if (!Array.isArray(pages) || !pages.every((p) => isPage(p, columns)))
       return undefined;
-    const fold = new SampleFold(marks);
+    const fold = new SampleFold(marks, atMost);
     for (const [row, ...v] of kept)
-      fold.kept.set(row, v.length > 0 ? v : undefined);
-    fold.last = last;
+      fold.kept.keep(row, v.length > 0 ? v : undefined);
+    fold.kept.last = last;
     fold.plotted = plotted;
     Object.assign(fold.skipped, skipped);
     for (const block of stale) fold.stales.add(block);
@@ -278,11 +278,7 @@ export class SampleFold {
 
   /** snapshot reads the fold as plain numbers. */
   snapshot(): Sampled {
-    const rows = [...this.kept.keys()].sort(byRank);
-    const values = rows.slice(0, SCATTER_POINTS_AT_MOST).flatMap((row) => {
-      const v = this.kept.get(row);
-      return v === undefined ? [] : [[...v]];
-    });
+    const values = this.kept.first().map(([, v]) => [...v]);
     const [least, most] = this.extent();
     const none = this.marks.map(() => 0);
     const seen = this.plotted > 0;
@@ -309,18 +305,6 @@ export class SampleFold {
       this.pages.set(first, page);
     }
     return page;
-  }
-
-  /** keep holds a row's numbers, unless the row ranks past the sample. */
-  private keep(row: number, values: number[] | undefined): void {
-    if (this.last !== undefined && byRank(row, this.last) > 0) return;
-    this.kept.set(row, values);
-    if (this.kept.size <= KEPT_AT_MOST) return;
-    const rows = [...this.kept.keys()].sort(byRank);
-    for (const past of rows.slice(SCATTER_POINTS_AT_MOST)) {
-      this.kept.delete(past);
-    }
-    this.last = rows[SCATTER_POINTS_AT_MOST - 1];
   }
 
   /** count counts a row, or takes one back when `sign` is -1. */
