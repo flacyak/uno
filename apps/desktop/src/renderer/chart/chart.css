@@ -1609,18 +1609,21 @@
   height: 100%;
 }
 
-.chart-heat {
+.chart-heat,
+.chart-horizon {
   grid-template-rows: auto;
 }
 
 /* A horizon chart's rows of folded bands, from horizon.ts, a bar tall: over
- * the track beside a value, or the whole row for a chart of one series. */
+ * the track beside a value, or the whole row for a chart of one series, as
+ * its legend over them. */
 .chart-horizon-row {
   grid-column: 2;
   height: var(--bar-thick);
 }
 
-.chart-horizon > .chart-horizon-row {
+.chart-horizon > .chart-horizon-row,
+.chart-horizon .chart-scale:only-child {
   grid-column: 1 / -1;
 }
 
