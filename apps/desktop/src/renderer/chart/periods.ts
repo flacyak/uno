@@ -132,6 +132,21 @@ export const PER_WORDS: Readonly<Record<Per, () => string>> = {
   year: m.chart_per_year,
 };
 
+/** Sunday 3 March 2024, from which a week heatmap's days and hours are written. */
+const A_SUNDAY_MS = Date.UTC(2024, 2, 3);
+
+/** dayName gives the name of the day `day` days from Sunday, written `weekday` long: "Tue", or "Tuesday". */
+export function dayName(day: number, weekday: "short" | "long"): string {
+  const at = new Date(A_SUNDAY_MS + day * DAY_HOURS * HOUR_MS);
+  return format(`weekday ${weekday}`, { weekday }).format(at);
+}
+
+/** hourName gives how the hour `hour` of a day is written alone: "6 AM", or "06". */
+export function hourName(hour: number): string {
+  const at = new Date(A_SUNDAY_MS + hour * HOUR_MS);
+  return format("hour alone", { hour: "numeric" }).format(at).replace(NARROW, NO_BREAK);
+}
+
 /** monthOf gives the month `minute` minutes from 1970 falls in, as the language names it. */
 export function monthOf(minute: number): string {
   return format("month long", { month: "long" }).format(new Date(minute * MINUTE_MS));

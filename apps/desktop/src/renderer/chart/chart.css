@@ -1541,19 +1541,43 @@
 
 /* A week heatmap, from week.ts: a cell per hour of the week, a row per day
  * from Sunday and a column per hour, the dataviz skill's 2 px of the window's
- * ground apart. A cell wears its class's step of the ramp, the accent's
- * above zero and the pole's below, and an hour of no rows, or of a sum of
- * zero, the gridline's rule. */
+ * ground apart, with the days' names in a column before them, each centred on
+ * its row, and the hours' under them, each centred on its column. A cell
+ * wears its class's step of the ramp, the accent's above zero and the pole's
+ * below, and an hour of no rows, or of a sum of zero, the gridline's rule. */
 .chart-week {
   display: grid;
+  grid-template: minmax(0, 1fr) auto / auto minmax(0, 1fr);
+  column-gap: var(--tick-gap);
   height: 100%;
   padding: var(--inset);
+}
+
+.chart-week-days {
+  display: grid;
+  grid-template-rows: repeat(var(--days), minmax(0, 1fr));
+  row-gap: var(--gap);
+  align-items: center;
 }
 
 .chart-week-cells {
   display: grid;
   grid-template: repeat(var(--days), minmax(0, 1fr)) / repeat(var(--hours), minmax(0, 1fr));
-  gap: 2px;
+  gap: var(--gap);
+}
+
+.chart-week-hours {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: repeat(var(--hours), minmax(0, 1fr));
+  column-gap: var(--gap);
+  margin-top: var(--tick-gap);
+}
+
+.chart-week-hours .chart-tick {
+  grid-row: 1;
+  grid-column: var(--hour);
+  justify-self: center;
 }
 
 .chart-week-cell {

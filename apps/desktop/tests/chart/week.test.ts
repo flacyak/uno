@@ -6,12 +6,13 @@
  * @vitest-environment happy-dom
  */
 
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 
 import type { WeekPlot } from "@document";
 import type { WeekTally } from "@engine";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { week } from "@renderer/chart/kinds/week";
-import { weekGrid } from "@renderer/chart/week";
+import { hourStep, weekGrid } from "@renderer/chart/week";
 import { DAY_HOURS, WEEK_HOURS } from "@tally";
 
 const AT = { col: 0, header: "ordered" };
@@ -19,6 +20,12 @@ const REVENUE = { col: 1, header: "revenue" };
 const ROWS: WeekPlot = { t: "week", at: AT, order: "day" };
 const SUMS: WeekPlot = { ...ROWS, sum: REVENUE };
 const ROOM = { width: 420, ch: 7 };
+/** The least width a window takes, and its plot. */
+const LEAST = { width: 240, ch: 7 };
+
+afterEach(async () => {
+  await setLocale(baseLocale, { reload: false });
+});
 const MONDAY_NINE = DAY_HOURS + 9;
 
 /** A tally of `plot` whose hours hold `held`, by hour of the week, and none else. */
@@ -45,7 +52,7 @@ const stepsOf = (drawn: HTMLElement): string[] =>
 
 test("a week heatmap draws a cell per hour of the week, each in the class of its rows", () => {
   const tally = tallyOf(ROWS, { 0: [1, 0], [MONDAY_NINE]: [7, 0], [WEEK_HOURS - 1]: [4, 0] });
-  const steps = stepsOf(weekGrid(tally, false));
+  const steps = stepsOf(weekGrid(tally, false, ROOM));
   expect(steps).toHaveLength(WEEK_HOURS);
   // Steps of 2 up to 8: 1 is in the first, 4 in the second and 7 in the fourth.
   expect(steps[0]).toBe("1");
@@ -56,11 +63,11 @@ test("a week heatmap draws a cell per hour of the week, each in the class of its
 
 test("a week heatmap of sums draws an hour below zero in the pole's class, and one of zero in neither", () => {
   const tally = tallyOf(SUMS, { 0: [2, -300], 1: [1, 0], [MONDAY_NINE]: [5, 400] });
-  const steps = stepsOf(weekGrid(tally, true));
+  const steps = stepsOf(weekGrid(tally, true, ROOM));
   expect([steps[0], steps[1], steps[MONDAY_NINE], steps[2]]).toEqual(["-3", "0", "4", ""]);
-  const fills = [...weekGrid(tally, true).querySelectorAll<HTMLElement>(".chart-week-cell")].map(
-    (c) => c.style.getPropertyValue("--fill"),
-  );
+  const fills = [
+    ...weekGrid(tally, true, ROOM).querySelectorAll<HTMLElement>(".chart-week-cell"),
+  ].map((c) => c.style.getPropertyValue("--fill"));
   expect([fills[0], fills[1], fills[MONDAY_NINE], fills[2]]).toEqual([
     "var(--div-3)",
     "",
@@ -74,4 +81,51 @@ test("a week heatmap's kind draws its tally, and one of no dated row is empty", 
   const drawing = week(SUMS).drawing(tally, ROOM)!;
   expect(stepsOf(drawing.draw(0))[MONDAY_NINE]).toBe("4");
   expect(week(SUMS).drawing(tallyOf(SUMS, {}), ROOM)?.empty).toBe(true);
+});
+
+test("a week heatmap names its days from Sunday beside its rows, and its hours under its columns as many as stand apart", () => {
+  const texts = (drawn: HTMLElement, at: string): string[] =>
+    // Node's ICU writes a space before AM where Chromium's writes a narrow one.
+    [...drawn.querySelectorAll(`${at} .chart-tick`)].map((t) =>
+      (t.textContent ?? "").replace(/\s/gu, " "),
+    );
+  const tally = tallyOf(ROWS, { 0: [1, 0] });
+  const drawn = weekGrid(tally, false, ROOM);
+  expect(texts(drawn, ".chart-week-days")).toEqual([
+    "Sun",
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat",
+  ]);
+  expect(texts(drawn, ".chart-week-hours")).toEqual([
+    "12 AM",
+    "3 AM",
+    "6 AM",
+    "9 AM",
+    "12 PM",
+    "3 PM",
+    "6 PM",
+    "9 PM",
+  ]);
+  expect(texts(weekGrid(tally, false, LEAST), ".chart-week-hours")).toEqual([
+    "12 AM",
+    "6 AM",
+    "12 PM",
+    "6 PM",
+  ]);
+});
+
+test("a week heatmap's hours stand as close as their labels let them, in each language", async () => {
+  expect([hourStep(ROOM, 3), hourStep(LEAST, 3)]).toEqual([3, 6]);
+  await setLocale("es", { reload: false });
+  // "18" is two characters where "12 AM" is five.
+  expect([hourStep(ROOM, 3), hourStep(LEAST, 3)]).toEqual([2, 3]);
+  const drawn = weekGrid(tallyOf(ROWS, { 0: [1, 0] }), false, ROOM);
+  const days = [...drawn.querySelectorAll(".chart-week-days .chart-tick")].map(
+    (t) => t.textContent,
+  );
+  expect(days).toEqual(["dom", "lun", "mar", "mié", "jue", "vie", "sáb"]);
 });

@@ -12,9 +12,9 @@ export const week: ChartKind<WeekPlot> = (plot) => ({
   numbered: plot.sum === undefined ? [] : [plot.sum],
   dated: { at: plot.at, reading: "order" in plot ? plot.order : plot.unit },
   valued: [plot.at],
-  drawing: (tally) => {
+  drawing: (tally, room) => {
     if (tally.t !== "week") return undefined;
     if (tally.hours.every(({ rows }) => rows === 0)) return { ...undrawn, empty: true };
-    return { ...undrawn, draw: () => weekGrid(tally, plot.sum !== undefined) };
+    return { ...undrawn, draw: () => weekGrid(tally, plot.sum !== undefined, room) };
   },
 });

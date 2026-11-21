@@ -2,7 +2,9 @@
  * @fileoverview Checks of week heatmaps in real layout: a cell per hour of the
  * week in each window, Monday 13:00's twenty orders in the accent's darkest
  * step, a Sunday night of none in the rule, Sunday evenings' returns in the
- * pole's third step, every cell inside its window and 2 px from the next.
+ * pole's third step, every cell inside its window and 2 px from the next;
+ * and the days named beside their rows from Sunday, the hours under their
+ * columns, apart.
  *
  * They open the workspace smoke.js wrote of four weeks of orders.
  */
@@ -51,6 +53,26 @@ export const CHART_WEEK: Check[] = [
         if (cells.some((c, i) => rect(i).left < win.left || rect(i).right > win.right || rect(i).bottom > win.bottom)) return "a cell stands past its window";
         if (Math.abs(rect(1).left - rect(0).right - ${GAP}) > ${PX_SLACK}) return "the cells of an hour stand " + (rect(1).left - rect(0).right) + " px apart";
         if (Math.abs(rect(24).top - rect(0).bottom - ${GAP}) > ${PX_SLACK}) return "the cells of a day stand " + (rect(24).top - rect(0).bottom) + " px apart";
+      }
+      return "";
+    `,
+  },
+  {
+    name: "a week heatmap names its days from Sunday each centred on its row, and its hours under their columns, none over another or past the window",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      const middle = (r) => r.top + r.height / 2;
+      for (const win of document.querySelectorAll(".chart")) {
+        const days = [...win.querySelectorAll(".chart-week-days .chart-tick")];
+        const cells = [...win.querySelectorAll(".chart-week-cell")];
+        if (days.map((d) => d.textContent).join() !== "Sun,Mon,Tue,Wed,Thu,Fri,Sat") return "the days read " + days.map((d) => d.textContent).join();
+        if (days.some((d, i) => Math.abs(middle(rect(d)) - middle(rect(cells[i * 24]))) > ${PX_SLACK} + 0.5)) return "a day's name stands off its row";
+        const hours = [...win.querySelectorAll(".chart-week-hours .chart-tick")].map(rect);
+        if (hours.length < 4) return "the window names " + hours.length + " hours";
+        if (hours.some((h, i) => i > 0 && h.left < hours[i - 1].right)) return "two hours' labels overlap";
+        const box = rect(win);
+        if (hours.some((h) => h.left < box.left || h.right > box.right || h.bottom > box.bottom)) return "an hour's label stands past its window";
+        if (hours.some((h) => h.top < rect(cells.at(-1)).bottom)) return "an hour's label stands over the cells";
       }
       return "";
     `,
