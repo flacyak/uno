@@ -14,7 +14,8 @@ import type { Block, Folder } from './folder.ts';
  * splitFolder folds rows by a plot's `by` and its series, a stack's `split`
  * or a slope's `between`, summing a stack's `sum` or a slope's `of` if it
  * names one, or returns the header of a column the view has not. A slope
- * folds the rows of its two states alone, which it draws from first.
+ * folds the rows of its two states alone, which it draws from first, and
+ * every state's behind them.
  */
 export function splitFolder(
   plot: StackPlot | SlopePlot,
@@ -94,6 +95,10 @@ function splitted(
       return back && splitted(counted, marks, back);
     },
     saved: () => fold.saved(),
+    behind:
+      only === undefined
+        ? undefined
+        : splitted({ ...counted, only: undefined }, marks),
     tally: (plot, coverage) => {
       const moved = plot.t === 'stack' ? plot.order : [];
       if (plot.t !== 'slope')

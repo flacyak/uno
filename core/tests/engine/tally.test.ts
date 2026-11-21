@@ -806,7 +806,7 @@ test('an edit moves dots of a mean by its one row, and a save keeps the fold, wh
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });
 
-test("a slope folds its two states' rows alone and reads as the pure split fold's slope, a mean of them reading no block, and another From or To folding again", () => {
+test("a slope draws first from a fold of its two states alone, then fills a fold of every state behind every chart's complete tally, after which another From or To, or a mean, reads no block", () => {
   const tallies = folded([CHANNEL_SLOPE]);
   const { id } = CHANNEL_SLOPE;
   expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(WEB_TO_DIRECT)]]);
@@ -814,15 +814,80 @@ test("a slope folds its two states' rows alone and reads as the pure split fold'
   expect(tallies.saved()[id]?.key).toBe(
     `pair ${REGION} ${CHANNEL} ${REVENUE} ${states}`,
   );
-  const mean: SlopePlot = { ...WEB_TO_DIRECT, measure: 'mean' };
-  tallies.attach({ ...CHANNEL_SLOPE, plot: mean }, HEADERS);
+  // A chart that folds goes first, and the fold behind waits for it.
+  tallies.attach(REGION_ROWS, HEADERS);
+  expect(tallies.from()).toBe(0);
+  fed(tallies);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [REGION_ROWS.id, pure(REGION_ROWS.plot)],
+  ]);
+  // The fold behind reads every block again from the first, and tells nothing new.
+  expect(tallies.from()).toBe(0);
+  fed(tallies);
+  expect(tallies.read(ROWS, true)).toStrictEqual([]);
+  expect(tallies.from()).toBeUndefined();
+  expect(tallies.saved()[id]?.key).toBe(
+    `split ${REGION} ${CHANNEL} ${REVENUE}`,
+  );
+  const plot: SlopePlot = {
+    ...WEB_TO_DIRECT,
+    from: 'partner',
+    measure: 'mean',
+  };
+  tallies.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
   expect(tallies.from()).toBe(ROWS);
-  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(mean)]]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(plot)]]);
+});
+
+test('a From or To changed before the fold behind is whole folds its two new states first, and the fold behind goes on from where it stood', () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  const half = TINY.blockRows * Math.floor(ROWS / TINY.blockRows / 2);
+  fed(tallies, 0, half);
   const plot: SlopePlot = { ...WEB_TO_DIRECT, from: 'partner' };
   tallies.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
   expect(tallies.from()).toBe(0);
   fed(tallies);
-  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(plot)]]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_SLOPE.id, pure(plot)],
+  ]);
+  expect(tallies.from()).toBe(half);
+  fed(tallies, half);
+  tallies.read(ROWS, true);
+  tallies.attach({ ...CHANNEL_SLOPE, plot: { ...plot, to: 'mail' } }, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+});
+
+test('a source that cannot be read stops the fold behind a chart, so no pass reads it again and again', () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  expect(tallies.from()).toBe(0);
+  expect(tallies.unread({ t: 'text', text: 'gone' })).toStrictEqual([]);
+  expect(tallies.from()).toBeUndefined();
+});
+
+test("an edit while the fold behind fills moves it too, and a save of it once full reads back in the chart's place with no pass", async () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  const half = TINY.blockRows * Math.floor(ROWS / TINY.blockRows / 2);
+  fed(tallies, 0, half);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, CHANNEL, 'partner');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  tallies.read(ROWS, true);
+  fed(tallies, half);
+  tallies.read(ROWS, true);
+  const plot: SlopePlot = { ...WEB_TO_DIRECT, from: 'partner' };
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_SLOPE.id, pure(plot, sheet)],
+  ]);
 });
 
 test('an edit to a slope moves its fold by the row where it is or was in either state, and by none in another', async () => {

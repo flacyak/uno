@@ -50,6 +50,13 @@ export interface Folder {
   tally(plot: Plot, coverage: Coverage): Tally;
   /** batch is a later batch of its periods at `per` from `offset`, if any. */
   batch?(per: Per, offset: number): TimeLevel | undefined;
+  /**
+   * behind is a fuller fold of the same columns, which the tallies fill once
+   * every chart has heard its complete tally, and which takes this fold's
+   * place once it has folded every row, so a later plot it serves reads no
+   * block.
+   */
+  readonly behind?: Folder;
   /** mend folds again, alone, each block an edit left it inexact over. */
   mend(read: (block: number) => Promise<Block>): Promise<void>;
 }
