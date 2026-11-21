@@ -350,7 +350,7 @@ export class TimeFold {
   private count(date: string, cell: string, sign: 1 | -1): void {
     const minute = readDate(date, this.reading);
     if (minute === undefined) {
-      this.undate(date, sign);
+      undate(this.dates, date, this.reading, sign);
       counted(this.undated, cell, sign, this.mark, this.skipped);
       return;
     }
@@ -368,19 +368,6 @@ export class TimeFold {
     }
   }
 
-  /** undate counts a date cell left out, or takes one back. */
-  private undate(date: string, sign: 1 | -1): void {
-    if (date === '') {
-      this.dates.blank += sign;
-      return;
-    }
-    this.dates.unparsed += sign;
-    const other = OTHER[this.reading];
-    if (other !== undefined && readDate(date, other) !== undefined) {
-      this.dates.other += sign;
-    }
-  }
-
   /** coarsen merges every period into the next coarser one that holds it. */
   private coarsen(): void {
     const finer = [...this.periods];
@@ -395,6 +382,27 @@ export class TimeFold {
       into.rows += count.rows;
       into.sum.merge(count.sum);
     }
+  }
+}
+
+/**
+ * undate counts in `dates` a date cell that does not read as `reading`, or
+ * takes one back, and whether it reads in the other order.
+ */
+export function undate(
+  dates: Undated,
+  date: string,
+  reading: Order | UnixUnit,
+  sign: 1 | -1,
+): void {
+  if (date === '') {
+    dates.blank += sign;
+    return;
+  }
+  dates.unparsed += sign;
+  const other = OTHER[reading];
+  if (other !== undefined && readDate(date, other) !== undefined) {
+    dates.other += sign;
   }
 }
 
