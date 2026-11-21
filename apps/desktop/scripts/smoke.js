@@ -707,6 +707,33 @@ await writeFile(
   }),
 );
 
+// A workspace of two horizon charts of the same year of four regions' orders:
+// rows per region per month in a new window's size at the sheet's foot, and
+// the sum of revenue per month alone in a window of the least width at its top.
+const horizons = join(scratch, "sent", "horizons.uno");
+const horizonPlot = { ...heatedPlot, t: "horizon" };
+const { by: _by, ...horizonAlone } = horizonPlot;
+await writeFile(
+  horizons,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [heatedSource],
+    active: heatedSource.id,
+    log: [],
+    charts: [
+      { ...heatedChart, id: "c1", plot: horizonPlot, place: { ...chartSize, x: 0, y: 1 } },
+      {
+        ...heatedChart,
+        id: "c2",
+        plot: { ...horizonAlone, sum: { col: 2, header: "revenue" } },
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: horizons,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -1071,6 +1098,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_WEEKLY: weekly,
       UNO_SMOKE_DAILY: daily,
       UNO_SMOKE_HEATED: heated,
+      UNO_SMOKE_HORIZONS: horizons,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,
