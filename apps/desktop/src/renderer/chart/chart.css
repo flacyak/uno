@@ -1415,6 +1415,22 @@
     forced-color-adjust: none;
   }
 
+  /* A slope's lines and its dots, ringed in the page's ground, and parallel
+   * coordinates' faint lines and their axes. */
+  .chart-slope-line,
+  .chart-slope-own,
+  .chart-parallel-axis,
+  .chart-parallel-line {
+    stroke: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .chart-slope-dot {
+    fill: CanvasText;
+    stroke: Canvas;
+    forced-color-adjust: none;
+  }
+
   .chart-segment,
   .chart-key-list .chart-legend-key {
     background: CanvasText padding-box;

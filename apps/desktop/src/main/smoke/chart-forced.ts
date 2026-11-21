@@ -31,6 +31,13 @@ const KINDS: readonly Forced[] = [
     marks: ".chart-swarm-dot",
     worn: "backgroundColor",
   },
+  { kind: "slope", workspace: "UNO_SMOKE_SLOPED", marks: ".chart-slope-dot", worn: "fill" },
+  {
+    kind: "parallel",
+    workspace: "UNO_SMOKE_PARALLELED",
+    marks: ".chart-parallel-line",
+    worn: "stroke",
+  },
 ];
 
 export const CHART_FORCED: Check[] = KINDS.map(({ kind, workspace, marks, worn }) => ({
