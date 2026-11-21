@@ -58,4 +58,19 @@ export const CHART_SLOPE: Check[] = [
       return "";
     `,
   },
+  {
+    name: "North's 140 at South's 150 is left out at the To end, as the larger South's stands there, and no two labels on a side overlap",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      for (const win of document.querySelectorAll(".chart")) {
+        const to = [...win.querySelectorAll(".chart-slope-ends.to > *")].map((label) => label.textContent);
+        if (to.join() !== "South 150,East 90") return "the To end says " + to.join();
+        for (const side of win.querySelectorAll(".chart-slope-ends")) {
+          const at = [...side.children].map(rect);
+          if (at.some((one, i) => at.some((other, j) => i !== j && one.top < other.bottom && other.top < one.bottom))) return "two labels overlap";
+        }
+      }
+      return "";
+    `,
+  },
 ];

@@ -158,3 +158,23 @@ export function slopes({ rows, states, more }: Slopes): HTMLElement {
   if (more > 0) box.append(el("div", "chart-bars-line", m.chart_bars_more({ count: num(more) })));
   return box;
 }
+
+/**
+ * fitSlopes leaves out each end's label that would stand over one placed
+ * before it on its side, the largest values' first, as the dataviz skill
+ * leaves colliding end labels to the tooltip and the table rather than nudge
+ * them off their ends. It measures, so the plot stands in the page by then.
+ */
+export function fitSlopes(box: HTMLElement): void {
+  for (const side of box.querySelectorAll(".chart-slope-ends")) {
+    const taken: DOMRect[] = [];
+    // A static list, as labels leave the side on the way.
+    for (const label of side.querySelectorAll(":scope > *")) {
+      const at = label.getBoundingClientRect();
+      // A plot not laid out yet has nothing to measure, and draws again as it takes a size.
+      if (at.height === 0) return;
+      if (taken.some((other) => at.top < other.bottom && other.top < at.bottom)) label.remove();
+      else taken.push(at);
+    }
+  }
+}
