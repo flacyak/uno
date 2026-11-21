@@ -28,6 +28,7 @@ import { CHART_WEEK } from "./chart-week.ts";
 import { CHART_HEAT } from "./chart-heat.ts";
 import { CHART_HORIZON } from "./chart-horizon.ts";
 import { CHART_PARALLEL } from "./chart-parallel.ts";
+import { CHART_CHORD } from "./chart-chord.ts";
 import { CHART_SWARM } from "./chart-swarm.ts";
 import { CHART_HISTOGRAM } from "./chart-histogram.ts";
 import { CHART_STACK } from "./chart-stack.ts";
@@ -117,6 +118,7 @@ const CHECKS: Record<string, Check[]> = {
   "chart-horizon": CHART_HORIZON,
   "chart-swarm": CHART_SWARM,
   "chart-parallel": CHART_PARALLEL,
+  "chart-chord": CHART_CHORD,
   "chart-move": CHART_MOVE,
   "chart-blank": CHART_BLANK,
   "chart-states": CHART_STATES,

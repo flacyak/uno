@@ -1208,6 +1208,13 @@
   visibility: hidden;
 }
 
+/* A chord chart's arc, from chord.ts, wears the `--key` it sets, and a whole
+ * ring is a band between two circles. */
+.chart-chord-arc {
+  fill: var(--key);
+  fill-rule: evenodd;
+}
+
 /* The mark the cursor is on, from tooltip.ts. A bar moves a fifth of the way
  * from the accent to the ink, over a wash of the accent across its row, as a
  * column does over its period's slot, a slice the same from its own colour,

@@ -1,6 +1,7 @@
-/** @fileoverview A chord chart's kind, whose window says it is not drawn yet. */
+/** @fileoverview A chord chart's kind: the flows between its nodes, and Other, as a ring. */
 
 import type { ChordPlot } from "@document";
+import { arcs, chord as drawChord, fitRing } from "../chord.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -10,5 +11,13 @@ export const chord: ChartKind<ChordPlot> = (plot) => ({
   title: () => named(plot.from),
   numbered: plot.sum === undefined ? [] : [plot.sum],
   valued: [plot.from, plot.to],
-  drawing: () => undrawn,
+  drawing: (tally) =>
+    tally.t !== "chord"
+      ? undefined
+      : {
+          ...undrawn,
+          empty: arcs(plot, tally).length === 0,
+          draw: () => drawChord(plot, tally),
+          fit: fitRing,
+        },
 });

@@ -559,6 +559,50 @@ await writeFile(
   }),
 );
 
+// A workspace of two chord charts of an export of flights between nine
+// airports, each way: the six with the most flights out and in and Other, in
+// a new window's size at the sheet's foot on the right, and in a window of the
+// least size at its top on the left. Each pair's flights grow with how busy
+// both airports are, a little more from the busier, so every ribbon differs.
+const chordFile = join(scratch, "sent", "flights.csv");
+const chordBusy = { ORD: 9, ATL: 8, DEN: 7, LAX: 6, JFK: 5, SFO: 4, SEA: 2, BOS: 2, MIA: 1 };
+const chordRows = Object.entries(chordBusy).flatMap(([from, out], i) =>
+  Object.entries(chordBusy).flatMap(([to, into], j) =>
+    i === j ? [] : Array.from({ length: out * into + (i < j ? out : 0) }, () => `${from},${to}`),
+  ),
+);
+await writeFile(chordFile, `${["origin,dest", ...chordRows].join("\n")}\n`);
+const chorded = join(scratch, "sent", "chorded.uno");
+const chordSource = {
+  ...spreadSource,
+  id: "chorded",
+  name: "flights.csv",
+  path: chordFile,
+  rows: chordRows.length,
+  cols: 2,
+};
+const chordChart = {
+  source: chordSource.id,
+  title: "",
+  refresh: 0,
+  plot: { t: "chord", from: { col: 0, header: "origin" }, to: { col: 1, header: "dest" } },
+};
+await writeFile(
+  chorded,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [chordSource],
+    active: chordSource.id,
+    log: [],
+    charts: [
+      { ...chordChart, id: "c1", place: { ...chartSize, x: 1, y: 1 } },
+      { ...chordChart, id: "c2", place: { ...leastSize, x: 0, y: 0 } },
+    ],
+    extra: new Map(),
+    at: chorded,
+  }),
+);
+
 // A workspace of two dot plots of an export of five carriers' delivery days,
 // their means a few tenths apart and Eagle's no number at all: the mean per
 // carrier in a new window's size at the sheet's foot, and the same in a
@@ -1192,6 +1236,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_BOXED: boxed,
       UNO_SMOKE_SWARMED: swarmed,
       UNO_SMOKE_PARALLELED: paralleled,
+      UNO_SMOKE_CHORDED: chorded,
       UNO_SMOKE_DOTTED: dotted,
       UNO_SMOKE_SLOPED: sloped,
       UNO_SMOKE_WEEKLY: weekly,
