@@ -2,7 +2,7 @@
 
 import type { ParallelPlot } from "@document";
 import { m } from "@paraglide/messages";
-import { num } from "@renderer/locale";
+import { joined, num } from "@renderer/locale";
 import type { ChartKind } from "../kind.ts";
 import { LINES_DRAWN, parallelLines, parallelTargets } from "../parallel.ts";
 import { parallelOver } from "../summary.ts";
@@ -10,9 +10,9 @@ import { paralleled, tableOf } from "../table.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
-/** parallel is what a window does with parallel coordinates' plot, titled by its first axis until its title comes. */
+/** parallel is what a window does with parallel coordinates' plot, titled by its axes in order: "units, revenue, and days". */
 export const parallel: ChartKind<ParallelPlot> = (plot) => ({
-  title: () => named(plot.axes[0]!),
+  title: () => joined(plot.axes.map(named)),
   numbered: plot.axes,
   valued: plot.axes,
   drawing: (tally) => {

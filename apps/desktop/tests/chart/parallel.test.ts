@@ -7,10 +7,11 @@
  * @vitest-environment happy-dom
  */
 
-import { expect, test } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 
 import type { ParallelPlot } from "@document";
 import type { ParallelTally } from "@engine";
+import { baseLocale, setLocale } from "@paraglide/runtime";
 import { parallel } from "@renderer/chart/kinds/parallel";
 import { LINES_DRAWN, parallelLines, parallelTargets } from "@renderer/chart/parallel";
 import { TIP_OFFSET, Tooltip } from "@renderer/chart/tooltip";
@@ -143,4 +144,18 @@ test("a step along one line says its number at the axis it is at, and stands the
   press("ArrowRight");
   expect(said()).toBe("25 revenue, row 1");
   expect(tip.box.style.left).toBe(`${200 + TIP_OFFSET}px`);
+});
+
+afterEach(() => {
+  void setLocale(baseLocale, { reload: false });
+});
+
+test("parallel coordinates' title lists their axes in order, as each language joins a list", () => {
+  expect(parallel(PLOT).title()).toBe("units, revenue, and discount");
+  void setLocale("en-GB", { reload: false });
+  expect(parallel(PLOT).title()).toBe("units, revenue and discount");
+  void setLocale("es", { reload: false });
+  expect(parallel(PLOT).title()).toBe("units, revenue y discount");
+  void setLocale("pt-BR", { reload: false });
+  expect(parallel(PLOT).title()).toBe("units, revenue e discount");
 });

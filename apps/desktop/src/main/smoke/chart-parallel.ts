@@ -34,7 +34,7 @@ const press = (key: string): readonly Input[] => [
 
 export const CHART_PARALLEL: Check[] = [
   {
-    name: "parallel coordinates draw an axis per column and a faint accent line per drawn row, its names inside the window, and eight axes apart in a narrow window that scrolls",
+    name: "parallel coordinates draw an axis per column and a faint accent line per drawn row, titled by their axes, its names inside the window, and eight axes apart in a narrow window that scrolls",
     send: ["menu:open-path", PARALLELED],
     shot: "chart-parallel",
     script: `
@@ -51,6 +51,8 @@ export const CHART_PARALLEL: Check[] = [
       if (wide.querySelectorAll(".chart-parallel-line").length !== ${LINES_DRAWN}) return "the wide window draws " + wide.querySelectorAll(".chart-parallel-line").length + " lines";
       const line = getComputedStyle(wide.querySelector(".chart-parallel-line"));
       if (Number(line.strokeOpacity) >= 1) return "a line is not faint";
+      const title = wide.querySelector(".chart-title").textContent;
+      if (title !== "units, revenue, discount, and days") return "the wide window's title reads " + title;
       const box = wide.getBoundingClientRect();
       for (const head of wide.querySelectorAll(".chart-parallel-heads .chart-parallel-label")) {
         const at = head.getBoundingClientRect();
