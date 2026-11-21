@@ -34,6 +34,9 @@ test('each region country holds its first-level regions', () => {
   );
   // 50 states and DC; Puerto Rico is a country of its own in admin 0.
   expect(held).toMatchObject({ US: 51, CA: 13, MX: 32, DE: 16, ZA: 9, AU: 8 });
+  // France's 18 regions, not its 101 departments; Italy's 20, not its 110
+  // provinces.
+  expect(held).toMatchObject({ FR: 18, IT: 20 });
 });
 
 test('every region is coded under its own country, with a name', () => {

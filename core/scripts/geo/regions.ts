@@ -4,6 +4,8 @@
  * code, with their names in English, Spanish, Portuguese and the local one.
  */
 
+import { DISSOLVES } from './dissolves.ts';
+import type { Dissolve } from './dissolves.ts';
 import { distinct, text } from './places.ts';
 import type { Properties } from './source.ts';
 
@@ -49,5 +51,29 @@ export function regions(features: readonly Properties[]) {
       return { code, names: distinct([...names, ...locals.filter(Boolean)]) };
     });
   }
+  for (const [country, dissolve] of Object.entries(DISSOLVES))
+    out[country] = dissolved(features, country, dissolve);
   return out;
+}
+
+/**
+ * dissolved is a country's regions as its dissolve names them, ascending by
+ * code. A feature of the country whose field names no region throws, so a
+ * dissolve never leaves a part of its country out.
+ */
+function dissolved(
+  features: readonly Properties[],
+  country: string,
+  { field, regions }: Dissolve,
+): Region[] {
+  for (const p of features) {
+    const value = text(p, field) ?? '';
+    if (text(p, 'iso_a2') === country && !(value in regions))
+      throw new Error(`${country}: no region for ${field} "${value}"`);
+  }
+  const each = Object.entries(regions).map(([value, [code, ...names]]) => ({
+    code: code!,
+    names: distinct([value, ...names]),
+  }));
+  return each.sort((a, b) => (a.code < b.code ? -1 : 1));
 }

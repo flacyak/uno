@@ -51,3 +51,20 @@ test('a country with no region reading reads no region', () => {
   expect(REGION_COUNTRIES).not.toContain('JP');
   expect(regionOf('JP')('Tokyo')).toBeUndefined();
 });
+
+describe('France and Italy read at their first level', () => {
+  test.each([
+    ['FR', 'Bretagne', 'FR-BRE'],
+    ['FR', 'Brittany', 'FR-BRE'],
+    ['FR', 'IDF', 'FR-IDF'],
+    ['FR', 'Corse', 'FR-20R'],
+    ['FR', 'Réunion', 'FR-974'],
+    ['FR', 'Nord', undefined],
+    ['IT', 'Lombardia', 'IT-25'],
+    ['IT', 'Lombardy', 'IT-25'],
+    ['IT', 'Sicilia', 'IT-82'],
+    ['IT', 'Milano', undefined],
+  ])('in %s, %s reads as %s', (country, v, code) =>
+    expect(regionOf(country)(v)).toBe(code),
+  );
+});
