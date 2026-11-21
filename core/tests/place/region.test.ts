@@ -52,7 +52,7 @@ test('a country with no region reading reads no region', () => {
   expect(regionOf('JP')('Tokyo')).toBeUndefined();
 });
 
-describe('France and Italy read at their first level', () => {
+describe('France, Italy, Spain and the United Kingdom read at their first level', () => {
   test.each([
     ['FR', 'Bretagne', 'FR-BRE'],
     ['FR', 'Brittany', 'FR-BRE'],
@@ -64,6 +64,14 @@ describe('France and Italy read at their first level', () => {
     ['IT', 'Lombardy', 'IT-25'],
     ['IT', 'Sicilia', 'IT-82'],
     ['IT', 'Milano', undefined],
+    ['ES', 'Cataluña', 'ES-CT'],
+    ['ES', 'Catalonia', 'ES-CT'],
+    ['ES', 'Melilla', 'ES-ML'],
+    ['ES', 'Barcelona', undefined],
+    ['GB', 'Scotland', 'GB-SCT'],
+    ['GB', 'Northern Ireland', 'GB-NIR'],
+    ['GB', 'ENG', 'GB-ENG'],
+    ['GB', 'Derry', undefined],
   ])('in %s, %s reads as %s', (country, v, code) =>
     expect(regionOf(country)(v)).toBe(code),
   );
