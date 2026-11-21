@@ -58,7 +58,7 @@ export const CHART_WEEK: Check[] = [
     `,
   },
   {
-    name: "a week heatmap names its days from Sunday each centred on its row, and its hours under their columns, none over another or past the window",
+    name: "a week heatmap names its days from Sunday each centred on its row, its hours under their columns, and its legend's breaks over them, none over another or past the cells",
     script: `
       const rect = (at) => at.getBoundingClientRect();
       const middle = (r) => r.top + r.height / 2;
@@ -73,6 +73,11 @@ export const CHART_WEEK: Check[] = [
         const box = rect(win);
         if (hours.some((h) => h.left < box.left || h.right > box.right || h.bottom > box.bottom)) return "an hour's label stands past its window";
         if (hours.some((h) => h.top < rect(cells.at(-1)).bottom)) return "an hour's label stands over the cells";
+        const breaks = [...win.querySelectorAll(".chart-scale .chart-tick")].map(rect);
+        const keys = [...win.querySelectorAll(".chart-swatch")].map(rect);
+        if (breaks.length < 2 || breaks.some((b, i) => i > 0 && b.left < breaks[i - 1].right)) return "the legend's breaks overlap";
+        if ([...breaks, ...keys].some((b) => b.left < rect(cells[0]).left || b.right > rect(cells.at(-1)).right)) return "the legend stands past the cells";
+        if (keys.some((k) => k.bottom > rect(cells[0]).top)) return "the legend stands over the cells";
       }
       return "";
     `,

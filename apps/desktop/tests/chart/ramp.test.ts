@@ -1,12 +1,15 @@
 /**
  * @fileoverview The classes a heatmap wears an amount in: four equal steps
  * from zero up and four down, a round width, whole for counts, the largest
- * value always in the last, each value in the class whose break it reaches.
+ * value always in the last, each value in the class whose break it reaches;
+ * and their legend.
+ *
+ * @vitest-environment happy-dom
  */
 
 import { expect, test } from "vite-plus/test";
 
-import { CLASSES, classOf, classesOver } from "@renderer/chart/ramp";
+import { CLASSES, SWATCH_WIDE, classOf, classesOver, scaleOf } from "@renderer/chart/ramp";
 import { RAMP_SHARES } from "@renderer/theme";
 
 test("as many classes stand either side of zero as the ramp has steps", () => {
@@ -57,4 +60,50 @@ test("zero is in no class either way, and a scale of zeros is one wide", () => {
   expect(classes.width).toBe(1);
   expect(classOf(0, classes)).toBe(0);
   expect(classesOver([], true).width).toBe(1);
+});
+
+/** A tick's character, in px, and a legend's room in the least window. */
+const CH = 7;
+const LEGEND_NARROW = 160;
+
+/** What a legend draws: each swatch's fill, and each break written with where it stands. */
+function legendOf(drawn: HTMLElement): { fills: string[]; breaks: string[] } {
+  const fills = [...drawn.querySelectorAll<HTMLElement>(".chart-swatch")].map((s) =>
+    s.style.getPropertyValue("--fill"),
+  );
+  const breaks = [...drawn.querySelectorAll<HTMLElement>(".chart-tick")].map(
+    (t) => `${t.textContent} at ${t.style.getPropertyValue("--at")}`,
+  );
+  return { fills, breaks };
+}
+
+test("a legend keys each class above zero, least first, with every break it has room for", () => {
+  const classes = classesOver([7], true);
+  const roomy = legendOf(scaleOf(classes, false, 1_000, CH));
+  expect(roomy.fills).toEqual(["var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)"]);
+  expect(roomy.breaks).toEqual(["0 at 0", "2 at 1", "4 at 2", "6 at 3", "8 at 4"]);
+  const wide = legendOf(scaleOf(classesOver([2_000], true), false, 1_000, CH));
+  // 1,000 centred on its edge would touch 2,000 at the legend's end.
+  expect(wide.breaks).toEqual(["0 at 0", "2,000 at 4"]);
+});
+
+test("a signed legend keys the pole's classes below zero, then the accent's, and in little room the ends and zero", () => {
+  const classes = classesOver([-1_200, 2_000], false);
+  const drawn = scaleOf(classes, true, LEGEND_NARROW, CH);
+  const { fills, breaks } = legendOf(drawn);
+  expect(fills).toEqual([
+    "var(--div-4)",
+    "var(--div-3)",
+    "var(--div-2)",
+    "var(--div-1)",
+    "var(--seq-1)",
+    "var(--seq-2)",
+    "var(--seq-3)",
+    "var(--seq-4)",
+  ]);
+  expect(breaks).toEqual(["-2,000 at 0", "0 at 4", "2,000 at 8"]);
+  // Eight swatches share 160 px, and in plenty of room stand SWATCH_WIDE.
+  expect(drawn.style.getPropertyValue("--swatch")).toBe("20px");
+  const roomy = scaleOf(classes, true, 1_000, CH);
+  expect(roomy.style.getPropertyValue("--swatch")).toBe(`${SWATCH_WIDE}px`);
 });

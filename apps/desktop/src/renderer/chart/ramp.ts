@@ -5,6 +5,8 @@
  * numbers (2026-11-17, answers 6 and 7).
  */
 
+import { num } from "@renderer/locale";
+import { el } from "@renderer/shell/util";
 import { RAMP_SHARES } from "@renderer/theme";
 import { decimal } from "./axes.ts";
 
@@ -73,4 +75,59 @@ export function classOf(value: number, classes: Classes): number {
   if (value === 0) return 0;
   const reached = Math.ceil(Math.abs(value) / classes.width - ON_BREAK);
   return Math.sign(value) * Math.min(Math.max(reached, 1), CLASSES);
+}
+
+/** The ramp a class wears either side of zero: the accent's above, the pole's below. */
+const ARMS = { up: "seq", down: "div" } as const;
+
+/** fillOf gives the colour a mark of class `step` wears, none at zero, which wears the rule. */
+export function fillOf(step: number): string | undefined {
+  if (step === 0) return undefined;
+  return `var(--${step > 0 ? ARMS.up : ARMS.down}-${Math.abs(step)})`;
+}
+
+/** How wide a swatch of a scale's legend stands at most, in px. */
+export const SWATCH_WIDE = 24;
+
+/** The strides a legend writes its breaks at, finest first: each, every other, the ends and zero. */
+const STRIDES = [1, 2, CLASSES] as const;
+
+/** The least room between two breaks' labels, in a tick's characters. */
+const BREAKS_APART = 1;
+
+/**
+ * scaleOf gives the legend of `classes` in `wide` px: a swatch per class from
+ * the furthest below zero where `signed` to the furthest above, SWATCH_WIDE
+ * or fewer px each, and the breaks between them written under them, at the
+ * finest stride whose labels stand apart in characters `ch` px wide.
+ */
+export function scaleOf(classes: Classes, signed: boolean, wide: number, ch: number): HTMLElement {
+  const steps = Array.from({ length: CLASSES }, (_, i) => i + 1);
+  const shown = signed ? [...steps.map((k) => -k).reverse(), ...steps] : steps;
+  const up = [0, ...classes.breaks];
+  const values = signed ? [...classes.breaks.map((b) => -b).reverse(), ...up] : up;
+  const labels = values.map((v) => num(v));
+  const swatch = Math.min(SWATCH_WIDE, Math.floor(wide / shown.length));
+  const last = labels.length - 1;
+  // The first break stands from its edge on, the last up to its edge, the rest centred on theirs,
+  // so a stride fits when an end's label and half the next fit between their edges.
+  const toward = (i: number): number => (i === 0 ? 0 : i === last ? 1 : 1 / 2);
+  const widest = Math.max(...labels.map((label) => label.length));
+  const needs = (widest * (1 + 1 / 2) + BREAKS_APART) * ch;
+  const stride = STRIDES.find((s) => s * swatch >= needs) ?? STRIDES.at(-1)!;
+  const box = el("div", "chart-scale");
+  box.style.setProperty("--swatch", `${swatch}px`);
+  for (const k of shown) {
+    const key = el("span", "chart-swatch");
+    key.style.setProperty("--fill", fillOf(k)!);
+    box.append(key);
+  }
+  for (const [i, label] of labels.entries()) {
+    if (i % stride !== 0) continue;
+    const tick = el("span", "chart-tick", label);
+    tick.style.setProperty("--at", `${i}`);
+    tick.style.setProperty("--toward", `${toward(i)}`);
+    box.append(tick);
+  }
+  return box;
 }

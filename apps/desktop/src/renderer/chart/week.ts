@@ -13,7 +13,7 @@ import { el } from "@renderer/shell/util";
 import { DAY_HOURS, WEEK_DAYS } from "@tally";
 import type { PlotRoom } from "./kind.ts";
 import { dayName, hourName } from "./periods.ts";
-import { classOf, classesOver } from "./ramp.ts";
+import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
 import { BARS_INSET } from "./rows.ts";
 import { TICK_GAP } from "./scatter.ts";
 
@@ -26,18 +26,14 @@ const LABELS_APART = 1;
 /** The gap between a week heatmap's cells, in px: the dataviz skill's between fills. */
 const CELL_GAP = 2;
 
-/** The ramp a class wears either side of zero: the accent's above, the pole's below. */
-const ARMS = { up: "seq", down: "div" } as const;
-
-/** fillOf gives the colour a cell of class `step` wears, none at zero, which wears the rule. */
-function fillOf(step: number): string | undefined {
-  if (step === 0) return undefined;
-  return `var(--${step > 0 ? ARMS.up : ARMS.down}-${Math.abs(step)})`;
-}
-
 /** amountsOf gives each hour of `tally`'s rows, or its sum where `summed`, Sunday 00:00 first. */
 export function amountsOf(tally: WeekTally, summed: boolean): number[] {
   return tally.hours.map((hour) => (summed ? hour.sum : hour.rows));
+}
+
+/** cellsWide gives how wide a week heatmap's cells stand in `room`, after a column of day names `daysCh` characters wide. */
+function cellsWide(room: PlotRoom, daysCh: number): number {
+  return room.width - 2 * BARS_INSET - daysCh * room.ch - TICK_GAP;
 }
 
 /**
@@ -46,7 +42,7 @@ export function amountsOf(tally: WeekTally, summed: boolean): number[] {
  * characters wide, stand LABELS_APART apart, or a label every 12 hours.
  */
 export function hourStep(room: PlotRoom, daysCh: number): number {
-  const cells = room.width - 2 * BARS_INSET - daysCh * room.ch - TICK_GAP;
+  const cells = cellsWide(room, daysCh);
   const pitch = (cells + CELL_GAP) / DAY_HOURS;
   const widest = Math.max(...Array.from({ length: DAY_HOURS }, (_, h) => hourName(h).length));
   const wanted = (widest + LABELS_APART) * room.ch;
@@ -75,7 +71,8 @@ export function weekGrid(tally: WeekTally, summed: boolean, room: PlotRoom): HTM
   box.style.setProperty("--days", `${WEEK_DAYS}`);
   box.style.setProperty("--hours", `${DAY_HOURS}`);
   const names = Array.from({ length: WEEK_DAYS }, (_, d) => dayName(d, "short"));
-  const [days, hours] = labelled(hourStep(room, Math.max(...names.map((n) => n.length))));
+  const daysCh = Math.max(...names.map((n) => n.length));
+  const [days, hours] = labelled(hourStep(room, daysCh));
   const cells = el("div", "chart-week-cells");
   const amounts = amountsOf(tally, summed);
   const classes = classesOver(amounts, !summed);
@@ -87,6 +84,8 @@ export function weekGrid(tally: WeekTally, summed: boolean, room: PlotRoom): HTM
     if (fill !== undefined) cell.style.setProperty("--fill", fill);
     cells.append(cell);
   }
-  box.append(days, cells, hours);
+  const signed = amounts.some((amount) => amount < 0);
+  const scale = scaleOf(classes, signed, cellsWide(room, daysCh), room.ch);
+  box.append(scale, days, cells, hours);
   return box;
 }

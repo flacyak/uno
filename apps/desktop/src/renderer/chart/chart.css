@@ -1547,8 +1547,8 @@
  * below, and an hour of no rows, or of a sum of zero, the gridline's rule. */
 .chart-week {
   display: grid;
-  grid-template: minmax(0, 1fr) auto / auto minmax(0, 1fr);
-  column-gap: var(--tick-gap);
+  grid-template: auto minmax(0, 1fr) auto / auto minmax(0, 1fr);
+  gap: var(--tick-gap);
   height: 100%;
   padding: var(--inset);
 }
@@ -1568,10 +1568,9 @@
 
 .chart-week-hours {
   display: grid;
-  grid-column: 2;
+  grid-area: 3 / 2;
   grid-template-columns: repeat(var(--hours), minmax(0, 1fr));
   column-gap: var(--gap);
-  margin-top: var(--tick-gap);
 }
 
 .chart-week-hours .chart-tick {
@@ -1583,4 +1582,30 @@
 .chart-week-cell {
   border-radius: 2px;
   background: var(--fill, var(--rule));
+}
+
+/* A scale's legend, from ramp.ts, over the cells it keys: a 10 px swatch per
+ * class, least first, and the breaks between them written under them in the
+ * ticks' ink: the first from its edge on, the last up to its edge, so both
+ * stand inside the legend, and each between centred on its edge. */
+.chart-scale {
+  position: relative;
+  display: flex;
+  grid-column: 2;
+  justify-self: start;
+  height: calc(10px + var(--tick-gap) + 1lh);
+  font-size: 11px;
+}
+
+.chart-swatch {
+  width: var(--swatch);
+  height: 10px;
+  background: var(--fill);
+}
+
+.chart-scale .chart-tick {
+  position: absolute;
+  bottom: 0;
+  left: calc(var(--at) * var(--swatch));
+  translate: calc(var(--toward) * -100%) 0;
 }
