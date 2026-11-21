@@ -68,6 +68,19 @@ export interface Group {
   sum: number;
 }
 
+/** How many values regroup names of those it could give no key, the largest. */
+export const UNKEYED_NAMED = 5;
+
+/** A fold's groups merged by a key, as `regroup` reads them. */
+export interface Regrouped {
+  /** Every key with rows, ascending, with its rows and their sum. */
+  keys: Array<{ key: string; rows: number; sum: number }>;
+  /** The values given no key: how many, their rows and sum, the largest named. */
+  unkeyed: { values: number; rows: number; sum: number; top: Group[] };
+  rest: { rows: number; sum: number };
+  skipped: Skipped;
+}
+
 /** One value's group of a mean fold: its cells that read as numbers too. */
 export interface MeanGroup extends Group {
   numbers: number;
@@ -261,6 +274,44 @@ export class GroupsFold {
       rows,
       sum: sum.value(),
     }));
+  }
+
+  /**
+   * regroup reads the fold with its values merged by the key `keyOf` gives
+   * each, rows added and sums merged exactly, as a map of places reads the
+   * groups bars keep. A value `keyOf` gives no key stays its own, unkeyed.
+   */
+  regroup(keyOf: (value: string) => string | undefined): Regrouped {
+    const keyed = new Map<string, Count>();
+    const unkeyed: Group[] = [];
+    const loose = new Count();
+    for (const [value, count] of this.groups) {
+      const key = keyOf(value);
+      if (key === undefined) {
+        unkeyed.push({ value, rows: count.rows, sum: count.sum.value() });
+        loose.rows += count.rows;
+        loose.sum.merge(count.sum);
+        continue;
+      }
+      const into = keyed.get(key) ?? new Count();
+      keyed.set(key, into);
+      into.rows += count.rows;
+      into.sum.merge(count.sum);
+    }
+    const keys = [...keyed].sort(([a], [b]) => (a < b ? -1 : 1));
+    unkeyed.sort((a, b) => b.rows - a.rows || (a.value < b.value ? -1 : 1));
+    const { rest, skipped } = this.snapshot();
+    return {
+      keys: keys.map(([key, c]) => ({ key, rows: c.rows, sum: c.sum.value() })),
+      unkeyed: {
+        values: unkeyed.length,
+        rows: loose.rows,
+        sum: loose.sum.value(),
+        top: unkeyed.slice(0, UNKEYED_NAMED),
+      },
+      rest,
+      skipped,
+    };
   }
 
   /** means reads a fold that means as snapshot does, with each group's numbers. */
