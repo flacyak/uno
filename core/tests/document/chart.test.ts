@@ -69,6 +69,7 @@ describe('parsePlot', () => {
     { t: 'week', at: DATE, sum: REVENUE, unit: 'ms' },
     { t: 'heat', by: REGION, at: DATE, per: 'day', order: 'month' },
     { t: 'horizon', at: DATE, per: 'week', order: 'day' },
+    { t: 'swarm', of: REVENUE, by: REGION },
     {
       t: 'horizon',
       at: DATE,

@@ -7,6 +7,7 @@ import { dotsFolder, groupsFolder } from './groups.ts';
 import { sampleFolder } from './sample.ts';
 import { splitFolder } from './split.ts';
 import { spreadFolder } from './spread.ts';
+import { swarmFolder } from './swarm.ts';
 import { boxFolder } from './spreads.ts';
 import { timeFolder } from './time.ts';
 import { horizonFolder, timeSplitFolder } from './timesplit.ts';
@@ -29,4 +30,5 @@ export const FOLDERS: Folders = {
   week: weekFolder,
   heat: timeSplitFolder,
   horizon: horizonFolder,
+  swarm: swarmFolder,
 };
