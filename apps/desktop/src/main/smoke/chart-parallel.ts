@@ -3,7 +3,8 @@
  * column, a faint accent line per drawn row, each column's name over its axis
  * inside the window, and eight axes at least 40 px apart in a narrow window,
  * which scrolls sideways; a click puts the cursor on a line, and End and
- * Home step it along to its ends, scrolled into sight.
+ * Home step it along to its ends, scrolled into sight; the table lists the
+ * rows drawn with a line of those it did not draw.
  *
  * They open the workspace smoke.js wrote of a thousand orders' eight numbers.
  */
@@ -14,6 +15,8 @@ import type { Check, Input } from "./check.ts";
 /** The workspace smoke.js wrote of two parallel coordinates. */
 const PARALLELED = process.env["UNO_SMOKE_PARALLELED"] ?? "";
 
+/** The rows of the file. */
+const ROWS = 1_000;
 /** The axes of the wide window and the narrow one, and the least px between two. */
 const WIDE_AXES = 4;
 const NARROW_AXES = 8;
@@ -92,6 +95,21 @@ export const CHART_PARALLEL: Check[] = [
       const said = () => along.closest(".chart").querySelector(".chart-tip-words").textContent;
       if (!(await until(() => / units, /u.test(said())))) return "the box says " + said();
       return along.scrollLeft < ${PX_SLACK} ? "" : "the scroller stands " + along.scrollLeft + " px along";
+    `,
+  },
+  {
+    name: "parallel coordinates' table lists the rows drawn by their row, their number at every axis, and a line of the rows not drawn",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-parallel-table",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((c) => c.textContent).join(" | "));
+      if (lines[0] !== "row | units | revenue | discount | days") return "the table's head reads " + lines[0];
+      if (lines.length !== ${LINES_DRAWN} + 2) return "the table has " + lines.length + " lines";
+      if (lines.at(-1) !== (${ROWS} - ${LINES_DRAWN}).toLocaleString("en-US") + " rows not sampled") return "the last line reads " + lines.at(-1);
+      const caption = win.querySelector(".chart-caption").textContent;
+      return caption.includes("${LINES_DRAWN} of 1,000 rows, a sample") ? "" : "the caption reads " + caption;
     `,
   },
 ];

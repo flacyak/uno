@@ -5,6 +5,8 @@ import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import type { ChartKind } from "../kind.ts";
 import { LINES_DRAWN, parallelLines, parallelTargets } from "../parallel.ts";
+import { parallelOver } from "../summary.ts";
+import { paralleled, tableOf } from "../table.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -21,6 +23,8 @@ export const parallel: ChartKind<ParallelPlot> = (plot) => ({
       ...undrawn,
       draw: () => parallelLines(plot, tally),
       targets: (box) => parallelTargets(plot, tally, box),
+      table: (called) => tableOf(paralleled(plot, tally), called),
+      told: () => parallelOver(plot, tally),
       notes: () => {
         if (shown >= tally.plotted) return [];
         const rows = m.rows_count({ count: tally.plotted });

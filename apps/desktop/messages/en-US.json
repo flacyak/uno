@@ -598,6 +598,8 @@
   "chart_table_row": "row",
   "chart_table_unsampled": "{rows} not sampled",
   "chart_summary_swarm": "{rows}, {of} from {least} to {most}.",
+  "chart_axis_from_to": "{of} from {least} to {most}",
+  "chart_summary_parallel": "{rows}: {axes}.",
   "chart_pie_other": "Other",
   "chart_pie_past_net": "more than {count} values · later ones go in Other at their net sum",
   "chart_pie_past_left_out": "more than {count} values · later ones are left out",

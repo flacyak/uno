@@ -9,8 +9,17 @@
  * apart from them, so a window can mark them as the file's.
  */
 
-import type { ChartColumn, Plot, StackPlot, SwarmPlot, TimePlot } from "@document";
-import type { Group, Groups, HeatTally, Sample, StackTally, SwarmTally, WeekTally } from "@engine";
+import type { ChartColumn, ParallelPlot, Plot, StackPlot, SwarmPlot, TimePlot } from "@document";
+import type {
+  Group,
+  Groups,
+  HeatTally,
+  ParallelTally,
+  Sample,
+  StackTally,
+  SwarmTally,
+  WeekTally,
+} from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent, places } from "@renderer/locale";
@@ -216,4 +225,17 @@ export function swarmOver(plot: SwarmPlot, tally: SwarmTally): Told {
   const each = tally.strips.map((s) => `${named(s.value)} ${num(s.plotted)}`);
   if (tally.rest !== undefined) each.push(`${m.chart_pie_other()} ${num(tally.rest.plotted)}`);
   return { span, each, more: Math.max(each.length - SUMMARY_VALUES, 0) };
+}
+
+/** parallelOver gives what parallel coordinates' summary says past their rows: how many rows they plot, and each axis's least and most. */
+export function parallelOver(plot: ParallelPlot, tally: ParallelTally): Told {
+  const axes = plot.axes.map(({ header, col }, i) =>
+    m.chart_axis_from_to({
+      of: columnLabel(header, col),
+      least: num(tally.least[i]!),
+      most: num(tally.most[i]!),
+    }),
+  );
+  const rows = m.rows_count({ count: tally.plotted });
+  return { span: m.chart_summary_parallel({ rows, axes: list(axes) }), each: [], more: 0 };
 }
