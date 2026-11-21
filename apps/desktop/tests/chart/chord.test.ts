@@ -343,6 +343,26 @@ test("a chord's arcs say their node's flows out and in, and each ribbon, under e
   expect(targets.under(ribbon[2]!, 0, 0)).toBe(6);
 });
 
+test("Right and Left step a chord's arcs, End to the last, and Down and Up along the ribbons of the arc the cursor is on or under", () => {
+  const box = chord(ROWS, AIRPORTS);
+  const { step, keys } = chordTargets(ROWS, AIRPORTS, box);
+  expect(keys).toStrictEqual(["ArrowDown", "ArrowUp"]);
+  // Arcs 0 to 2, then ORD's two ribbons at 3 and 4, JFK's one at 5, and LAX's two at 6 and 7.
+  const walk = (keys: string[], from?: number) =>
+    keys.reduce<number | undefined>((at, key) => step!(key, at) ?? at, from);
+  expect(walk(["ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight"])).toBe(2);
+  expect(walk(["ArrowLeft"])).toBe(2);
+  expect(walk(["End"], 0)).toBe(2);
+  expect(walk(["ArrowDown"], 0)).toBe(3);
+  expect(walk(["ArrowDown", "ArrowDown", "ArrowDown"], 0)).toBe(4);
+  expect(walk(["ArrowUp"], 4)).toBe(3);
+  expect(walk(["ArrowUp"], 3)).toBe(0);
+  expect(walk(["ArrowDown"], 2)).toBe(6);
+  // From a ribbon, Right steps from the arc it stands under.
+  expect(walk(["ArrowRight"], 5)).toBe(2);
+  expect(step!("Home", 5)).toBeUndefined();
+});
+
 test("a chord not laid out yet places no arc or ribbon, to place them once it is", () => {
   for (const mark of fitted(AIRPORTS, 0).querySelectorAll(
     ".chart-chord-arc, .chart-chord-ribbon",

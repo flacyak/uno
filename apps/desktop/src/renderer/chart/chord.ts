@@ -31,6 +31,9 @@ export const ARC_GAP = 2;
 /** The least arc that keeps its gaps, in px round the rim: a gap's width of its own colour beside them. */
 export const ARC_LEAST = 2 * ARC_GAP;
 
+/** The keys a chord's targets step past the tooltip's: along an arc's ribbons, Down first. */
+const CHORD_KEYS: readonly string[] = ["ArrowDown", "ArrowUp"];
+
 /** How finely a path is written: to a hundredth of a px. */
 const PX_SCALE = 100;
 
@@ -266,8 +269,9 @@ export function fitRing(box: HTMLElement): void {
  * chordTargets gives the marks of `box`, as chord drew `tally` for `plot`:
  * each arc, worth its node's flows out and in, then along each arc in turn
  * the ribbons it stands under, each worth its flow either way, keyed by
- * the colour of the node it runs from. A ribbon is a target under each of
- * its two arcs, so the keys step every arc's ribbons after the arcs.
+ * the colour of the node it runs from. Right and Left step the arcs, End
+ * goes to the last, and Down and Up step along the ribbons of the arc the
+ * cursor is on or under, Up from its first back to the arc.
  */
 export function chordTargets(plot: ChordPlot, tally: ChordTally, box: HTMLElement): Targets {
   const flow = (p: number, q: number) => {
@@ -339,5 +343,29 @@ export function chordTargets(plot: ChordPlot, tally: ChordTally, box: HTMLElemen
     }),
   );
   const all = [...arcTargets, ...ribbonTargets];
-  return { all, under: among(all, ".chart-chord-arc, .chart-chord-ribbon") };
+  // Where each arc's ribbons start among all, and which arc each target is or stands under.
+  const starts = along.map(
+    (_, a) => drawn.length + along.slice(0, a).reduce((n, r) => n + r.length, 0),
+  );
+  const arcOf = (t: number) => (t < drawn.length ? t : starts.findLastIndex((start) => start <= t));
+  const last = drawn.length - 1;
+  const step = (key: string, at: number | undefined): number | undefined => {
+    const a = at === undefined ? undefined : arcOf(at);
+    if (key === "ArrowRight") return a === undefined ? 0 : Math.min(a + 1, last);
+    if (key === "ArrowLeft") return a === undefined ? last : Math.max(a - 1, 0);
+    if (key === "End") return last;
+    if (at === undefined || a === undefined) return CHORD_KEYS.includes(key) ? 0 : undefined;
+    // Which of its arc's ribbons the cursor is on, -1 on the arc itself.
+    const j = at < drawn.length ? -1 : at - starts[a]!;
+    if (key === "ArrowDown")
+      return along[a]!.length === 0 ? a : starts[a]! + Math.min(j + 1, along[a]!.length - 1);
+    if (key === "ArrowUp") return j <= 0 ? a : starts[a]! + j - 1;
+    return undefined;
+  };
+  return {
+    all,
+    under: among(all, ".chart-chord-arc, .chart-chord-ribbon"),
+    step,
+    keys: CHORD_KEYS,
+  };
 }

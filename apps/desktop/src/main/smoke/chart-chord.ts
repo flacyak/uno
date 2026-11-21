@@ -83,4 +83,15 @@ export const CHART_CHORD: Check[] = [
       return /^[\\d,]+ from ORD · [\\d,]+ to ORD$/u.test(said()) ? "" : "the box says " + said();
     `,
   },
+  {
+    name: "Down steps from ORD's arc to its first ribbon, and the box says its flights either way, each on a line",
+    input: { events: press("Down"), through: true },
+    shot: "chart-chord-ribbon",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-chord-ribbon.cursor") !== null))) return "no ribbon wears the cursor";
+      const lines = [...win.querySelectorAll(".chart-tip-line")].map((line) => line.textContent.replace(/\\s+/gu, " ").trim());
+      return lines.length === 2 && /^[\\d,]+ ORD to Other$/u.test(lines[0]) && /^[\\d,]+ Other to ORD$/u.test(lines[1]) ? "" : "the box says " + lines.join(" / ");
+    `,
+  },
 ];
