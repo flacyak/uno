@@ -68,6 +68,7 @@ export type {
   DotMeasure,
   DotsPlot,
   HeatPlot,
+  HorizonPlot,
   Plot,
   Reading,
   SlopePlot,

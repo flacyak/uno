@@ -13,6 +13,7 @@ import { scatter } from "./scatter.ts";
 import { stack } from "./stack.ts";
 import { time } from "./time.ts";
 import { heat } from "./heat.ts";
+import { horizon } from "./horizon.ts";
 import { week } from "./week.ts";
 
 /** Each plot's kind. */
@@ -28,4 +29,5 @@ export const KINDS: Kinds = {
   slope,
   week,
   heat,
+  horizon,
 };

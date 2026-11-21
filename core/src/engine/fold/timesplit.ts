@@ -3,10 +3,11 @@
  * another column, per value of one column and per period of a date column.
  */
 
-import type { HeatPlot } from '@document';
+import type { HeatPlot, HorizonPlot } from '@document';
 import type { Mark } from '@num';
 import { TimeSplitFold } from '@tally';
 import { markOf, placeOf } from './folder.ts';
+import { timeFolder } from './time.ts';
 import type { Block, Folder, MakeFolder } from './folder.ts';
 
 /** timeSplitFolder folds rows by a plot's `by` and the period of its `at`, summing `sum` if it names one. */
@@ -64,9 +65,25 @@ function timeSplit(
     saved: () => fold.saved(),
     // A chart that changed only its size keeps the fold, read at its size now.
     tally: (plot, coverage) => {
-      const per = plot.t === 'heat' ? plot.per : 'auto';
+      const per = 'per' in plot ? plot.per : 'auto';
       return { t: 'heat', plot, coverage, ...fold.snapshot(per) };
     },
     mend: () => Promise.resolve(),
   };
 }
+
+/**
+ * horizonFolder folds a horizon chart as an over-time chart of its columns
+ * where it names no `by`, and as a heatmap of them where it does, so it shares
+ * either's fold and saves no shape of its own.
+ */
+export const horizonFolder: MakeFolder<HorizonPlot> = (
+  plot,
+  headers,
+  marks,
+) => {
+  const { by, ...rest } = plot;
+  if (by === undefined)
+    return timeFolder({ ...rest, t: 'time' }, headers, marks);
+  return timeSplitFolder({ ...rest, by, t: 'heat' }, headers, marks);
+};

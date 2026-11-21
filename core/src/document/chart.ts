@@ -79,6 +79,19 @@ export type HeatPlot = {
 } & Reading;
 
 /**
+ * A horizon chart: rows, or the sum of `sum`, per period of `at`, a row of
+ * folded bands per value of `by` where it names one, at the size `per` or the
+ * finest that fits, its dates read as the chart was made.
+ */
+export type HorizonPlot = {
+  t: 'horizon';
+  at: ChartColumn;
+  by?: ChartColumn;
+  sum?: ChartColumn;
+  per: Per | 'auto';
+} & Reading;
+
+/**
  * A stacked bar chart: rows, or the sum of `sum`, per value of `by`, each
  * bar split by the value of `split` in the same row.
  */
@@ -139,7 +152,8 @@ export type Plot =
   | DotsPlot
   | SlopePlot
   | WeekPlot
-  | HeatPlot;
+  | HeatPlot
+  | HorizonPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

@@ -28,6 +28,7 @@ import type {
   DotMeasure,
   DotsPlot,
   HeatPlot,
+  HorizonPlot,
   Plot,
   Reading,
   SlopePlot,
@@ -1111,6 +1112,7 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   slope: ['t', 'by', 'between', 'from', 'to', 'of', 'measure'],
   week: ['t', 'at', 'sum', 'order', 'unit'],
   heat: ['t', 'by', 'at', 'sum', 'per', 'order', 'unit'],
+  horizon: ['t', 'at', 'by', 'sum', 'per', 'order', 'unit'],
 };
 
 /** What a dot plot's dots may stand at. */
@@ -1193,6 +1195,7 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'slope') return parseSlope(where, p);
   if (t === 'week') return parseWeek(where, p);
   if (t === 'heat') return parseHeat(where, p);
+  if (t === 'horizon') return parseHorizon(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };
@@ -1315,6 +1318,16 @@ export function parseHeat(where: string, value: unknown): HeatPlot {
   const per = required(p, 'per', PER_SIZE, where);
   const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
   return { t: 'heat', by, at, ...sum, per, ...readingOf(where, p) };
+}
+
+/** parseHorizon reads a horizon chart's plot: a heatmap's, its `by` optional. */
+export function parseHorizon(where: string, value: unknown): HorizonPlot {
+  const p = asRecord(value);
+  if (p['by'] !== undefined) return { ...parseHeat(where, p), t: 'horizon' };
+  const per = required(p, 'per', PER_SIZE, where);
+  const at = columnOf(where, p, 'at');
+  const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  return { t: 'horizon', at, ...sum, per, ...readingOf(where, p) };
 }
 
 /** readingOf reads how a plot's dates read: a column's `order` or a Unix `unit`, one of the two. */

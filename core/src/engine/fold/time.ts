@@ -46,7 +46,7 @@ function timed(
       t: 'time',
       plot,
       coverage,
-      ...fold.snapshot(plot.t === 'time' ? plot.per : 'auto'),
+      ...fold.snapshot('per' in plot ? plot.per : 'auto'),
     }),
   });
 }

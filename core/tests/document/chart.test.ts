@@ -66,6 +66,15 @@ describe('parsePlot', () => {
     { t: 'dots', by: REGION, of: UNITS, measure: 'sum', order: ['East'] },
     { t: 'week', at: DATE, sum: REVENUE, unit: 'ms' },
     { t: 'heat', by: REGION, at: DATE, per: 'day', order: 'month' },
+    { t: 'horizon', at: DATE, per: 'week', order: 'day' },
+    {
+      t: 'horizon',
+      at: DATE,
+      by: REGION,
+      sum: REVENUE,
+      per: 'auto',
+      unit: 's',
+    },
   ])('reads %j', (plot) => {
     expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });

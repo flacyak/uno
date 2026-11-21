@@ -300,6 +300,12 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     }
     return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
   }
+  if (plot.t === 'horizon') {
+    const { by, ...rest } = plot;
+    const like: Plot =
+      by === undefined ? { ...rest, t: 'time' } : { ...rest, by, t: 'heat' };
+    return { ...pure(like, sheet), plot } as Tally;
+  }
   if (plot.t === 'heat') {
     const reading = 'order' in plot ? plot.order : plot.unit;
     const { by, at, sum } = plot;
@@ -808,6 +814,28 @@ test('a heatmap over periods folded a block at a time reads as the pure fold of 
   expect(tallies.read(ROWS, true)).toStrictEqual([
     [quarters.id, pure(quarters.plot)],
   ]);
+});
+
+test('an over-time chart or a heatmap changed to a horizon chart keeps its fold, which reads as the pure fold of its columns', () => {
+  const tallies = folded([PER_MONTH, REGION_MONTHS]);
+  tallies.read(ROWS, true);
+  const lone: Chart = {
+    ...PER_MONTH,
+    plot: { ...PER_MONTH.plot, t: 'horizon' } as Plot,
+  };
+  const split: Chart = {
+    ...REGION_MONTHS,
+    plot: { ...REGION_MONTHS.plot, t: 'horizon' } as Plot,
+  };
+  tallies.attach(lone, HEADERS);
+  tallies.attach(split, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  const read = tallies.read(ROWS, true);
+  expect(read).toStrictEqual([
+    [lone.id, pure(lone.plot)],
+    [split.id, pure(split.plot)],
+  ]);
+  expect(read.map(([, t]) => t.t)).toStrictEqual(['time', 'heat']);
 });
 
 test('an edit to a date moves a heatmap over periods by its one row, and a save keeps the fold, which reads back with no pass', async () => {

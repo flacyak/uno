@@ -68,7 +68,7 @@ function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
   if (plot.t === "dots") return [plot.by, plot.of];
   if (plot.t === "slope") return [plot.by, plot.between, plot.of];
   if (plot.t === "time" || plot.t === "week") return [plot.at, plot.sum];
-  if (plot.t === "heat") return [plot.by, plot.at, plot.sum];
+  if (plot.t === "heat" || plot.t === "horizon") return [plot.by, plot.at, plot.sum];
   return [plot.by, plot.sum];
 }
 
