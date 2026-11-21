@@ -222,6 +222,21 @@ test("a slope chart's kind titles what it measures per value and its two states"
   );
 });
 
+test("a chord chart's kind titles what flows from its from column to its to column, and reads its names from both", () => {
+  const [from, to] = [REGION, { col: 2, header: "channel" }];
+  const rows = chord({ t: "chord", from, to });
+  expect([rows.title(), rows.valued, rows.numbered]).toStrictEqual([
+    "rows from region to channel",
+    [from, to],
+    [],
+  ]);
+  const sums = chord({ t: "chord", from, to, sum: REVENUE });
+  expect([sums.title(), sums.numbered]).toStrictEqual([
+    "sum of revenue from region to channel",
+    [REVENUE],
+  ]);
+});
+
 test("a slope chart's kind reads its values, its states and its numbers from its columns", () => {
   const between = { col: 0, header: "year" };
   const plot = { t: "slope", by: REGION, between, from: "2024", to: "2025" } as const;

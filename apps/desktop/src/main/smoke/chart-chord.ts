@@ -52,6 +52,8 @@ export const CHART_CHORD: Check[] = [
         if (arcs.length !== keys.length) return "a window draws " + arcs.length + " arcs";
         const worn = arcs.map((arc) => getComputedStyle(arc).fill);
         if (worn.join() !== keys.join()) return "the arcs wear " + worn.join();
+        const title = win.querySelector(".chart-title").textContent;
+        if (title !== "rows from origin to dest") return "a window's title reads " + title;
         const ribbons = win.querySelectorAll(".chart-chord-ribbon[d]").length;
         if (ribbons !== ${RIBBONS}) return "a window draws " + ribbons + " ribbons";
         const box = win.querySelector(".chart-plot").getBoundingClientRect();

@@ -463,6 +463,8 @@
   "chart_title_slope": "{title}, {from} to {to}",
   "chart_title_stack_rows": "rows per {by} by {split}",
   "chart_title_stack_sum": "sum of {sum} per {by} by {split}",
+  "chart_title_chord_rows": "rows from {from} to {to}",
+  "chart_title_chord_sum": "sum of {sum} from {from} to {to}",
   "chart_title_time_rows": "rows per {per} of {at}",
   "chart_title_time_sum": "sum of {sum} per {per} of {at}",
   "chart_title_week_rows": "rows per hour of the week of {at}",

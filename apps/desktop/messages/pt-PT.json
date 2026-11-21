@@ -479,6 +479,8 @@
   "chart_title_slope": "{title}, de {from} a {to}",
   "chart_title_stack_rows": "linhas por {by} e por {split}",
   "chart_title_stack_sum": "soma de {sum} por {by} e por {split}",
+  "chart_title_chord_rows": "linhas de {from} para {to}",
+  "chart_title_chord_sum": "soma de {sum} de {from} para {to}",
   "chart_title_time_rows": "linhas por {per} de {at}",
   "chart_title_time_sum": "soma de {sum} por {per} de {at}",
   "chart_title_week_rows": "linhas por hora da semana de {at}",

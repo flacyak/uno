@@ -479,6 +479,8 @@
   "chart_title_slope": "{title}, de {from} a {to}",
   "chart_title_stack_rows": "filas por {by} y por {split}",
   "chart_title_stack_sum": "suma de {sum} por {by} y por {split}",
+  "chart_title_chord_rows": "filas de {from} a {to}",
+  "chart_title_chord_sum": "suma de {sum} de {from} a {to}",
   "chart_title_time_rows": "filas por {per} de {at}",
   "chart_title_time_sum": "suma de {sum} por {per} de {at}",
   "chart_title_week_rows": "filas por hora de la semana de {at}",
