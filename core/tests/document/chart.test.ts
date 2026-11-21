@@ -296,4 +296,18 @@ describe('parseSlope', () => {
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parseSlope(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
+
+  test('a slope is one parsePlot reads, and refuses a key it does not know', () => {
+    const plot: SlopePlot = {
+      t: 'slope',
+      by: REGION,
+      between: YEAR,
+      from: 'a',
+      to: 'b',
+    };
+    expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
+    expect(() => parsePlot(PLOT, { ...plot, order: [] })).toThrow(
+      new Error(`${PLOT}: this build does not read "order"`),
+    );
+  });
 });

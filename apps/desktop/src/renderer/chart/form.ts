@@ -344,8 +344,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column; the form makes no slope yet.
+    this.kind.value = plot.t === "stack" || plot.t === "slope" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time") {
       this.per.value = plot.per;
@@ -356,6 +356,8 @@ export class ChartForm {
       const by = plot.t === "box" ? plot.by : undefined;
       const unused = [undefined, undefined, undefined, undefined, undefined];
       this.offer(this.placeAt(plot.of), [...unused, plot.of, by]);
+    } else if (plot.t === "slope") {
+      this.offer(this.placeAt(plot.by), [plot.of, undefined, undefined, undefined, plot.between]);
     } else if (plot.t === "dots") {
       this.measure.value = plot.measure ?? "mean";
       const unused = [undefined, undefined, undefined, undefined, undefined, undefined, undefined];

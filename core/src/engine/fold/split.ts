@@ -1,32 +1,35 @@
 /**
- * @fileoverview The folder of a stacked bar chart: rows per value of one
- * column and per value of another in the same row, or the sum of a third.
+ * @fileoverview The folder of a stacked bar chart or a slope chart: rows per
+ * value of one column and per value of another in the same row, or the sum
+ * of a third.
  */
 
-import type { StackPlot } from '@document';
+import type { SlopePlot, StackPlot } from '@document';
 import type { Mark } from '@num';
 import { SplitFold } from '@tally';
 import { markOf, placeOf } from './folder.ts';
 import type { Block, Folder } from './folder.ts';
 
 /**
- * splitFolder folds rows by a plot's `by` and `split`, summing `sum` if it
- * names one, or returns the header of a column the view has not.
+ * splitFolder folds rows by a plot's `by` and its series, a stack's `split`
+ * or a slope's `between`, summing a stack's `sum` or a slope's `of` if it
+ * names one, or returns the header of a column the view has not. A slope's
+ * two states are two of its series, so another From or To reads no block.
  */
 export function splitFolder(
-  plot: StackPlot,
+  plot: StackPlot | SlopePlot,
   headers: readonly string[],
   marks: readonly Mark[],
 ): Folder | string {
+  const [series, summed] =
+    plot.t === 'stack' ? [plot.split, plot.sum] : [plot.between, plot.of];
   const by = placeOf(plot.by, headers);
   if (by === undefined) return plot.by.header;
-  const split = placeOf(plot.split, headers);
-  if (split === undefined) return plot.split.header;
-  if (plot.sum === undefined) return splitted([by, split], undefined, marks);
-  const sum = placeOf(plot.sum, headers);
-  return sum === undefined
-    ? plot.sum.header
-    : splitted([by, split], sum, marks);
+  const split = placeOf(series, headers);
+  if (split === undefined) return series.header;
+  if (summed === undefined) return splitted([by, split], undefined, marks);
+  const sum = placeOf(summed, headers);
+  return sum === undefined ? summed.header : splitted([by, split], sum, marks);
 }
 
 /** The two columns a split fold counts each row by: its value's, and its series'. */
@@ -69,12 +72,18 @@ function splitted(
       return back && splitted([by, split], sum, marks, back);
     },
     saved: () => fold.saved(),
-    tally: (plot, coverage) => ({
-      t: 'stack',
-      plot,
-      coverage,
-      ...fold.snapshot(plot.t === 'stack' ? plot.order : []),
-    }),
+    tally: (plot, coverage) => {
+      const moved = plot.t === 'stack' ? plot.order : [];
+      if (plot.t !== 'slope')
+        return { t: 'stack', plot, coverage, ...fold.snapshot(moved) };
+      const mean = plot.measure === 'mean';
+      return {
+        t: 'slope',
+        plot,
+        coverage,
+        ...fold.slope([plot.from, plot.to], mean),
+      };
+    },
     mend: () => Promise.resolve(),
   };
 }

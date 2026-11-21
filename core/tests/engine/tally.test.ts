@@ -11,7 +11,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { expect, test } from 'vite-plus/test';
 
 import { newManifest, writeDocument } from '@document';
-import type { Chart, Plot } from '@document';
+import type { Chart, Plot, SlopePlot } from '@document';
 import { TALLY_MS } from '@engine';
 import type {
   Coverage,
@@ -190,6 +190,18 @@ const CHANNEL_MEANS: Chart = {
   plot: { t: 'dots', by: column(CHANNEL), of: column(UNITS), measure: 'mean' },
 };
 
+/** The fixture's revenue per region, from the web channel to the direct one. */
+const WEB_TO_DIRECT: SlopePlot = {
+  t: 'slope',
+  by: column(REGION),
+  between: column(CHANNEL),
+  from: 'web',
+  to: 'direct',
+  of: column(REVENUE),
+  measure: 'sum',
+};
+const CHANNEL_SLOPE: Chart = { ...REGION_ROWS, id: 'c12', plot: WEB_TO_DIRECT };
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -250,6 +262,20 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       fold.add(cell(r, at), sum === undefined ? '' : cell(r, sum));
     }
     return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
+  }
+  if (plot.t === 'slope') {
+    const fold = new SplitFold(plot.of === undefined ? undefined : 'point');
+    for (let r = 0; r < rows; r++) {
+      const sum = plot.of === undefined ? '' : cell(r, plot.of);
+      fold.add(cell(r, plot.by), cell(r, plot.between), sum);
+    }
+    const ends = [plot.from, plot.to] as const;
+    return {
+      t: 'slope',
+      plot,
+      coverage,
+      ...fold.slope(ends, plot.measure === 'mean'),
+    };
   }
   if (plot.t === 'dots' && plot.measure === 'mean') {
     const fold = new GroupsFold('mean', 'point');
@@ -773,6 +799,23 @@ test('an edit moves dots of a mean by its one row, and a save keeps the fold, wh
   reopened.attach(CHANNEL_MEANS, HEADERS);
   expect(reopened.from()).toBe(ROWS);
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test('a slope folded a block at a time reads as the pure split fold of its two states, and another From or To, or a mean, reads no block', () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_SLOPE.id, pure(CHANNEL_SLOPE.plot)],
+  ]);
+  const plot: SlopePlot = {
+    ...WEB_TO_DIRECT,
+    from: 'partner',
+    measure: 'mean',
+  };
+  tallies.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_SLOPE.id, pure(plot)],
+  ]);
 });
 
 test("dots of rows or a sum share a bar chart's fold, and read as its pure fold", () => {

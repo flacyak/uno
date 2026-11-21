@@ -110,7 +110,8 @@ export type Plot =
   | { t: 'histogram'; of: ChartColumn; span: Span }
   /** A box of the numbers of `of`, or one per value of `by`, as R's boxplot draws them. */
   | { t: 'box'; of: ChartColumn; by?: ChartColumn; span: Span }
-  | DotsPlot;
+  | DotsPlot
+  | SlopePlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

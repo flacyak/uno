@@ -23,4 +23,5 @@ export const FOLDERS: Folders = {
   histogram: spreadFolder,
   box: boxFolder,
   dots: dotsFolder,
+  slope: splitFolder,
 };

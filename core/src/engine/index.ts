@@ -54,6 +54,7 @@ export type {
   SpreadTally,
   BoxTally,
   MeanTally,
+  SlopeTally,
   StackTally,
   TimeTally,
   SignIns,

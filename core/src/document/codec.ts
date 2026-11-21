@@ -1105,6 +1105,7 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   histogram: ['t', 'of', 'span'],
   box: ['t', 'of', 'by', 'span'],
   dots: ['t', 'by', 'of', 'measure', 'order'],
+  slope: ['t', 'by', 'between', 'from', 'to', 'of', 'measure'],
 };
 
 /** What a dot plot's dots may stand at. */
@@ -1184,6 +1185,7 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'time') return parseOverTime(where, p);
   if (t === 'stack') return parseStacked(where, p);
   if (t === 'dots') return parseDots(where, p);
+  if (t === 'slope') return parseSlope(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };

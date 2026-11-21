@@ -17,6 +17,7 @@ import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
 import { dots } from "@renderer/chart/kinds/dots";
+import { slope } from "@renderer/chart/kinds/slope";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
@@ -179,7 +180,14 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots });
+  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots, slope });
+});
+
+test("a slope chart's kind reads its values, its states and its numbers from its columns", () => {
+  const between = { col: 0, header: "year" };
+  const plot = { t: "slope", by: REGION, between, from: "2024", to: "2025" } as const;
+  const means = slope({ ...plot, of: REVENUE, measure: "mean" });
+  expect([means.valued, means.numbered]).toStrictEqual([[REGION, between], [REVENUE]]);
 });
 
 test("a dot plot's kind titles its rows, its sum or its mean per value, and reads its numbers from its column", () => {
