@@ -6,6 +6,7 @@
 import { readDate } from '@date';
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
+import type { SavedSum } from './exact.ts';
 import { Count, DISTINCT_AT_MOST, counted } from './groups.ts';
 import type { Skipped } from './skipped.ts';
 import { PAIRS_AT_MOST } from './split.ts';
@@ -32,6 +33,33 @@ export interface TimeSplits {
   held: Held;
   values: ValuePeriods[];
   rest: { rows: number; sum: number };
+  dates: Undated;
+  skipped: Skipped;
+}
+
+/** A count as a save writes it: its rows, and their sum when summed. */
+type SavedCount = { rows: number; sum?: SavedSum };
+
+/** A period as a save writes it: its key, its rows, and their sum when summed. */
+type SavedPeriod = [number, number] | [number, number, SavedSum];
+
+/**
+ * SavedTimeSplit is every bit of a TimeSplitFold, as a save writes it: how it
+ * reads dates, the mark it sums with, the period it holds, each value's
+ * periods, undated and unsplit rows in the order they began, the rest, and
+ * what it left out.
+ */
+export interface SavedTimeSplit {
+  reading: Order | UnixUnit;
+  mark?: Mark;
+  held: Held;
+  groups: Array<{
+    value: string;
+    periods: SavedPeriod[];
+    undated: SavedCount;
+    unsplit: SavedCount;
+  }>;
+  rest: SavedCount;
   dates: Undated;
   skipped: Skipped;
 }
@@ -82,6 +110,30 @@ export class TimeSplitFold {
     this.count(group, date, cell, -1);
     const empty = group?.periods.size === 0 && group.undated.rows === 0;
     if (empty && group.unsplit.rows === 0) this.groups.delete(value);
+  }
+
+  /** saved is what the fold holds, which `restored` reads back as it was. */
+  saved(): SavedTimeSplit {
+    const summed = this.mark !== undefined;
+    const count = (c: Count): SavedCount =>
+      summed ? { rows: c.rows, sum: c.sum.saved() } : { rows: c.rows };
+    const groups = [...this.groups].map(([value, g]) => ({
+      value,
+      periods: [...g.periods].map(([key, c]): SavedPeriod =>
+        summed ? [key, c.rows, c.sum.saved()] : [key, c.rows],
+      ),
+      undated: count(g.undated),
+      unsplit: count(g.unsplit),
+    }));
+    return {
+      reading: this.reading,
+      mark: this.mark,
+      held: HELD[this.level]!,
+      groups,
+      rest: count(this.rest),
+      dates: { ...this.dates },
+      skipped: { ...this.skipped },
+    };
   }
 
   /** read is what the fold holds, as plain numbers. */

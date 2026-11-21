@@ -6,6 +6,7 @@
 
 import { expect, test } from 'vite-plus/test';
 
+import { readDate } from '@date';
 import { hashOf } from '@engine/grown';
 import { read } from '@ingest';
 import {
@@ -22,6 +23,7 @@ import {
   SplitFold,
   TALLY_VERSION,
   TimeFold,
+  TimeSplitFold,
   WEEK_HOURS,
   WeekFold,
 } from '@tally';
@@ -629,6 +631,46 @@ test('a save that holds no week fold reads back as none', () => {
   expect(WeekFold.restored(throughJson(saved))?.saved()).toStrictEqual(saved);
 });
 
+test('a time split fold saves each value with its periods in the order they began, its undated and unsplit rows, and the rest', () => {
+  const fold = new TimeSplitFold('day', 'point');
+  fold.add('North', '2024-03-04 14:05', '1.5');
+  fold.add('North', '2024-03-04 09:00', '');
+  fold.add('South', 'n/a', '-2');
+  const sum = (...xs: number[]) => {
+    const s = new ExactSum();
+    for (const x of xs) s.add(x);
+    return s.saved();
+  };
+  const hour = (date: string) =>
+    Math.floor(readDate(date, 'day')! / HOUR_MINUTES);
+  const none = { rows: 0, sum: sum() };
+  expect(throughJson(fold.saved())).toStrictEqual({
+    reading: 'day',
+    mark: 'point',
+    held: 'hour',
+    groups: [
+      {
+        value: 'North',
+        periods: [
+          [hour('2024-03-04 14:00'), 1, sum(1.5)],
+          [hour('2024-03-04 09:00'), 1, sum()],
+        ],
+        undated: none,
+        unsplit: none,
+      },
+      {
+        value: 'South',
+        periods: [],
+        undated: { rows: 1, sum: sum(-2) },
+        unsplit: none,
+      },
+    ],
+    rest: none,
+    dates: { blank: 0, unparsed: 1, other: 0 },
+    skipped: { blank: 1, unparsed: 0 },
+  });
+});
+
 /** Numbers of a few figures over many decades, either side of zero. */
 const SPREAD_CELLS = [...CELLS, '0', '2.3', '-2.25', '1e300', '7e-12'];
 // Few enough buckets that a spread of DRAWS rows coarsens.
@@ -778,6 +820,7 @@ const GOLDEN = {
   spreads: '4d692394f8b2ad5f577c4016013a381dc2662741743816ab00b57a35dc29e6d1',
   mean: '46fe0e11379d829a37ab6ee93bbfb3c25da30cff2630076375e3aca28605c4f9',
   week: '34cedec1c28038164d7bec62b8722839122943259e473f3da14a8b2ecebcc5f1',
+  timesplit: '9694dab4f6df0f1d416a30218e8e9bf2b37eb9731d3fbea11e5b3c53036e8b4d',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -890,4 +933,18 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(weeks.map((f) => f.saved())))),
     'a week fold, or how a cell reads as a date or a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.week);
+  const timeSplits = (['day', 'month'] as const).flatMap((order) => [
+    new TimeSplitFold(order),
+    new TimeSplitFold(order, 'point'),
+    new TimeSplitFold(order, 'comma'),
+  ]);
+  for (const fold of splits) {
+    dates.forEach((v, r) =>
+      fold.add(regions[r % regions.length]!, v, cells[r]),
+    );
+  }
+  expect(
+    hashOf(encoder.encode(JSON.stringify(timeSplits.map((f) => f.saved())))),
+    'a time split fold, or how a cell reads as a date or a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.timesplit);
 });
