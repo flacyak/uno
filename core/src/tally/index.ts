@@ -14,6 +14,7 @@ export {
   GROUPS_SENT,
   GroupsFold,
   LABEL_AT_MOST,
+  UNKEYED_NAMED,
   counted,
 } from './groups.ts';
 export type {
@@ -21,6 +22,7 @@ export type {
   Groups,
   MeanGroup,
   Measure,
+  Regrouped,
   SavedGroups,
 } from './groups.ts';
 export {
