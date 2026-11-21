@@ -1,0 +1,116 @@
+/**
+ * @fileoverview Checks of chord charts in real layout: a ring of an arc per
+ * airport of the six with the most flights and Other, each in its slot's
+ * colour and Other in the caption's ink, each named, inside its window, and
+ * a ribbon between each two, in a window of a new chart's size and one of the least.
+ *
+ * They open the workspace smoke.js wrote of flights between nine airports.
+ */
+
+import { CHORD_NODES_AT_MOST } from "@tally";
+import type { Check, Input } from "./check.ts";
+
+/** The workspace smoke.js wrote of two chord charts. */
+const CHORDED = process.env["UNO_SMOKE_CHORDED"] ?? "";
+
+/** The ribbons of the flights: one between each two of the seven arcs, and Other's to itself. */
+const RIBBONS = 22;
+
+/** The flights smoke.js wrote, which the table's totals account for. */
+const FLIGHTS = 1_894;
+
+/** How far a measure may stand off: half a px of rounding. */
+const PX_SLACK = 0.5;
+
+/** A real press of `key`. */
+const press = (key: string): readonly Input[] => [
+  { type: "keyDown", keyCode: key },
+  { type: "keyUp", keyCode: key },
+];
+
+export const CHART_CHORD: Check[] = [
+  {
+    name: "a chord chart draws a ring of an arc per airport of the six busiest and Other, in their slots' colours and Other in the caption's ink, each named inside its window, and a ribbon between each two",
+    send: ["menu:open-path", CHORDED],
+    shot: "chart-chord",
+    script: `
+      const windows = () => [...document.querySelectorAll(".chart")];
+      const drawn = () => windows().length === 2 && windows().every((win) => win.querySelector(".chart-chord-arc[d]") !== null);
+      if (!(await arrives(drawn))) return "the windows draw no arcs";
+      const colour = (value) => {
+        const probe = document.createElement("div");
+        probe.style.color = value;
+        document.body.append(probe);
+        const read = getComputedStyle(probe).color;
+        probe.remove();
+        return read;
+      };
+      const keys = [...Array(${CHORD_NODES_AT_MOST}).keys()].map((i) => colour("var(--chart-" + (i + 1) + ")"));
+      keys.push(colour("var(--ink-3)"));
+      for (const win of windows()) {
+        const arcs = [...win.querySelectorAll(".chart-chord-arc")];
+        if (arcs.length !== keys.length) return "a window draws " + arcs.length + " arcs";
+        const worn = arcs.map((arc) => getComputedStyle(arc).fill);
+        if (worn.join() !== keys.join()) return "the arcs wear " + worn.join();
+        const title = win.querySelector(".chart-title").textContent;
+        if (title !== "rows from origin to dest") return "a window's title reads " + title;
+        const ribbons = win.querySelectorAll(".chart-chord-ribbon[d]").length;
+        if (ribbons !== ${RIBBONS}) return "a window draws " + ribbons + " ribbons";
+        const box = win.querySelector(".chart-plot").getBoundingClientRect();
+        const names = [...win.querySelectorAll(".chart-pie.listed .chart-legend li, .chart-pie:not(.listed) .chart-slice-label")];
+        const said = names.map((name) => name.textContent).join();
+        if (said !== "ORD,ATL,DEN,LAX,JFK,SFO,Other") return "a window names its arcs " + said;
+        for (const arc of [...arcs, ...names]) {
+          const at = arc.getBoundingClientRect();
+          if (at.left < box.left - ${PX_SLACK} || at.right > box.right + ${PX_SLACK} || at.top < box.top - ${PX_SLACK} || at.bottom > box.bottom + ${PX_SLACK}) return "an arc or its name stands past its plot";
+        }
+      }
+      return "";
+    `,
+  },
+  {
+    name: "a click on a chord chart's ring puts the cursor on a mark under it, and the box says its flights",
+    click: { selector: ".chart:first-child .chart-chord-ring" },
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-plot:focus-within, .chart-plot:focus") !== null))) return "the plot has no focus";
+      return "";
+    `,
+  },
+  {
+    name: "Home puts the cursor on ORD's arc, and the box says its flights out and in",
+    input: { events: press("Home"), through: true },
+    shot: "chart-chord-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      const said = () => win.querySelector(".chart-tip-words")?.textContent.replace(/\\s+/gu, " ").trim() ?? "";
+      if (!(await until(() => win.querySelector(".chart-chord-arc.cursor") === win.querySelector(".chart-chord-arc")))) return "ORD's arc has no cursor";
+      return /^[\\d,]+ from ORD · [\\d,]+ to ORD$/u.test(said()) ? "" : "the box says " + said();
+    `,
+  },
+  {
+    name: "Down steps from ORD's arc to its first ribbon, and the box says its flights either way, each on a line",
+    input: { events: press("Down"), through: true },
+    shot: "chart-chord-ribbon",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-chord-ribbon.cursor") !== null))) return "no ribbon wears the cursor";
+      const lines = [...win.querySelectorAll(".chart-tip-line")].map((line) => line.textContent.replace(/\\s+/gu, " ").trim());
+      return lines.length === 2 && /^[\\d,]+ ORD to Other$/u.test(lines[0]) && /^[\\d,]+ Other to ORD$/u.test(lines[1]) ? "" : "the box says " + lines.join(" / ");
+    `,
+  },
+  {
+    name: "a chord chart's table lists its square, from in rows and to in columns, Other last, with each row's total",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-chord-table",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((c) => c.textContent).join(" | "));
+      if (lines[0] !== "origin | ORD | ATL | DEN | LAX | JFK | SFO | Other | total") return "the table's head reads " + lines[0];
+      const totals = lines.slice(1).map((line) => Number(line.split(" | ").at(-1).replace(/,/gu, "")));
+      const rows = totals.reduce((n, total) => n + total, 0);
+      return rows === ${FLIGHTS} ? "" : "the table's totals add to " + rows;
+    `,
+  },
+];

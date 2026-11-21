@@ -48,6 +48,7 @@ export const QUESTIONS: readonly Question[] = [
     kinds: [
       ["scatter", m.chart_kind_scatter],
       ["parallel", m.chart_kind_parallel],
+      ["chord", m.chart_kind_chord],
     ],
   },
 ];

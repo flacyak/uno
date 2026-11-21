@@ -16,6 +16,8 @@ import {
 } from '@go';
 import type { Order, UnixUnit } from '@date';
 import { read as ingestRead } from '@ingest';
+import { REGION_COUNTRIES } from '@place';
+import type { Reading as PlaceReading } from '@place';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { GROUPS_SENT, PER } from '@tally';
@@ -33,9 +35,11 @@ import type {
   Reading,
   SlopePlot,
   StackPlot,
+  ChordPlot,
   ParallelPlot,
   MapBox,
   MapPlot,
+  PlacesPlot,
   Projection,
   SwarmPlot,
   TimePlot,
@@ -1122,6 +1126,7 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   horizon: ['t', 'at', 'by', 'sum', 'per', 'order', 'unit'],
   swarm: ['t', 'of', 'by'],
   parallel: ['t', 'axes'],
+  chord: ['t', 'from', 'to', 'sum'],
 };
 
 /** What a dot plot's dots may stand at. */
@@ -1207,6 +1212,7 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'horizon') return parseHorizon(where, p);
   if (t === 'swarm') return parseSwarm(where, p);
   if (t === 'parallel') return parseParallel(where, p);
+  if (t === 'chord') return parseChord(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };
@@ -1341,6 +1347,24 @@ export function parseHorizon(where: string, value: unknown): HorizonPlot {
   return { t: 'horizon', at, ...sum, per, ...readingOf(where, p) };
 }
 
+/**
+ * parseChord reads a chord chart's plot: its `from` and `to` columns, two
+ * different ones, and a `sum` it may name, which is neither.
+ */
+export function parseChord(where: string, value: unknown): ChordPlot {
+  const p = asRecord(value);
+  const [from, to] = [columnOf(where, p, 'from'), columnOf(where, p, 'to')];
+  if (from.col === to.col)
+    throw new Error(`${where}: from and to name one column`);
+  if (p['sum'] === undefined) return { t: 'chord', from, to };
+  const sum = columnOf(where, p, 'sum');
+  for (const [key, column] of Object.entries({ from, to })) {
+    if (sum.col === column.col)
+      throw new Error(`${where}: sum and ${key} name one column`);
+  }
+  return { t: 'chord', from, to, sum };
+}
+
 /** parseSwarm reads a beeswarm's plot: its column `of` numbers, and a column `by` of strips it may name. */
 export function parseSwarm(where: string, value: unknown): SwarmPlot {
   const p = asRecord(value);
@@ -1400,6 +1424,36 @@ export function parseMap(where: string, value: unknown): MapPlot {
     plot.projection = required(p, 'projection', PROJECTION, where);
   if (p['box'] !== undefined) plot.box = required(p, 'box', BOX, where);
   return plot;
+}
+
+/** How a map of places may read its column: countries, or one region country's regions. */
+const PLACE_READING: Expects<PlaceReading> = {
+  is: (v): v is PlaceReading => {
+    if (typeof v !== 'object' || v === null) return false;
+    const { level, country } = v as Record<string, unknown>;
+    if (level === 'country') return Object.keys(v).length === 1;
+    return (
+      level === 'region' &&
+      typeof country === 'string' &&
+      REGION_COUNTRIES.includes(country)
+    );
+  },
+  not: "is not a reading of countries or of a region country's regions",
+};
+
+/**
+ * parsePlaces reads a map of places' plot: its column `by`, how it `reads`,
+ * and a `sum` it may name that is another column.
+ */
+export function parsePlaces(where: string, value: unknown): PlacesPlot {
+  const p = asRecord(value);
+  const by = columnOf(where, p, 'by');
+  const reads = required(p, 'reads', PLACE_READING, where);
+  if (p['sum'] === undefined) return { t: 'places', by, reads };
+  const sum = columnOf(where, p, 'sum');
+  if (sum.col === by.col)
+    throw new Error(`${where}: by and sum name one column`);
+  return { t: 'places', by, reads, sum };
 }
 
 /**

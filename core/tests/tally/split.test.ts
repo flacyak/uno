@@ -8,8 +8,13 @@ import { compareStrings } from '@go';
 import { parse } from '@num';
 import { ExactSum } from '@tally/exact';
 import { DISTINCT_AT_MOST, GROUPS_SENT, LABEL_AT_MOST } from '@tally/groups';
-import { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from '@tally/split';
-import type { Split } from '@tally/split';
+import {
+  CHORD_NODES_AT_MOST,
+  PAIRS_AT_MOST,
+  SERIES_AT_MOST,
+  SplitFold,
+} from '@tally/split';
+import type { Split, Square } from '@tally/split';
 import { seeded } from '@core-tests/lab/cache/stats';
 
 // Enough seeds that edits empty and start cells dozens of times.
@@ -415,4 +420,107 @@ test('a split fold is whole while every row is in its cell, none apart past PAIR
   expect(fold.whole()).toBe(true);
   for (let i = values; i <= DISTINCT_AT_MOST; i++) fold.add(`v${i}`, 'x');
   expect(fold.whole()).toBe(false);
+});
+
+// More names than a square sends, each both a from and a to.
+const NAMES = ['', 'ORD', 'JFK', 'LAX', 'ATL', 'DEN', 'SEA', 'SFO', 'BOS'];
+
+/**
+ * squared is the square a fold of `rows` that passes no bound reads as: each
+ * name's rows out and in, the largest named, and each row in the cell of its
+ * from and its to, Other where either is not named.
+ */
+function squared(rows: Row[], sums = false): Square {
+  const skipped = { blank: 0, unparsed: 0 };
+  const xs = rows.map(([, , cell = '']) => {
+    const x = sums ? parse(cell, 'point') : undefined;
+    if (sums && x === undefined) skipped[cell === '' ? 'blank' : 'unparsed']++;
+    return x;
+  });
+  const counts = (r: number[]) => {
+    const c = new Recount();
+    for (const i of r) {
+      c.rows++;
+      if (xs[i] !== undefined) c.sum.add(xs[i]);
+    }
+    return c.measured();
+  };
+  const size = (m: { rows: number; sum: number }) =>
+    Math.abs(sums ? m.sum : m.rows);
+  const rowsOf = (keep: (row: Row) => boolean) =>
+    rows.flatMap((row, i) => (keep(row) ? [i] : []));
+  const names = [...new Set(rows.flatMap(([from, to]) => [from, to]))];
+  const nodes = names
+    .map((name) => ({
+      name,
+      size:
+        size(counts(rowsOf(([from]) => from === name))) +
+        size(counts(rowsOf(([, to]) => to === name))),
+    }))
+    .sort((a, b) => b.size - a.size || compareStrings(a.name, b.name))
+    .slice(0, CHORD_NODES_AT_MOST)
+    .map(({ name }) => name);
+  const place = (name: string) =>
+    nodes.includes(name) ? nodes.indexOf(name) : nodes.length;
+  const places = Array.from({ length: nodes.length + 1 }, (_, i) => i);
+  return {
+    nodes,
+    flows: places.map((i) =>
+      places.map((j) =>
+        counts(rowsOf(([from, to]) => place(from) === i && place(to) === j)),
+      ),
+    ),
+    others: names.length - nodes.length,
+    unsplit: 0,
+    rest: { rows: 0, sum: 0 },
+    skipped,
+  };
+}
+
+test('a square reads each flow between the names with the most rows out and in, the rest as Other, as its rows counted again', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const cents = () => `${Math.floor(random() * MOST_CENTS) / CENTS}`;
+    const row = (): Row => [pick(NAMES), pick(NAMES), pick([cents(), ''])];
+    const rows = Array.from({ length: ROWS }, row);
+    const [rowed, sum] = [folded(rows), summed(rows)];
+    expect(rowed.square(), `seed ${seed}`).toEqual(squared(rows));
+    expect(sum.square(), `seed ${seed}, summed`).toEqual(squared(rows, true));
+    for (let edit = 0; edit < ROWS; edit++) {
+      const r = Math.floor(random() * ROWS);
+      for (const fold of [rowed, sum]) fold.remove(...rows[r]!);
+      rows[r] = row();
+      for (const fold of [rowed, sum]) fold.add(...rows[r]);
+    }
+    expect(sum.square(), `seed ${seed}, edited`).toEqual(squared(rows, true));
+  }
+});
+
+test('a square counts a row past PAIRS_AT_MOST from its value to Other, and the rest from Other to Other', () => {
+  // Four series of every value fill the pairs, so a's row to b has no cell.
+  const SERIES_EACH = ['a', 'b', 'c', 'd'];
+  const values = PAIRS_AT_MOST / SERIES_EACH.length;
+  const fold = new SplitFold();
+  for (let i = 0; i < values; i++) {
+    for (const series of SERIES_EACH) fold.add(`v${i}`, series);
+  }
+  fold.add('a', 'b');
+  const { nodes, flows, others, unsplit } = fold.square();
+  const other = CHORD_NODES_AT_MOST;
+  expect(nodes).toStrictEqual([...SERIES_EACH, 'v0', 'v1']);
+  expect(flows[0]![1]).toStrictEqual({ rows: 0, sum: 0 });
+  expect(flows[0]![other]).toStrictEqual({ rows: 1, sum: 0 });
+  expect(flows[4]![0]).toStrictEqual({ rows: 1, sum: 0 });
+  expect(flows[other]![0]).toStrictEqual({ rows: values - 2, sum: 0 });
+  expect(unsplit).toBe(1);
+  expect(others).toBe(values + SERIES_EACH.length - CHORD_NODES_AT_MOST);
+  // A value first seen past DISTINCT_AT_MOST has no group, so its row is Other's.
+  const full = new SplitFold();
+  for (let i = 0; i < DISTINCT_AT_MOST; i++) full.add(`v${i}`, 'a');
+  full.add('late', 'a');
+  const square = full.square();
+  expect(square.nodes[0]).toBe('a');
+  expect(square.rest).toStrictEqual({ rows: 1, sum: 0 });
+  expect(square.flows[other]![other]).toStrictEqual({ rows: 1, sum: 0 });
 });

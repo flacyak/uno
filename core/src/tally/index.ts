@@ -45,7 +45,12 @@ export {
 export type { SavedSpreads, Spreads, ValueSpread } from './spreads.ts';
 export { edgeOf } from './levels.ts';
 export type { Level } from './levels.ts';
-export { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from './split.ts';
+export {
+  CHORD_NODES_AT_MOST,
+  PAIRS_AT_MOST,
+  SERIES_AT_MOST,
+  SplitFold,
+} from './split.ts';
 export type {
   Ended,
   Measured,
@@ -56,6 +61,7 @@ export type {
   SlopeValue,
   Split,
   SplitValue,
+  Square,
 } from './split.ts';
 export { TALLY_VERSION, isCount, isRecord } from './saved.ts';
 export {

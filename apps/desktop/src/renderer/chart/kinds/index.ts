@@ -5,6 +5,7 @@
 import type { Kinds } from "../kind.ts";
 import { bars } from "./bars.ts";
 import { box } from "./box.ts";
+import { chord } from "./chord.ts";
 import { dots } from "./dots.ts";
 import { slope } from "./slope.ts";
 import { histogram } from "./histogram.ts";
@@ -34,4 +35,5 @@ export const KINDS: Kinds = {
   horizon,
   swarm,
   parallel,
+  chord,
 };

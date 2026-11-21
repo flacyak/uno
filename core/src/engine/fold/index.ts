@@ -32,4 +32,5 @@ export const FOLDERS: Folders = {
   horizon: horizonFolder,
   swarm: swarmFolder,
   parallel: parallelFolder,
+  chord: splitFolder,
 };

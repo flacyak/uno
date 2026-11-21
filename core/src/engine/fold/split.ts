@@ -1,10 +1,10 @@
 /**
- * @fileoverview The folder of a stacked bar chart or a slope chart: rows per
- * value of one column and per value of another in the same row, or the sum
- * of a third, of every value of the other or of a slope's two.
+ * @fileoverview The folder of a stacked bar chart, a slope chart or a chord
+ * chart: rows per value of one column and per value of another in the same
+ * row, or the sum of a third, of every value of the other or of a slope's two.
  */
 
-import type { SlopePlot, StackPlot } from '@document';
+import type { ChordPlot, SlopePlot, StackPlot } from '@document';
 import type { Mark } from '@num';
 import { SplitFold } from '@tally';
 import { markOf, placeOf } from './folder.ts';
@@ -13,19 +13,24 @@ import type { Block, Folder } from './folder.ts';
 /**
  * splitFolder folds rows by a plot's `by` and its series, a stack's `split`
  * or a slope's `between`, summing a stack's `sum` or a slope's `of` if it
- * names one, or returns the header of a column the view has not. A slope
+ * names one, or returns the header of a column the view has not. A chord
+ * folds as a stack by its `from`, split by its `to`. A slope
  * folds the rows of its two states alone, which it draws from first, and
  * every state's behind them.
  */
 export function splitFolder(
-  plot: StackPlot | SlopePlot,
+  plot: StackPlot | SlopePlot | ChordPlot,
   headers: readonly string[],
   marks: readonly Mark[],
 ): Folder | string {
-  const [series, summed] =
-    plot.t === 'stack' ? [plot.split, plot.sum] : [plot.between, plot.of];
-  const by = placeOf(plot.by, headers);
-  if (by === undefined) return plot.by.header;
+  const [valued, series, summed] =
+    plot.t === 'stack'
+      ? [plot.by, plot.split, plot.sum]
+      : plot.t === 'slope'
+        ? [plot.by, plot.between, plot.of]
+        : [plot.from, plot.to, plot.sum];
+  const by = placeOf(valued, headers);
+  if (by === undefined) return valued.header;
   const split = placeOf(series, headers);
   if (split === undefined) return series.header;
   const sum = summed === undefined ? undefined : placeOf(summed, headers);
@@ -102,6 +107,8 @@ function splitted(
         : splitted({ ...counted, only: undefined }, marks),
     tally: (plot, coverage) => {
       const moved = plot.t === 'stack' ? plot.order : [];
+      if (plot.t === 'chord')
+        return { t: 'chord', plot, coverage, ...fold.square() };
       if (plot.t !== 'slope')
         return { t: 'stack', plot, coverage, ...fold.snapshot(moved) };
       const mean = plot.measure === 'mean';

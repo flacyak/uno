@@ -4,6 +4,7 @@
  */
 
 import type { Order, UnixUnit } from '@date';
+import type { Reading as PlaceReading } from '@place';
 import type { Per, Span } from '@tally';
 
 /**
@@ -98,6 +99,18 @@ export const PARALLEL_AXES_AT_MOST = 8;
 /** Parallel coordinates: a line per sampled row across an axis per number column of `axes`, in their order. */
 export type ParallelPlot = { t: 'parallel'; axes: ChartColumn[] };
 
+/**
+ * A chord chart: the rows, or the sum of `sum`, that flow from each value of
+ * `from` to each value of `to` in the same row, between the names the two
+ * share.
+ */
+export type ChordPlot = {
+  t: 'chord';
+  from: ChartColumn;
+  to: ChartColumn;
+  sum?: ChartColumn;
+};
+
 /** A beeswarm: a dot per sampled row at its number in `of`, in a strip per value of `by` where it names one. */
 export type SwarmPlot = { t: 'swarm'; of: ChartColumn; by?: ChartColumn };
 
@@ -127,6 +140,14 @@ export interface MapPlot {
   sum?: ChartColumn;
   projection?: Projection;
   box?: MapBox;
+}
+
+/** A map of places: rows, or the sum of `sum`, per place `by` names, read as `reads`. */
+export interface PlacesPlot {
+  t: 'places';
+  by: ChartColumn;
+  reads: PlaceReading;
+  sum?: ChartColumn;
 }
 
 /**
@@ -193,7 +214,8 @@ export type Plot =
   | HeatPlot
   | HorizonPlot
   | SwarmPlot
-  | ParallelPlot;
+  | ParallelPlot
+  | ChordPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are
