@@ -278,6 +278,31 @@ test("a fitted chord's ribbons stand ARC_GAP inside the arcs, the widest first, 
   expect(endY).toBeCloseTo(-inside * Math.cos(2 * Math.PI * end), close);
 });
 
+test("a chord names each arc past its middle, and lists its names beside the ring each with its arc's colour, Other and a blank cell in the app's words", () => {
+  const tally = tallyOf(
+    ["ORD", ""],
+    [
+      [0, 1, 0],
+      [0, 0, 0],
+      [0, 0, 1],
+    ],
+  );
+  const box = chord(ROWS, tally);
+  const labels = [...box.querySelectorAll<HTMLElement>(".chart-slice-label")];
+  expect(labels.map((l) => l.textContent)).toStrictEqual(["ORD", "(blank)", "Other"]);
+  // ORD's arc runs a quarter of the ring from the top, so its name stands past its middle, an eighth round.
+  const eighth = Math.SQRT1_2;
+  const close = 6;
+  expect(Number(labels[0]!.style.getPropertyValue("--x"))).toBeCloseTo(eighth, close);
+  expect(Number(labels[0]!.style.getPropertyValue("--y"))).toBeCloseTo(-eighth, close);
+  const listed = [...box.querySelectorAll(".chart-legend li")];
+  expect(listed.map((li) => li.textContent)).toStrictEqual(["ORD", "(blank)", "Other"]);
+  const keys = [...box.querySelectorAll<HTMLElement>(".chart-legend-key")].map((k) =>
+    k.style.getPropertyValue("--key"),
+  );
+  expect(keys).toStrictEqual(["var(--chart-1)", "var(--chart-2)", OTHER_KEY]);
+});
+
 test("a chord not laid out yet places no arc or ribbon, to place them once it is", () => {
   for (const mark of fitted(AIRPORTS, 0).querySelectorAll(
     ".chart-chord-arc, .chart-chord-ribbon",

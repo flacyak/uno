@@ -5,14 +5,16 @@
  * slot's colour, Other the caption's ink. A flow at or below zero has no
  * width to draw. Inside the ring, a ribbon joins each two arcs with a flow
  * between them, and each arc with a flow to itself. Its sizes are px, so the
- * ring is placed once it stands in the page and its size is known.
+ * ring is placed once it stands in the page and its size is known. Each arc
+ * is named past its middle, or the names are listed beside the ring where
+ * they would meet, as a pie's are.
  */
 
 import type { ChordPlot } from "@document";
 import type { ChordTally } from "@engine";
 import type { Measured } from "@tally";
 import { el } from "@renderer/shell/util";
-import { LABEL_GAP, OTHER_KEY } from "./pie.ts";
+import { LABEL_GAP, OTHER_KEY, entry, label } from "./pie.ts";
 import { BARS_INSET } from "./rows.ts";
 import { mark } from "./scatter.ts";
 
@@ -158,19 +160,25 @@ export function chord(plot: ChordPlot, tally: ChordTally): HTMLElement {
     Object.assign(ribbon.dataset, { ends: ends.flat().join(" "), arcs: arcsOf.join(" ") });
     ring.append(ribbon);
   }
-  for (const { from, to, key } of drawn) {
+  const labels: HTMLElement[] = [];
+  const list = el("ul", "chart-legend chart-scrolls themed-bar");
+  for (const { place, from, to, key } of drawn) {
     const arc = mark("path", "chart-chord-arc");
     arc.style.setProperty("--key", key);
     Object.assign(arc.dataset, { from: `${from}`, to: `${to}` });
     ring.append(arc);
+    // Other is the place past the nodes, which has no name of its own.
+    const name = tally.nodes[place];
+    labels.push(label(name, (from + to) / 2));
+    list.append(entry(key, name));
   }
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--label-gap", `${LABEL_GAP}px`);
   // A ribbon's ring is as wide as the gap between two arcs.
   box.style.setProperty("--ribbon-ring", `${ARC_GAP}px`);
   const disc = el("div", "chart-pie-disc");
-  disc.append(ring);
-  box.append(disc);
+  disc.append(ring, ...labels);
+  box.append(disc, list);
   return box;
 }
 
