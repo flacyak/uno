@@ -57,3 +57,25 @@ export const CHART_FORCED: Check[] = KINDS.map(({ kind, workspace, marks, worn }
     return off.length === 0 ? "" : off.length + " marks wear " + off[0] + " where CanvasText is " + text;
   `,
 }));
+
+/** The kinds whose cells wear the ramp's classes, which take an ordered hatch. */
+const RAMPED = [
+  { kind: "week", workspace: "UNO_SMOKE_WEEKLY", marks: ".chart-week-cell.chart-stepped" },
+  { kind: "heat", workspace: "UNO_SMOKE_HEATED", marks: ".chart-heat-cell.chart-stepped" },
+] as const;
+
+export const CHART_FORCED_RAMP: Check[] = RAMPED.map(({ kind, workspace, marks }) => ({
+  name: `a ${kind} chart's classes wear a hatch of CanvasText under forced colours, a different one per class`,
+  send: ["menu:open-path", process.env[workspace] ?? ""],
+  forced: true,
+  shot: `forced-${kind}`,
+  script: `
+    const marks = () => [...document.querySelectorAll(${JSON.stringify(marks)})];
+    if (!(await arrives(() => marks().length > 0))) return "no cells drew";
+    const worn = marks().map((mark) => [mark.style.getPropertyValue("--step"), getComputedStyle(mark).backgroundImage]);
+    const flat = worn.filter(([, image]) => !image.startsWith("repeating-linear-gradient"));
+    if (flat.length > 0) return flat.length + " cells wear " + flat[0][1];
+    const hatches = new Map(worn);
+    return new Set(hatches.values()).size === hatches.size ? "" : "two classes wear one hatch";
+  `,
+}));

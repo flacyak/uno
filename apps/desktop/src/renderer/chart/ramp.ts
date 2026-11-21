@@ -90,6 +90,18 @@ export function fillOf(step: number): string | undefined {
   return `var(--${step > 0 ? ARMS.up : ARMS.down}-${Math.abs(step)})`;
 }
 
+/**
+ * wear gives `mark` the colour of class `step`, and the class itself, which
+ * chart.css hatches in place of the colour under forced colours and in print.
+ * At zero it wears neither, and keeps the rule.
+ */
+export function wear(mark: HTMLElement, step: number, fill = fillOf(step)): void {
+  if (fill === undefined) return;
+  mark.classList.add("chart-stepped");
+  mark.style.setProperty("--fill", fill);
+  mark.style.setProperty("--step", `${step}`);
+}
+
 /** How wide a swatch of a scale's legend stands at most, in px. */
 export const SWATCH_WIDE = 24;
 
@@ -132,7 +144,7 @@ export function scaleOf(
   box.style.setProperty("--swatch", `${swatch}px`);
   for (const k of shown) {
     const key = el("span", "chart-swatch");
-    key.style.setProperty("--fill", fill(k)!);
+    wear(key, k, fill(k));
     box.append(key);
   }
   for (const [i, label] of labels.entries()) {

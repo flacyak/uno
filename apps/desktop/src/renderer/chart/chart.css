@@ -1870,3 +1870,22 @@
   left: calc(var(--at) * var(--swatch));
   translate: calc(var(--toward) * -100%) 0;
 }
+
+/* The ramp's classes, under forced colours and in print, where no colour
+ * reads, wear the dataviz skill's ordered hatch in place of theirs: lines of
+ * the text's colour at 45 degrees above zero and 135 below, closer with each
+ * class out from zero, so a class still reads by its texture. */
+@media (forced-colors: active), print {
+  .chart-stepped {
+    --hatch-line: 1px;
+    --hatch-widest: 10px;
+    --hatch-closer: 2px;
+    forced-color-adjust: none;
+    print-color-adjust: exact;
+    background: repeating-linear-gradient(
+      calc(90deg - 45deg * sign(var(--step))),
+      CanvasText 0 var(--hatch-line),
+      Canvas 0 calc(var(--hatch-widest) - var(--hatch-closer) * abs(var(--step)))
+    );
+  }
+}

@@ -9,7 +9,7 @@
 
 import { expect, test } from "vite-plus/test";
 
-import { CLASSES, SWATCH_WIDE, classOf, classesOver, scaleOf } from "@renderer/chart/ramp";
+import { CLASSES, SWATCH_WIDE, classOf, classesOver, scaleOf, wear } from "@renderer/chart/ramp";
 import { RAMP_SHARES } from "@renderer/theme";
 
 test("as many classes stand either side of zero as the ramp has steps", () => {
@@ -122,4 +122,34 @@ test("a scale of fewer classes steps as round, and its legend wears the fills it
   // Every other break of seven would leave zero out, so a signed legend writes each, or the ends and zero.
   const signed = legendOf(scaleOf(classesOver([600], true, BANDS), true, LEGEND_NARROW, CH));
   expect(signed.breaks).toEqual(["-600 at 0", "0 at 3", "600 at 6"]);
+});
+
+test("a mark wears its class's colour and its class, which chart.css hatches where no colour reads, and at zero neither", () => {
+  const [up, down, zero] = [3, -2, 0].map((step) => {
+    const mark = document.createElement("span");
+    wear(mark, step);
+    return [
+      mark.className,
+      mark.style.getPropertyValue("--fill"),
+      mark.style.getPropertyValue("--step"),
+    ];
+  });
+  expect(up).toStrictEqual(["chart-stepped", "var(--seq-3)", "3"]);
+  expect(down).toStrictEqual(["chart-stepped", "var(--div-2)", "-2"]);
+  expect(zero).toStrictEqual(["", "", ""]);
+  const swatches = [
+    ...scaleOf(classesOver([-4, 4], true), true, 200, 7).querySelectorAll<HTMLElement>(
+      ".chart-swatch",
+    ),
+  ];
+  expect(swatches.map((s) => s.style.getPropertyValue("--step"))).toStrictEqual([
+    "-4",
+    "-3",
+    "-2",
+    "-1",
+    "1",
+    "2",
+    "3",
+    "4",
+  ]);
 });
