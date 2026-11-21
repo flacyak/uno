@@ -1110,6 +1110,7 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   dots: ['t', 'by', 'of', 'measure', 'order'],
   slope: ['t', 'by', 'between', 'from', 'to', 'of', 'measure'],
   week: ['t', 'at', 'sum', 'order', 'unit'],
+  heat: ['t', 'by', 'at', 'sum', 'per', 'order', 'unit'],
 };
 
 /** What a dot plot's dots may stand at. */
@@ -1191,6 +1192,7 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'dots') return parseDots(where, p);
   if (t === 'slope') return parseSlope(where, p);
   if (t === 'week') return parseWeek(where, p);
+  if (t === 'heat') return parseHeat(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };

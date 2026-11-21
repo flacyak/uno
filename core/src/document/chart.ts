@@ -138,7 +138,8 @@ export type Plot =
   | { t: 'box'; of: ChartColumn; by?: ChartColumn; span: Span }
   | DotsPlot
   | SlopePlot
-  | WeekPlot;
+  | WeekPlot
+  | HeatPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

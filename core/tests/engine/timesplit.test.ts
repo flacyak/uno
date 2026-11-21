@@ -6,7 +6,7 @@
 
 import { expect, test } from 'vite-plus/test';
 
-import type { HeatPlot, Plot } from '@document';
+import type { HeatPlot } from '@document';
 import { timeSplitFolder } from '@engine/fold/timesplit';
 import type { Folder } from '@engine/fold/index';
 import { read } from '@ingest';
@@ -30,13 +30,6 @@ const PLOT: HeatPlot = {
   order: 'day',
 };
 const shown = (col: number) => (row: number) => sheet.display(row, col);
-/** The plot a tally names: an over-time chart's of the same size, until a heatmap is a plot. */
-const SERVED: Plot = {
-  t: 'time',
-  at: column(DATES),
-  per: 'month',
-  order: 'day',
-};
 
 /** folded is `plot`'s folder over every row of the sheet, a block at a time. */
 function folded(plot: HeatPlot): Folder {
@@ -68,13 +61,13 @@ test("a heatmap's folder reads as a time split fold of every row, at the plot's 
   const folder = folded(PLOT);
   expect(folder.key).toBe(`timesplit ${REGION} ${DATES} day ${REVENUE}`);
   expect(folder.cols).toStrictEqual([REGION, DATES, REVENUE]);
-  expect(folder.tally(SERVED, COVERAGE)).toStrictEqual({
+  expect(folder.tally(PLOT, COVERAGE)).toStrictEqual({
     t: 'heat',
-    plot: SERVED,
+    plot: PLOT,
     coverage: COVERAGE,
     ...pure().snapshot('month'),
   });
-  const weekly: Plot = { ...SERVED, per: 'week' };
+  const weekly: HeatPlot = { ...PLOT, per: 'week' };
   expect(folder.tally(weekly, COVERAGE)).toMatchObject(pure().snapshot('week'));
 });
 

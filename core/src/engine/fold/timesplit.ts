@@ -7,14 +7,10 @@ import type { HeatPlot } from '@document';
 import type { Mark } from '@num';
 import { TimeSplitFold } from '@tally';
 import { markOf, placeOf } from './folder.ts';
-import type { Block, Folder } from './folder.ts';
+import type { Block, Folder, MakeFolder } from './folder.ts';
 
 /** timeSplitFolder folds rows by a plot's `by` and the period of its `at`, summing `sum` if it names one. */
-export function timeSplitFolder(
-  plot: HeatPlot,
-  headers: readonly string[],
-  marks: readonly Mark[],
-): Folder | string {
+export const timeSplitFolder: MakeFolder<HeatPlot> = (plot, headers, marks) => {
   const by = placeOf(plot.by, headers);
   const at = placeOf(plot.at, headers);
   const sum = plot.sum === undefined ? undefined : placeOf(plot.sum, headers);
@@ -23,7 +19,7 @@ export function timeSplitFolder(
   if (plot.sum !== undefined && sum === undefined) return plot.sum.header;
   const reading = 'order' in plot ? plot.order : plot.unit;
   return timeSplit([by, at, sum], reading, marks);
-}
+};
 
 /** timeSplit is the folder of rows by `by` and the period of `at` read as `reading`, summing `sum`. */
 function timeSplit(
@@ -68,7 +64,7 @@ function timeSplit(
     saved: () => fold.saved(),
     // A chart that changed only its size keeps the fold, read at its size now.
     tally: (plot, coverage) => {
-      const per = 'per' in plot ? plot.per : 'auto';
+      const per = plot.t === 'heat' ? plot.per : 'auto';
       return { t: 'heat', plot, coverage, ...fold.snapshot(per) };
     },
     mend: () => Promise.resolve(),

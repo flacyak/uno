@@ -18,6 +18,7 @@ import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
 import { dots } from "@renderer/chart/kinds/dots";
 import { slope } from "@renderer/chart/kinds/slope";
+import { heat } from "@renderer/chart/kinds/heat";
 import { week } from "@renderer/chart/kinds/week";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
@@ -192,6 +193,7 @@ test("each plot kind has its module", () => {
     dots,
     slope,
     week,
+    heat,
   });
 });
 
