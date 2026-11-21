@@ -1,7 +1,7 @@
 /** @fileoverview A chord chart's kind: the flows between its nodes, and Other, as a ring. */
 
 import type { ChordPlot } from "@document";
-import { arcs, chord as drawChord, fitRing } from "../chord.ts";
+import { arcs, chord as drawChord, chordTargets, fitRing } from "../chord.ts";
 import type { ChartKind } from "../kind.ts";
 import { fitLabels } from "../pie.ts";
 import { named } from "./bars.ts";
@@ -24,5 +24,6 @@ export const chord: ChartKind<ChordPlot> = (plot) => ({
             fitLabels(drawn);
             fitRing(drawn);
           },
+          targets: (drawn) => chordTargets(plot, tally, drawn),
         },
 });

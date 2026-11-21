@@ -11,12 +11,14 @@ import { expect, test } from "vite-plus/test";
 
 import type { ChordPlot } from "@document";
 import type { ChordTally } from "@engine";
+import type { Targets } from "@renderer/chart/tooltip";
 import {
   ARC_GAP,
   ARC_LEAST,
   ARC_WIDTH,
   arcs,
   chord,
+  chordTargets,
   fitRing,
   ribbons,
 } from "@renderer/chart/chord";
@@ -301,6 +303,44 @@ test("a chord names each arc past its middle, and lists its names beside the rin
     k.style.getPropertyValue("--key"),
   );
   expect(keys).toStrictEqual(["var(--chart-1)", "var(--chart-2)", OTHER_KEY]);
+});
+
+/** What each of `targets` says: its readings' values and labels, and each one's key where it has one. */
+function saidBy(targets: Targets): string[][] {
+  return targets.all.map((target) =>
+    target
+      .said()
+      .map(
+        ({ value, label, key }) =>
+          `${value} ${label.textContent}${key === undefined ? "" : ` ${key}`}`,
+      ),
+  );
+}
+
+test("a chord's arcs say their node's flows out and in, and each ribbon, under each of its arcs in turn, its flow either way keyed by where it runs from", () => {
+  const box = chord(ROWS, AIRPORTS);
+  const targets = chordTargets(ROWS, AIRPORTS, box);
+  const ribbon = [...box.querySelectorAll(".chart-chord-ribbon")];
+  // ORD stands under LAX's ribbon first, then JFK's; LAX under its own, then ORD's.
+  expect(targets.all.map(({ mark }) => mark)).toStrictEqual([
+    ...box.querySelectorAll(".chart-chord-arc"),
+    ribbon[1],
+    ribbon[0],
+    ribbon[0],
+    ribbon[2],
+    ribbon[1],
+  ]);
+  const [ord, jfk, lax] = ["1", "2", "3"].map((slot) => `var(--chart-${slot})`);
+  expect(saidBy(targets).slice(0, 5)).toStrictEqual([
+    ["4 from ORD", "2 to ORD"],
+    ["2 from JFK", "3 to JFK"],
+    ["1 from LAX", "2 to LAX"],
+    [`1 ORD to LAX ${ord}`, `0 LAX to ORD ${lax}`],
+    [`3 ORD to JFK ${ord}`, `2 JFK to ORD ${jfk}`],
+  ]);
+  expect(saidBy(targets).at(-2)).toStrictEqual([`1 LAX to LAX ${lax}`]);
+  expect(targets.all.map(({ key }) => key)).toStrictEqual([ord, jfk, lax, ord, ord, ord, lax, ord]);
+  expect(targets.under(ribbon[2]!, 0, 0)).toBe(6);
 });
 
 test("a chord not laid out yet places no arc or ribbon, to place them once it is", () => {

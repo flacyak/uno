@@ -13,10 +13,14 @@
 import type { ChordPlot } from "@document";
 import type { ChordTally } from "@engine";
 import type { Measured } from "@tally";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { LABEL_GAP, OTHER_KEY, entry, label } from "./pie.ts";
 import { BARS_INSET } from "./rows.ts";
 import { mark } from "./scatter.ts";
+import { among, named } from "./tooltip.ts";
+import type { Reading, Target, Targets } from "./tooltip.ts";
 
 /** How thick an arc is, in px: the legend's key, which wears the same colour. */
 export const ARC_WIDTH = 10;
@@ -256,4 +260,84 @@ export function fitRing(box: HTMLElement): void {
     ];
     made.setAttribute("d", ribbon(ends, inside));
   }
+}
+
+/**
+ * chordTargets gives the marks of `box`, as chord drew `tally` for `plot`:
+ * each arc, worth its node's flows out and in, then along each arc in turn
+ * the ribbons it stands under, each worth its flow either way, keyed by
+ * the colour of the node it runs from. A ribbon is a target under each of
+ * its two arcs, so the keys step every arc's ribbons after the arcs.
+ */
+export function chordTargets(plot: ChordPlot, tally: ChordTally, box: HTMLElement): Targets {
+  const flow = (p: number, q: number) => {
+    const { rows, sum } = tally.flows[p]![q]!;
+    return plot.sum === undefined ? rows : sum;
+  };
+  const places = tally.flows.map((_, p) => p);
+  const name = (p: number) =>
+    p < tally.nodes.length ? named(tally.nodes[p]!) : el("span", "", m.chart_pie_other());
+  const said = (...parts: Array<Node | string>) => {
+    const label = el("span");
+    label.append(...parts.flatMap((part, i) => (i === 0 ? [part] : [" ", part])));
+    return label;
+  };
+  const drawn = arcs(plot, tally);
+  const made = ribbons(plot, tally);
+  const arcMarks = [...box.querySelectorAll<SVGElement>(".chart-chord-arc")];
+  const ribbonMarks = [...box.querySelectorAll<SVGElement>(".chart-chord-ribbon")];
+  // A ribbon says each way on a line of its own, keyed by where it runs from.
+  const target = (mark: SVGElement, readings: () => Reading[], lines = false): Target => ({
+    mark,
+    at: mark,
+    front: false,
+    key: mark.style.getPropertyValue("--key"),
+    said: readings,
+    lines,
+  });
+  const arcTargets = drawn.map(({ place: p }, a) =>
+    target(arcMarks[a]!, () => [
+      {
+        value: num(places.reduce((n, q) => n + flow(p, q), 0)),
+        label: said(m.chart_chord_from(), name(p)),
+      },
+      {
+        value: num(places.reduce((n, q) => n + flow(q, p), 0)),
+        label: said(m.chart_chord_to(), name(p)),
+      },
+    ]),
+  );
+  // Each arc's ribbons in the order they stand along it.
+  const along = drawn.map(({ place }) =>
+    made
+      .flatMap((r, i) =>
+        r.places.includes(place) ? [{ i, at: r.ends[r.places.indexOf(place)][0] }] : [],
+      )
+      .sort((a, b) => a.at - b.at)
+      .map(({ i }) => i),
+  );
+  const ribbonTargets = along.flatMap((ribbonsOf) =>
+    ribbonsOf.map((i) => {
+      const [p, q] = made[i]!.places;
+      const ways =
+        p === q
+          ? [[p, q]]
+          : [
+              [p, q],
+              [q, p],
+            ];
+      return target(
+        ribbonMarks[i]!,
+        () =>
+          ways.map(([from, to]) => ({
+            value: num(flow(from!, to!)),
+            label: said(name(from!), m.chart_chord_to(), name(to!)),
+            key: keyOf(from!, tally.nodes.length),
+          })),
+        true,
+      );
+    }),
+  );
+  const all = [...arcTargets, ...ribbonTargets];
+  return { all, under: among(all, ".chart-chord-arc, .chart-chord-ribbon") };
 }

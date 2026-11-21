@@ -623,6 +623,8 @@
   "chart_axis_from_to": "{of} de {least} a {most}",
   "chart_summary_parallel": "{rows}: {axes}.",
   "chart_pie_other": "Outros",
+  "chart_chord_from": "de",
+  "chart_chord_to": "para",
   "chart_pie_past_net": "mais de {count} valores · os demais entram em Outros pela soma líquida",
   "chart_pie_past_left_out": "mais de {count} valores · os demais ficam de fora",
   "chart_pie_below_zero": [

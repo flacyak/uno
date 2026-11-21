@@ -8,7 +8,7 @@
  */
 
 import { CHORD_NODES_AT_MOST } from "@tally";
-import type { Check } from "./check.ts";
+import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote of two chord charts. */
 const CHORDED = process.env["UNO_SMOKE_CHORDED"] ?? "";
@@ -18,6 +18,12 @@ const RIBBONS = 22;
 
 /** How far a measure may stand off: half a px of rounding. */
 const PX_SLACK = 0.5;
+
+/** A real press of `key`. */
+const press = (key: string): readonly Input[] => [
+  { type: "keyDown", keyCode: key },
+  { type: "keyUp", keyCode: key },
+];
 
 export const CHART_CHORD: Check[] = [
   {
@@ -55,6 +61,26 @@ export const CHART_CHORD: Check[] = [
         }
       }
       return "";
+    `,
+  },
+  {
+    name: "a click on a chord chart's ring puts the cursor on a mark under it, and the box says its flights",
+    click: { selector: ".chart:first-child .chart-chord-ring" },
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-plot:focus-within, .chart-plot:focus") !== null))) return "the plot has no focus";
+      return "";
+    `,
+  },
+  {
+    name: "Home puts the cursor on ORD's arc, and the box says its flights out and in",
+    input: { events: press("Home"), through: true },
+    shot: "chart-chord-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      const said = () => win.querySelector(".chart-tip-words")?.textContent.replace(/\\s+/gu, " ").trim() ?? "";
+      if (!(await until(() => win.querySelector(".chart-chord-arc.cursor") === win.querySelector(".chart-chord-arc")))) return "ORD's arc has no cursor";
+      return /^[\\d,]+ from ORD · [\\d,]+ to ORD$/u.test(said()) ? "" : "the box says " + said();
     `,
   },
 ];

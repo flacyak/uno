@@ -623,6 +623,8 @@
   "chart_axis_from_to": "{of} de {least} a {most}",
   "chart_summary_parallel": "{rows}: {axes}.",
   "chart_pie_other": "Otros",
+  "chart_chord_from": "desde",
+  "chart_chord_to": "a",
   "chart_pie_past_net": "más de {count} valores · los demás van en Otros por su suma neta",
   "chart_pie_past_left_out": "más de {count} valores · los demás se dejan fuera",
   "chart_pie_below_zero": [

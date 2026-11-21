@@ -604,6 +604,8 @@
   "chart_axis_from_to": "{of} from {least} to {most}",
   "chart_summary_parallel": "{rows}: {axes}.",
   "chart_pie_other": "Other",
+  "chart_chord_from": "from",
+  "chart_chord_to": "to",
   "chart_pie_past_net": "more than {count} values · later ones go in Other at their net sum",
   "chart_pie_past_left_out": "more than {count} values · later ones are left out",
   "chart_pie_below_zero": [

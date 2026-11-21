@@ -1280,7 +1280,9 @@
   vector-effect: non-scaling-stroke;
 }
 
-.chart-slice.cursor {
+.chart-slice.cursor,
+.chart-chord-arc.cursor,
+.chart-chord-ribbon.cursor {
   fill: color-mix(in srgb, var(--key) 80%, var(--ink));
 }
 
@@ -1414,7 +1416,9 @@
   }
 
   .chart-point.cursor,
-  .chart-slice.cursor {
+  .chart-slice.cursor,
+  .chart-chord-arc.cursor,
+  .chart-chord-ribbon.cursor {
     fill: Highlight;
   }
 
