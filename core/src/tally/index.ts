@@ -62,4 +62,6 @@ export type {
   Times,
   Undated,
 } from './time.ts';
+export { DAY_HOURS, WEEK_DAYS, WEEK_HOURS, WeekFold } from './week.ts';
+export type { Week } from './week.ts';
 export type { Skipped } from './skipped.ts';
