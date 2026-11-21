@@ -1,0 +1,48 @@
+/**
+ * @fileoverview Checks of slope charts in real layout: a line per region from
+ * its 2024 end to its 2025 end in the accent, 2 px, an 8 px dot at each end,
+ * West of no 2025 row one dot and no line, every dot inside its window; and
+ * the same in a narrow window.
+ *
+ * They open the workspace smoke.js wrote of four regions' revenue.
+ */
+
+import type { Check } from "./check.ts";
+
+/** The workspace smoke.js wrote of two slope charts. */
+const SLOPED = process.env["UNO_SMOKE_SLOPED"] ?? "";
+
+/** A line's width, and a dot's radius, in px: the dataviz skill's. */
+const LINE = 2;
+const RADIUS = 4;
+
+export const CHART_SLOPE: Check[] = [
+  {
+    name: "a slope chart draws a line per region between its two years in the accent, a dot at each end, West one dot",
+    send: ["menu:open-path", SLOPED],
+    shot: "chart-slope",
+    script: `
+      const windows = () => [...document.querySelectorAll(".chart")];
+      const drawn = () => windows().length === 2 && windows().every((win) => win.querySelector(".chart-slope-line") !== null);
+      if (!(await arrives(drawn))) return "the windows draw no slopes";
+      const rect = (at) => at.getBoundingClientRect();
+      const probe = document.createElement("div");
+      probe.style.color = "var(--accent)";
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      for (const win of windows()) {
+        const lines = [...win.querySelectorAll(".chart-slope-line")];
+        const dots = [...win.querySelectorAll(".chart-slope-dot")];
+        if (lines.length !== 3 || dots.length !== 7) return lines.length + " lines and " + dots.length + " dots";
+        for (const line of lines) {
+          const style = getComputedStyle(line);
+          if (style.stroke !== accent || parseFloat(style.strokeWidth) !== ${LINE}) return "a line is " + style.strokeWidth + " of " + style.stroke;
+        }
+        if (dots.some((dot) => Number(dot.getAttribute("r")) !== ${RADIUS} || getComputedStyle(dot).fill !== accent)) return "a dot is not an 8 px accent dot";
+        if (dots.some((dot) => rect(dot).left < rect(win).left || rect(dot).right > rect(win).right)) return "a dot stands past the window";
+      }
+      return "";
+    `,
+  },
+];

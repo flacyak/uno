@@ -1,13 +1,16 @@
 /**
  * @fileoverview A slope chart's rows: each value's two ends as the chart
- * measures them, the first SLOPES_AT_MOST of them, and the rest counted.
+ * measures them, the first SLOPES_AT_MOST of them, and the rest counted; and
+ * a line per value between its ends, on one scale over both.
+ *
+ * @vitest-environment happy-dom
  */
 
 import { expect, test } from "vite-plus/test";
 
 import type { SlopePlot } from "@document";
 import type { SlopeTally } from "@engine";
-import { SLOPES_AT_MOST, sloped } from "@renderer/chart/slope";
+import { SLOPES_AT_MOST, sloped, slopes } from "@renderer/chart/slope";
 import type { Ended } from "@tally";
 
 const REGION = { col: 0, header: "region" };
@@ -66,4 +69,33 @@ test("a slope's rows are its first SLOPES_AT_MOST values, the rest counted with 
   expect(rows).toHaveLength(SLOPES_AT_MOST);
   expect(rows[0]!.ends).toStrictEqual([undefined, undefined]);
   expect(more).toBe(5);
+});
+
+/** Where `drawn`'s marks of class `cls` stand up the plot, as thirds of it from its foot. */
+const thirds = (drawn: Element, cls: string, at: "y1" | "y2" | "cy") =>
+  [...drawn.querySelectorAll(`.${cls}`)].map((mark) =>
+    Math.round((1 - parseFloat(mark.getAttribute(at)!) / 100) * 3),
+  );
+
+test("a slope's lines run from each value's From end to its To end on one scale over both, a dot at each end over every line", () => {
+  const tally = tallyOf([
+    ["East", end(10, 1), end(30, 1)],
+    ["West", end(40, 1), end(20, 1)],
+  ]);
+  // 10 to 40 on an axis of 10 to 40.
+  const drawn = slopes(sloped(SUMS, tally));
+  expect(thirds(drawn, "chart-slope-line", "y1")).toStrictEqual([0, 3]);
+  expect(thirds(drawn, "chart-slope-line", "y2")).toStrictEqual([2, 1]);
+  const dots = [...drawn.querySelectorAll("svg > *")].slice(-4);
+  expect(dots.every((dot) => dot.classList.contains("chart-slope-dot"))).toBe(true);
+});
+
+test("a value with rows at one end only draws its one dot and no line, and one standing nowhere draws nothing", () => {
+  const tally = tallyOf([
+    ["East", end(10, 1), NONE],
+    ["West", end(20, 1, 0), end(40, 1)],
+  ]);
+  const drawn = slopes(sloped({ ...SUMS, measure: "mean" }, tally));
+  expect(drawn.querySelectorAll(".chart-slope-line")).toHaveLength(0);
+  expect(thirds(drawn, "chart-slope-dot", "cy")).toStrictEqual([0, 3]);
 });
