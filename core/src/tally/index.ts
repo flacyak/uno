@@ -4,6 +4,7 @@
 
 export { coarsen } from './coarsen.ts';
 export { ExactSum } from './exact.ts';
+export { LEVEL_FINEST, cellAt, parentOf } from './quad.ts';
 export type { SavedSum } from './exact.ts';
 export {
   Count,
