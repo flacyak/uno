@@ -1,5 +1,5 @@
 /**
- * @fileoverview A scatter's points, from a sample of rows chosen by number.
+ * @fileoverview A sample of rows chosen by number, with their numbers.
  */
 
 import type { Mark } from '@num';
@@ -21,8 +21,6 @@ const KEPT_AT_MOST = 2 * SCATTER_POINTS_AT_MOST;
 // A page holds the least and most of this many blocks in 8 KB, so a fold of
 // one block stays small, and one of every block holds 32 bytes a block.
 const PAGE_BLOCKS = 256;
-/** A point's columns, x and y. */
-const POINT_COLUMNS = 2;
 
 /** A row's x and y, both numbers. */
 export interface Point {
@@ -36,7 +34,14 @@ export interface Marks {
   y: Mark;
 }
 
-/** What a fold holds, read. */
+/** Sample of any number of columns, with a number of each in place of x and y. */
+export interface Sampled extends Omit<Sample, 'x' | 'y' | 'least' | 'most'> {
+  values: number[][];
+  least: number[];
+  most: number[];
+}
+
+/** What a scatter's fold holds, read. */
 export interface Sample {
   /** At most SCATTER_POINTS_AT_MOST, in rank order: point i is x[i], y[i]. */
   x: number[];
@@ -116,18 +121,19 @@ class Page {
 }
 
 /**
- * SampleFold keeps a scatter's points: those of the SCATTER_POINTS_AT_MOST
+ * SampleFold keeps the numbers of any number of columns, a scatter's x and y
+ * among them, of the SCATTER_POINTS_AT_MOST
  * rows of least rowRank, which hangs on the row number alone, so blocks of
- * rows fold alone or in any order into the same sample. A row whose x or y
- * is not a number keeps its place in the sample, with no point. Beside it,
+ * rows fold alone or in any order into the same sample. A row with a cell
+ * that is not a number keeps its place in the sample, with none. Beside it,
  * a fold counts every row it plots and every row it leaves out, and keeps
- * each block's least and most x and y, so a chart's axes take in every row.
- * It reads x and y with the decimal marks of their columns, `marks`.
+ * each block's least and most of each column, so a chart's axes take in every row.
+ * It reads column k with the decimal mark `marks[k]`.
  */
 export class SampleFold {
-  readonly marks: Marks;
-  /** Each kept row's point, or undefined when the row is left out. */
-  private readonly kept = new Map<number, Point | undefined>();
+  readonly marks: readonly Mark[];
+  /** Each kept row's numbers, or undefined when the row is left out. */
+  private readonly kept = new Map<number, number[] | undefined>();
   /** The row ranked last when kept was last cut. No row past it is sampled. */
   private last: number | undefined;
   private plotted = 0;
@@ -137,26 +143,25 @@ export class SampleFold {
   /** The blocks whose least or most an edit took back. */
   private readonly stales = new Set<number>();
 
-  constructor(marks: Marks) {
-    this.marks = marks;
+  constructor(marks: readonly Mark[]) {
+    this.marks = [...marks];
   }
 
-  /** add folds `row` of `block`, whose x cell is `xCell` and y `yCell`. */
-  add(block: number, row: number, xCell: string, yCell: string): void {
-    const point = this.count(xCell, yCell, 1);
-    const at = point && [point.x, point.y];
-    if (at !== undefined) this.page(block).widen(block, at, at);
-    this.keep(row, point);
+  /** add folds `row` of `block`, whose cells are `cells`, a column each. */
+  add(block: number, row: number, ...cells: string[]): void {
+    const values = this.count(cells, 1);
+    if (values !== undefined) this.page(block).widen(block, values, values);
+    this.keep(row, values);
   }
 
   /**
    * remove takes back a row that add folded, so an edit can add the row's
    * new cells. A row on its block's least or most leaves the block stale.
    */
-  remove(block: number, row: number, xCell: string, yCell: string): void {
-    const point = this.count(xCell, yCell, -1);
+  remove(block: number, row: number, ...cells: string[]): void {
+    const values = this.count(cells, -1);
     const page = this.page(block);
-    if (point !== undefined && page.touches(block, [point.x, point.y])) {
+    if (values !== undefined && page.touches(block, values)) {
       this.stales.add(block);
       // A block of a coarse page holds the page's least and most, which
       // only every block of it folded again tells apart.
@@ -173,8 +178,8 @@ export class SampleFold {
    * forget takes back a row as remove does, for a block that refold empties
    * and that folds again whole, so it leaves no block stale.
    */
-  forget(row: number, xCell: string, yCell: string): void {
-    this.count(xCell, yCell, -1);
+  forget(row: number, ...cells: string[]): void {
+    this.count(cells, -1);
     this.kept.delete(row);
   }
 
@@ -183,7 +188,7 @@ export class SampleFold {
     this.plotted += other.plotted;
     this.skipped.blank += other.skipped.blank;
     this.skipped.unparsed += other.skipped.unparsed;
-    for (const [row, point] of other.kept) this.keep(row, point);
+    for (const [row, values] of other.kept) this.keep(row, values);
     for (const [first, page] of other.pages) {
       const mine = this.page(first);
       for (let at = first; at < first + PAGE_BLOCKS; at++) {
@@ -206,11 +211,11 @@ export class SampleFold {
 
   /** saved is what the fold holds, with each page's least and most. */
   saved(): SavedSample {
-    const kept = [...this.kept].map(([row, p]): SavedSample['kept'][number] =>
-      p === undefined ? [row] : [row, p.x, p.y],
+    const kept = [...this.kept].map(([row, v]): SavedSample['kept'][number] =>
+      v === undefined ? [row] : [row, v[0]!, v[1]!],
     );
     const pages = [...this.pages].flatMap(([first, page]) => {
-      const [least, most] = extentOf([page], POINT_COLUMNS);
+      const [least, most] = extentOf([page], this.marks.length);
       const [leastOf, mostOf] = [page.least[0]!, page.most[0]!];
       const span = 1 + leastOf.findLastIndex((v, i) => v <= mostOf[i]!);
       const [l, m] = [pointOf(least), pointOf(most)];
@@ -219,7 +224,8 @@ export class SampleFold {
     const { last, plotted } = this;
     const skipped = { ...this.skipped };
     const counts = { last, plotted, skipped, stale: this.stale() };
-    return { marks: { ...this.marks }, kept, ...counts, pages };
+    const [x, y] = this.marks;
+    return { marks: { x: x!, y: y! }, kept, ...counts, pages };
   }
 
   /**
@@ -239,9 +245,9 @@ export class SampleFold {
     if (!kept.every(isKept) || !Array.isArray(stale) || !stale.every(isCount))
       return undefined;
     if (!Array.isArray(pages) || !pages.every(isPage)) return undefined;
-    const fold = new SampleFold({ x, y });
+    const fold = new SampleFold([x, y]);
     for (const k of kept)
-      fold.kept.set(k[0], k.length === 3 ? { x: k[1], y: k[2] } : undefined);
+      fold.kept.set(k[0], k.length === 3 ? [k[1], k[2]] : undefined);
     fold.last = last;
     fold.plotted = plotted;
     Object.assign(fold.skipped, skipped);
@@ -256,26 +262,27 @@ export class SampleFold {
   }
 
   /** snapshot reads the fold as plain numbers. */
-  snapshot(): Sample {
+  snapshot(): Sampled {
     const rows = [...this.kept.keys()].sort(byRank);
-    const points = rows
-      .slice(0, SCATTER_POINTS_AT_MOST)
-      .flatMap((row) => this.kept.get(row) ?? []);
+    const values = rows.slice(0, SCATTER_POINTS_AT_MOST).flatMap((row) => {
+      const v = this.kept.get(row);
+      return v === undefined ? [] : [[...v]];
+    });
     const [least, most] = this.extent();
+    const none = this.marks.map(() => 0);
     const seen = this.plotted > 0;
     return {
-      x: points.map((p) => p.x),
-      y: points.map((p) => p.y),
+      values,
       plotted: this.plotted,
-      least: seen ? pointOf(least) : { x: 0, y: 0 },
-      most: seen ? pointOf(most) : { x: 0, y: 0 },
+      least: seen ? least : none,
+      most: seen ? most : none,
       skipped: { ...this.skipped },
     };
   }
 
-  /** extent returns the least and most x and y of every block. */
+  /** extent returns the least and most of each column over every block. */
   private extent(): [number[], number[]] {
-    return extentOf(this.pages.values(), POINT_COLUMNS);
+    return extentOf(this.pages.values(), this.marks.length);
   }
 
   /** page returns the page that holds block `at`, made when it has none. */
@@ -283,16 +290,16 @@ export class SampleFold {
     const first = at - (at % PAGE_BLOCKS);
     let page = this.pages.get(first);
     if (page === undefined) {
-      page = new Page(POINT_COLUMNS);
+      page = new Page(this.marks.length);
       this.pages.set(first, page);
     }
     return page;
   }
 
-  /** keep holds a row's point, unless the row ranks past the sample. */
-  private keep(row: number, point: Point | undefined): void {
+  /** keep holds a row's numbers, unless the row ranks past the sample. */
+  private keep(row: number, values: number[] | undefined): void {
     if (this.last !== undefined && byRank(row, this.last) > 0) return;
-    this.kept.set(row, point);
+    this.kept.set(row, values);
     if (this.kept.size <= KEPT_AT_MOST) return;
     const rows = [...this.kept.keys()].sort(byRank);
     for (const past of rows.slice(SCATTER_POINTS_AT_MOST)) {
@@ -302,18 +309,15 @@ export class SampleFold {
   }
 
   /** count counts a row, or takes one back when `sign` is -1. */
-  private count(xCell: string, yCell: string, sign: 1 | -1): Point | undefined {
-    const x = parse(xCell, this.marks.x);
-    const y = parse(yCell, this.marks.y);
-    if (x === undefined || y === undefined) {
-      const word = (v: number | undefined, cell: string) =>
-        v === undefined && cell !== '';
-      const kind = word(x, xCell) || word(y, yCell) ? 'unparsed' : 'blank';
-      this.skipped[kind] += sign;
-      return undefined;
+  private count(cells: readonly string[], sign: 1 | -1): number[] | undefined {
+    const values = this.marks.map((mark, k) => parse(cells[k] ?? '', mark));
+    if (values.every((v) => v !== undefined)) {
+      this.plotted += sign;
+      return values;
     }
-    this.plotted += sign;
-    return { x, y };
+    const word = values.some((v, k) => v === undefined && cells[k] !== '');
+    this.skipped[word ? 'unparsed' : 'blank'] += sign;
+    return undefined;
   }
 }
 
@@ -329,11 +333,6 @@ function extentOf(
     page.most.forEach((c, k) => (most[k] = Math.max(most[k]!, ...c)));
   }
   return [least, most];
-}
-
-/** pointOf is the point of x and y. */
-function pointOf([x, y]: readonly number[]): Point {
-  return { x: x!, y: y! };
 }
 
 /** isKept says whether `v` is a kept row as a save writes it. */
@@ -355,4 +354,22 @@ function isPage(v: unknown): v is SavedSample['pages'][number] {
 /** isPoint says whether `v` is a point of two finite numbers. */
 function isPoint(v: unknown): v is Point {
   return isRecord(v) && Number.isFinite(v['x']) && Number.isFinite(v['y']);
+}
+
+/** pointOf is the point of a scatter's x and y. */
+function pointOf([x, y]: readonly number[]): Point {
+  return { x: x!, y: y! };
+}
+
+/** pointsOf reads a fold of a scatter's x and y as its points. */
+export function pointsOf(sampled: Sampled): Sample {
+  const { values, plotted, skipped } = sampled;
+  return {
+    x: values.map((v) => v[0]!),
+    y: values.map((v) => v[1]!),
+    plotted,
+    least: pointOf(sampled.least),
+    most: pointOf(sampled.most),
+    skipped,
+  };
 }

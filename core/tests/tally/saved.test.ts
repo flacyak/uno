@@ -18,6 +18,7 @@ import {
   PAIRS_AT_MOST,
   SPREAD_AT_MOST,
   SampleFold,
+  pointsOf,
   SpreadFold,
   SpreadsFold,
   SplitFold,
@@ -330,7 +331,7 @@ const PAGE_BLOCKS = 256;
 const BLOCK_ROWS = 4;
 /** Rows over two pages and a part of a third. */
 const PAGED_ROWS = (2 * PAGE_BLOCKS + 3) * BLOCK_ROWS;
-const POINTS = { x: 'point', y: 'point' } as const;
+const POINTS = ['point', 'point'] as const;
 
 /** paged is a row's x and y over PAGED_ROWS, with a word and a blank. */
 function paged(row: number): [string, string] {
@@ -361,7 +362,7 @@ test('a scatter fold saves the least and most of each page of blocks', () => {
   // Each page's least and most are those of its rows alone.
   for (const { first, span, least, most } of saved.pages) {
     const rows = range(first * BLOCK_ROWS, (first + span) * BLOCK_ROWS);
-    const alone = scattered(rows).snapshot();
+    const alone = pointsOf(scattered(rows).snapshot());
     expect({ least, most }).toEqual({ least: alone.least, most: alone.most });
   }
   expect(saved.kept.length).toBeGreaterThan(0);
@@ -917,7 +918,7 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
   ).toBe(GOLDEN.groups);
   const [units, revenue] = [column(UNITS), column(REVENUE)];
   const samples = (['point', 'comma'] as const).map((mark) => {
-    const fold = new SampleFold({ x: mark, y: mark });
+    const fold = new SampleFold([mark, mark]);
     units.forEach((x, r) =>
       fold.add(Math.floor(r / BLOCK_ROWS), r, x, revenue[r]!),
     );

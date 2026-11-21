@@ -32,7 +32,7 @@ import type {
 import { sources } from '@plugin';
 import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
-import { GroupsFold, SampleFold } from '@tally';
+import { GroupsFold, SampleFold, pointsOf } from '@tally';
 import { FIXTURE, bytes, sales } from './harness.ts';
 
 /** join turns a frame into the one value a socket would deliver. */
@@ -65,7 +65,7 @@ test('plain data is one text frame, and reads back equal', async () => {
 
 test("a chart's tally from either fold is plain data, and crosses as one text frame", async () => {
   const groups = new GroupsFold('sum', 'point');
-  const sample = new SampleFold({ x: 'point', y: 'point' });
+  const sample = new SampleFold(['point', 'point']);
   // A region, a revenue and a units cell, with a blank and a word left out.
   const rows: Array<[string, string, string]> = [
     ['North', '1.5', '2'],
@@ -93,7 +93,7 @@ test("a chart's tally from either fold is plain data, and crosses as one text fr
       t: 'sample',
       plot: { t: 'scatter', x: sum, y },
       coverage,
-      ...sample.snapshot(),
+      ...pointsOf(sample.snapshot()),
     },
   ];
   for (const tally of tallies) {

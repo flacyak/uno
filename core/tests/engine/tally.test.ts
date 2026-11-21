@@ -42,6 +42,7 @@ import {
   GroupsFold,
   LEVEL_BATCH,
   SampleFold,
+  pointsOf,
   SplitFold,
   SpreadFold,
   SpreadsFold,
@@ -248,10 +249,10 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   const coverage =
     rows === ROWS ? WHOLE : { rows, total: rows, complete: true };
   if (plot.t === 'scatter') {
-    const fold = new SampleFold({ x: 'point', y: 'point' });
+    const fold = new SampleFold(['point', 'point']);
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
-    return { t: 'sample', plot, coverage, ...fold.snapshot() };
+    return { t: 'sample', plot, coverage, ...pointsOf(fold.snapshot()) };
   }
   if (plot.t === 'stack') {
     const { by, split, sum } = plot;

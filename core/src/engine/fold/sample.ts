@@ -5,7 +5,7 @@
 
 import type { Plot } from '@document';
 import type { Mark } from '@num';
-import { SampleFold } from '@tally';
+import { SampleFold, pointsOf } from '@tally';
 import { markOf, placeOf } from './folder.ts';
 import type { Block, Folder, MakeFolder } from './folder.ts';
 
@@ -27,7 +27,7 @@ function sampled(
   x: number,
   y: number,
   marks: readonly Mark[],
-  sample = new SampleFold({ x: markOf(marks, x), y: markOf(marks, y) }),
+  sample = new SampleFold([markOf(marks, x), markOf(marks, y)]),
 ): Folder {
   /** into adds the rows of `block` to `fold`. */
   const into = (fold: SampleFold, block: number, rows: Block) => {
@@ -55,7 +55,7 @@ function sampled(
       sample.add(block, row, after[x] ?? '', after[y] ?? '');
     },
     readsWith: (now) =>
-      sample.marks.x === markOf(now, x) && sample.marks.y === markOf(now, y),
+      sample.marks[0] === markOf(now, x) && sample.marks[1] === markOf(now, y),
     again: (now) => sampled(x, y, now),
     restored(saved) {
       const back = SampleFold.restored(saved);
@@ -67,7 +67,7 @@ function sampled(
       t: 'sample',
       plot,
       coverage,
-      ...sample.snapshot(),
+      ...pointsOf(sample.snapshot()),
     }),
     /** Each block whose least or most an edit took back is folded alone. */
     async mend(read) {
