@@ -33,56 +33,63 @@ afterEach(() => {
   done = undefined;
 });
 
-async function open(): Promise<{ engine: Engine; src: SourceHandle }> {
-  const c = connect(TUNING);
-  done = c.done;
-  const src = await openOne(c.engine, {
+/** opens the file once more in `engine` and waits for its index. */
+async function open(engine: Engine): Promise<SourceHandle> {
+  const src = await openOne(engine, {
     name: 'big.csv',
     blob: new Blob([OBJECT]),
   });
   await indexed(src);
-  return { engine: c.engine, src };
+  return src;
 }
 
-/** fastest runs the find SAMPLES times and returns the quickest. */
-async function fastest(
-  src: SourceHandle,
-): Promise<{ found: Found; ms: number }> {
-  let best: { found: Found; ms: number } | undefined;
-  for (let i = 0; i < SAMPLES; i++) {
-    const started = performance.now();
-    const found = await src.find({
-      col: REGION,
-      from: 0,
-      dir: 1,
-      match: { t: 'text', text: NOWHERE },
-    });
-    const ms = performance.now() - started;
-    if (best === undefined || ms < best.ms) best = { found, ms };
-  }
-  return best!;
-}
-
-test('a find on one column costs the same beside a bound column', async () => {
-  const { engine, src } = await open();
-
-  const plain = await fastest(src);
-  // A find skips the row it starts from, so it searches one row fewer.
-  expect(plain.found).toEqual({
-    row: null,
-    searched: src.progress.rows - 1,
-    complete: true,
+/** timed runs one find to the end of a source's region column. */
+async function timed(src: SourceHandle): Promise<{ found: Found; ms: number }> {
+  const started = performance.now();
+  const found = await src.find({
+    col: REGION,
+    from: 0,
+    dir: 1,
+    match: { t: 'text', text: NOWHERE },
   });
+  return { found, ms: performance.now() - started };
+}
 
-  engine.mode(true);
-  await src.edit({
+/** quicker keeps the faster of two runs. */
+function quicker<T extends { ms: number }>(best: T | undefined, run: T): T {
+  return best === undefined || run.ms < best.ms ? run : best;
+}
+
+// The plain and the bound finds take turns, so a slow stretch on a shared
+// runner slows both rather than only the side it falls on.
+test('a find on one column costs the same beside a bound column', async () => {
+  const c = connect(TUNING);
+  done = c.done;
+  const plainSrc = await open(c.engine);
+  const boundSrc = await open(c.engine);
+  c.engine.mode(true);
+  await boundSrc.edit({
     op: Op.Bind,
     row: NO_ROW,
     col: CHANNEL,
     now: 'revenue / units',
   });
-  const bound = await fastest(src);
-  expect(bound.found).toEqual(plain.found);
+
+  let plain: { found: Found; ms: number } | undefined;
+  let bound: { found: Found; ms: number } | undefined;
+  for (let i = 0; i < SAMPLES; i++) {
+    plain = quicker(plain, await timed(plainSrc));
+    bound = quicker(bound, await timed(boundSrc));
+  }
+  // A find skips the row it starts from, so it searches one row fewer.
+  expect(plain?.found).toEqual({
+    row: null,
+    searched: plainSrc.progress.rows - 1,
+    complete: true,
+  });
+  expect(bound?.found).toEqual(plain?.found);
+  if (plain === undefined || bound === undefined)
+    throw new Error('no find was timed');
 
   const times = bound.ms / plain.ms;
   record('find', [
