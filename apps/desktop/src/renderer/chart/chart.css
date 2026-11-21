@@ -1215,6 +1215,15 @@
   fill-rule: evenodd;
 }
 
+/* The hatch chord.ts draws, which every other slot wears under forced colours. */
+.chart-chord-hatch-ground {
+  fill: Canvas;
+}
+
+.chart-chord-hatch-line {
+  fill: CanvasText;
+}
+
 /* A ribbon wears its `--key` over a ring of the window's ground under it, 2 px
  * past its edge, so one over another stands apart where they cross. */
 .chart-chord-ribbon {
@@ -1406,6 +1415,29 @@
     border-color: CanvasText;
     background: linear-gradient(CanvasText 0 0) center / 100% 2px no-repeat;
     forced-color-adjust: none;
+  }
+
+  /* A chord's arcs and ribbons, every other slot hatched and Other grey, and
+   * a ribbon's ring the page's ground. */
+  .chart-chord-arc,
+  .chart-chord-ribbon {
+    fill: CanvasText;
+    stroke: Canvas;
+    forced-color-adjust: none;
+  }
+
+  .chart-chord-arc {
+    stroke: none;
+  }
+
+  .chart-chord-arc.hatched,
+  .chart-chord-ribbon.hatched {
+    fill: var(--hatch);
+  }
+
+  .chart-chord-arc.other,
+  .chart-chord-ribbon.other {
+    fill: GrayText;
   }
 
   .chart-median,

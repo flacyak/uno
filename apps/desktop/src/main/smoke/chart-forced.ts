@@ -33,6 +33,12 @@ const KINDS: readonly Forced[] = [
   },
   { kind: "slope", workspace: "UNO_SMOKE_SLOPED", marks: ".chart-slope-dot", worn: "fill" },
   {
+    kind: "chord",
+    workspace: "UNO_SMOKE_CHORDED",
+    marks: ".chart-chord-arc:not(.hatched, .other)",
+    worn: "fill",
+  },
+  {
     kind: "parallel",
     workspace: "UNO_SMOKE_PARALLELED",
     marks: ".chart-parallel-line",

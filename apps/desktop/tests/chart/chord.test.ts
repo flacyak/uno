@@ -363,6 +363,35 @@ test("Right and Left step a chord's arcs, End to the last, and Down and Up along
   expect(step!("Home", 5)).toBeUndefined();
 });
 
+test("where no colour reads, every other slot's arc and ribbons wear a hatch of the chart's own, and Other's grey", () => {
+  const tally = tallyOf(
+    ["ORD", "JFK"],
+    [
+      [0, 2, 0],
+      [1, 0, 1],
+      [1, 0, 0],
+    ],
+  );
+  const [one, two] = [chord(ROWS, tally), chord(ROWS, tally)];
+  const worn = (box: HTMLElement, marks: string) =>
+    [...box.querySelectorAll(marks)].map((mark) => mark.getAttribute("class"));
+  expect(worn(one, ".chart-chord-arc")).toStrictEqual([
+    "chart-chord-arc",
+    "chart-chord-arc hatched",
+    "chart-chord-arc other",
+  ]);
+  // ORD sends JFK more than JFK sends it, Other sends ORD its one, and JFK sends Other its one.
+  expect(worn(one, ".chart-chord-ribbon")).toStrictEqual([
+    "chart-chord-ribbon",
+    "chart-chord-ribbon other",
+    "chart-chord-ribbon hatched",
+  ]);
+  const hatch = (box: HTMLElement) => box.style.getPropertyValue("--hatch");
+  const id = one.querySelector("pattern")!.id;
+  expect(hatch(one)).toBe(`url(#${id})`);
+  expect(hatch(two)).not.toBe(hatch(one));
+});
+
 test("a chord not laid out yet places no arc or ribbon, to place them once it is", () => {
   for (const mark of fitted(AIRPORTS, 0).querySelectorAll(
     ".chart-chord-arc, .chart-chord-ribbon",

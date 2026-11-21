@@ -162,6 +162,7 @@ export function chord(plot: ChordPlot, tally: ChordTally): HTMLElement {
   // The widest first, so a narrower one stands over it, ringed in the window's ground.
   for (const { places, ends, key } of ribbons(plot, tally)) {
     const ribbon = mark("path", "chart-chord-ribbon");
+    ribbon.classList.add(...wornBy(places[0], tally.nodes.length));
     ribbon.style.setProperty("--key", key);
     const arcsOf = places.flatMap((place) => [spanOf(place).from, spanOf(place).to]);
     Object.assign(ribbon.dataset, { ends: ends.flat().join(" "), arcs: arcsOf.join(" ") });
@@ -171,6 +172,7 @@ export function chord(plot: ChordPlot, tally: ChordTally): HTMLElement {
   const list = el("ul", "chart-legend chart-scrolls themed-bar");
   for (const { place, from, to, key } of drawn) {
     const arc = mark("path", "chart-chord-arc");
+    arc.classList.add(...wornBy(place, tally.nodes.length));
     arc.style.setProperty("--key", key);
     Object.assign(arc.dataset, { from: `${from}`, to: `${to}` });
     ring.append(arc);
@@ -183,10 +185,49 @@ export function chord(plot: ChordPlot, tally: ChordTally): HTMLElement {
   box.style.setProperty("--label-gap", `${LABEL_GAP}px`);
   // A ribbon's ring is as wide as the gap between two arcs.
   box.style.setProperty("--ribbon-ring", `${ARC_GAP}px`);
+  box.style.setProperty("--hatch", hatchIn(ring));
   const disc = el("div", "chart-pie-disc");
   disc.append(ring, ...labels);
   box.append(disc, list);
   return box;
+}
+
+/**
+ * wornBy gives what a place's marks wear where no colour reads, under forced
+ * colours: every other slot a hatch, so two arcs side by side differ, and
+ * Other the grey of text that is off.
+ */
+function wornBy(place: number, nodes: number): string[] {
+  if (place === nodes) return ["other"];
+  return place % 2 === 1 ? ["hatched"] : [];
+}
+
+/** How many hatches the page has made, so each drawing's pattern has an id of its own. */
+let hatches = 0;
+
+/** How far apart a hatch's lines stand, in px: two gaps between arcs, and how wide each is, one px. */
+const HATCH_PITCH = 2 * ARC_GAP;
+const HATCH_LINE = 1;
+
+/** hatchIn gives `ring` the hatch every other slot wears under forced colours, lines at 45 degrees on the page's ground, and the url that fills with it. */
+function hatchIn(ring: SVGSVGElement): string {
+  const pattern = mark("pattern", "");
+  pattern.id = `chart-chord-hatch-${++hatches}`;
+  const sized = { width: `${HATCH_PITCH}`, height: `${HATCH_PITCH}` };
+  const placed = { patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)", ...sized };
+  for (const [name, value] of Object.entries(placed)) pattern.setAttribute(name, value);
+  const [ground, line] = [
+    mark("rect", "chart-chord-hatch-ground"),
+    mark("rect", "chart-chord-hatch-line"),
+  ];
+  for (const [name, value] of Object.entries(sized)) ground.setAttribute(name, value);
+  for (const [name, value] of Object.entries({ ...sized, width: `${HATCH_LINE}` }))
+    line.setAttribute(name, value);
+  pattern.append(ground, line);
+  const defs = mark("defs", "");
+  defs.append(pattern);
+  ring.append(defs);
+  return `url(#${pattern.id})`;
 }
 
 /** at writes `n` px as a path holds it, to PX_SCALE. */
