@@ -617,9 +617,41 @@
  * end its 8 px marker, ringed 2 px in the window's ground painted under it. */
 .chart-slope {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template:
+    auto minmax(0, 1fr) auto / min(var(--from-wide), 25%) minmax(0, 1fr)
+    min(var(--to-wide), 40%);
+  gap: var(--tip-gap);
   height: 100%;
   padding: var(--inset);
+  font-size: 11px;
+}
+
+/* The states stand over their ends, From's ending at the left axis and To's
+ * starting at the right, in the caption's ink; a line of the values left out
+ * runs under the plot. */
+.chart-slope-states {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  color: var(--ink-2);
+}
+
+.chart-slope-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-slope-state:first-child {
+  text-align: end;
+}
+
+.chart-slope-state:last-child {
+  grid-column: 3;
+}
+
+.chart-slope > .chart-bars-line {
+  grid-column: 1 / -1;
 }
 
 .chart-slope-plot {

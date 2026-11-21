@@ -7,9 +7,12 @@
 
 import type { SlopePlot } from "@document";
 import type { SlopeTally } from "@engine";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import type { Ended } from "@tally";
 import { axis } from "./axes.ts";
+import { TIP_GAP } from "./bars.ts";
 import { BARS_INSET } from "./rows.ts";
 import { POINT_RADIUS, gridline, mark, percent } from "./scatter.ts";
 
@@ -57,6 +60,12 @@ export function sloped(plot: SlopePlot, tally: SlopeTally): Slopes {
   return { rows: rows.slice(0, SLOPES_AT_MOST), states: [plot.from, plot.to], more };
 }
 
+/** Splits a name into the letters a reader sees, each a mono character. */
+const LETTERS = new Intl.Segmenter();
+
+/** wide gives the characters `text` takes, mono. */
+const wide = (text: string): number => [...LETTERS.segment(text)].length;
+
 /** line gives a mark of class `cls` from `x1`, `y1` to `x2`, `y2` of the plot. */
 function line(cls: string, x1: string, y1: string, x2: string, y2: string): SVGLineElement {
   const made = mark("line", cls);
@@ -65,12 +74,16 @@ function line(cls: string, x1: string, y1: string, x2: string, y2: string): SVGL
 }
 
 /**
- * slopes draws `rows` on two axes, a line per value between its ends on one
- * scale over every end, and a dot at each end, over every line.
+ * slopes draws `rows` on two axes named by `states`, a line per value between
+ * its ends on one scale over every end, a dot at each end, over every line,
+ * and a line under them counting the `more` values left out.
  */
-export function slopes({ rows }: Slopes): HTMLElement {
+export function slopes({ rows, states, more }: Slopes): HTMLElement {
   const box = el("div", "chart-slope");
   box.style.setProperty("--inset", `${BARS_INSET}px`);
+  box.style.setProperty("--tip-gap", `${TIP_GAP}px`);
+  box.style.setProperty("--from-wide", `${wide(states[0])}ch`);
+  box.style.setProperty("--to-wide", `${wide(states[1])}ch`);
   box.style.setProperty("--ring", `${RING}px`);
   box.style.setProperty("--dot-reach", `${POINT_RADIUS + RING}px`);
   const ends = rows.flatMap(({ ends: both }) => both.filter((at) => at !== undefined));
@@ -98,6 +111,9 @@ export function slopes({ rows }: Slopes): HTMLElement {
   }
   // Every dot stands over every line, so no line runs across another's end.
   plot.append(...dots);
-  box.append(plot);
+  const named = el("div", "chart-slope-states");
+  named.append(...states.map((state) => el("bdi", "chart-slope-state from-file", state)));
+  box.append(named, el("div"), plot);
+  if (more > 0) box.append(el("div", "chart-bars-line", m.chart_bars_more({ count: num(more) })));
   return box;
 }

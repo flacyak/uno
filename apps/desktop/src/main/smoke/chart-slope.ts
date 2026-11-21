@@ -1,8 +1,8 @@
 /**
  * @fileoverview Checks of slope charts in real layout: a line per region from
  * its 2024 end to its 2025 end in the accent, 2 px, an 8 px dot at each end,
- * West of no 2025 row one dot and no line, every dot inside its window; and
- * the same in a narrow window.
+ * West of no 2025 row one dot and no line, every dot inside its window, and
+ * the years named over the ends; and the same in a narrow window.
  *
  * They open the workspace smoke.js wrote of four regions' revenue.
  */
@@ -18,7 +18,7 @@ const RADIUS = 4;
 
 export const CHART_SLOPE: Check[] = [
   {
-    name: "a slope chart draws a line per region between its two years in the accent, a dot at each end, West one dot",
+    name: "a slope chart draws a line per region between its two years in the accent, a dot at each end, West one dot, the years over the ends",
     send: ["menu:open-path", SLOPED],
     shot: "chart-slope",
     script: `
@@ -41,6 +41,9 @@ export const CHART_SLOPE: Check[] = [
         }
         if (dots.some((dot) => Number(dot.getAttribute("r")) !== ${RADIUS} || getComputedStyle(dot).fill !== accent)) return "a dot is not an 8 px accent dot";
         if (dots.some((dot) => rect(dot).left < rect(win).left || rect(dot).right > rect(win).right)) return "a dot stands past the window";
+        const plot = rect(win.querySelector(".chart-slope-plot"));
+        const [from, to] = [...win.querySelectorAll(".chart-slope-state")].map(rect);
+        if (from.right > plot.left || to.left < plot.right) return "a year stands over the plot, not over its end";
       }
       return "";
     `,

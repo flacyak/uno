@@ -99,3 +99,17 @@ test("a value with rows at one end only draws its one dot and no line, and one s
   expect(drawn.querySelectorAll(".chart-slope-line")).toHaveLength(0);
   expect(thirds(drawn, "chart-slope-dot", "cy")).toStrictEqual([0, 3]);
 });
+
+test("a slope names its states over its ends, as wide as their names, and a line counts the values left out", () => {
+  const values = Array.from({ length: SLOPES_AT_MOST + 1 }, (_, i): [string, Ended, Ended] => [
+    `v${i}`,
+    end(i, 1),
+    end(i, 1),
+  ]);
+  const drawn = slopes(sloped({ ...SUMS, to: "2025 plan" }, tallyOf(values)));
+  const states = [...drawn.querySelectorAll(".chart-slope-state")].map((s) => s.textContent);
+  expect(states).toStrictEqual(["2024", "2025 plan"]);
+  const wides = ["--from-wide", "--to-wide"].map((at) => drawn.style.getPropertyValue(at));
+  expect(wides).toStrictEqual(["4ch", "9ch"]);
+  expect(drawn.querySelector(".chart-bars-line")?.textContent).toBe("+1 more");
+});
