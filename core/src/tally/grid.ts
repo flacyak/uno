@@ -7,6 +7,7 @@ import { parse } from '@num';
 import type { Mark } from '@num';
 
 import { coarsen } from './coarsen.ts';
+import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
 import { Count, counted } from './groups.ts';
 import {
@@ -23,6 +24,9 @@ import { restoredCount } from './time.ts';
 
 /** The most cells a fold holds before every four merge into one. */
 export const CELLS_AT_MOST = 8_192;
+
+/** The most cells a tally sends while its pass runs, so a reading tally stays small. */
+export const CELLS_SENT_READING = CELLS_AT_MOST / 2;
 
 /** How a map's coordinate columns read: each with its own decimal mark. */
 export interface Coords {
@@ -168,11 +172,23 @@ export class GridFold {
     return fold;
   }
 
-  /** read is what the fold holds, as plain numbers. */
-  read(): Cells {
-    const cells = [...this.cells].sort(([a], [b]) => a - b);
+  /**
+   * read is what the fold holds, as plain numbers, its cells merged into
+   * their parents a level at a time, exactly, until at most `atMost` remain.
+   * The fold keeps its own cells.
+   */
+  read(atMost = CELLS_AT_MOST): Cells {
+    let level = this.level;
+    let held = this.cells;
+    if (held.size > atMost)
+      held = new Map([...held].map(([k, c]) => [k, copied(c)]));
+    while (held.size > atMost) {
+      const finer = level--;
+      coarsen(held, (k) => parentOf(k, finer));
+    }
+    const cells = [...held].sort(([a], [b]) => a - b);
     return {
-      level: this.level,
+      level,
       keys: cells.map(([key]) => key),
       rows: cells.map(([, c]) => c.rows),
       sum: this.mark === undefined ? [] : cells.map(([, c]) => c.sum.value()),
@@ -211,4 +227,11 @@ export class GridFold {
     }
     return undefined;
   }
+}
+
+/** copied is a count of its own that holds what `count` holds. */
+function copied(count: Count): Count {
+  const copy = Object.assign(new Count(), count, { sum: new ExactSum() });
+  copy.sum.merge(count.sum);
+  return copy;
 }
