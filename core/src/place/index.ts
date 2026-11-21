@@ -10,6 +10,7 @@
  */
 
 import table from './data/places.json' with { type: 'json' };
+import { headerWords } from './words.ts';
 
 /** A country as places.json holds it. */
 interface Country {
@@ -111,17 +112,6 @@ export function readPlace(v: string, reading: Reading): string | undefined {
 /** The least share of a sample's cells a reading must read to be inferred. */
 export const PLACE_SHARE_LEAST = 0.8;
 
-// A header's words: runs of letters, split again where lower case turns
-// upper, so `pickupLat` is `pickup` and `lat`.
-const LETTERS = /\p{L}+/gu;
-const CASE_TURN = /(\p{Ll})(\p{Lu})/gu;
-
-/** headerWords is `header` split into its words, in lower case. */
-export function headerWords(header: string): string[] {
-  const words = header.replace(CASE_TURN, '$1 $2').match(LETTERS) ?? [];
-  return words.map((w) => w.toLowerCase());
-}
-
 /** The header words that name each level, in English, Spanish and Portuguese. */
 const LEVEL_WORDS: Record<Reading['level'], ReadonlySet<string>> = {
   country: new Set([
@@ -183,3 +173,7 @@ export function inferPlace(
   }
   return most >= PLACE_SHARE_LEAST * cells.length ? best : undefined;
 }
+
+export { LON_AT_MOST, inferCoord, pairCoords } from './coord.ts';
+export { headerWords } from './words.ts';
+export type { Coord, CoordPair } from './coord.ts';
