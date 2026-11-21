@@ -14,7 +14,7 @@ import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
 import { fullName } from "./periods.ts";
 import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
-import { BARS_INSET, row, rowsIn } from "./rows.ts";
+import { row, rowsIn, trackWide } from "./rows.ts";
 import { TICK_GAP } from "./scatter.ts";
 import { ticksOf } from "./timeAxis.ts";
 import { among, named } from "./tooltip.ts";
@@ -27,18 +27,15 @@ export const HEAT_ROWS_AT_MOST = 12;
 /** The least room a period takes across, in px: a 4 px cell and the dataviz skill's 2 px gap. */
 export const HEAT_PITCH_LEAST = 6;
 
-/** The share of the plot the values' names take at most, and the gap after them, as bars' are. */
-const NAMES_MOST = 0.4;
-const NAMES_GAP = 8;
-
 /** The rows the legend over the cells and the periods' labels under them take. */
 const ROWS_BESIDE = 2;
 
 /** cellsWide gives how wide the cells of `tally` stand in `room`, after its values' names. */
 function cellsWide(tally: HeatTally, room: PlotRoom): number {
-  const inside = room.width - 2 * BARS_INSET;
-  const longest = Math.max(0, ...tally.values.map(({ value }) => value.length));
-  return inside - Math.min(longest * room.ch, NAMES_MOST * inside) - NAMES_GAP;
+  return trackWide(
+    tally.values.map(({ value }) => value),
+    room,
+  );
 }
 
 /** heatLevel gives the finest size of `tally` whose periods each get HEAT_PITCH_LEAST px of `room`, or the coarsest. */

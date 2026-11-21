@@ -1,8 +1,8 @@
 /**
  * @fileoverview The classes a heatmap wears an amount in: four equal steps
  * from zero up and four down, a round width, whole for counts, the largest
- * value always in the last, each value in the class whose break it reaches;
- * and their legend.
+ * value always in the last, each value in the class whose break it reaches,
+ * and as round for fewer, as a horizon chart's bands; and their legend.
  *
  * @vitest-environment happy-dom
  */
@@ -106,4 +106,20 @@ test("a signed legend keys the pole's classes below zero, then the accent's, and
   expect(drawn.style.getPropertyValue("--swatch")).toBe("20px");
   const roomy = scaleOf(classes, true, 1_000, CH);
   expect(roomy.style.getPropertyValue("--swatch")).toBe(`${SWATCH_WIDE}px`);
+});
+
+/** Fewer classes than the ramp has steps, as a horizon chart's three bands. */
+const BANDS = 3;
+
+test("a scale of fewer classes steps as round, and its legend wears the fills it is given and writes zero", () => {
+  // 5 over three classes rounds up to 2, so the last class reaches 6.
+  const classes = classesOver([5, 1], true, BANDS);
+  expect(classes).toStrictEqual({ width: 2, breaks: [2, 4, 6] });
+  const fill = (step: number) => `step ${step}`;
+  const { fills, breaks } = legendOf(scaleOf(classes, false, LEGEND_NARROW, CH, fill));
+  expect(fills).toEqual(["step 1", "step 2", "step 3"]);
+  expect(breaks).toEqual(["0 at 0", "2 at 1", "4 at 2", "6 at 3"]);
+  // Every other break of seven would leave zero out, so a signed legend writes each, or the ends and zero.
+  const signed = legendOf(scaleOf(classesOver([600], true, BANDS), true, LEGEND_NARROW, CH));
+  expect(signed.breaks).toEqual(["-600 at 0", "0 at 3", "600 at 6"]);
 });

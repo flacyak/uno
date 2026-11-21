@@ -56,14 +56,18 @@ export interface Classes {
 
 /**
  * classesOver gives the classes of `values`: the least round width whose
- * CLASSES steps reach the value furthest from zero, either side, a whole one
- * of at least 1 for `whole` values, as counts are.
+ * `count` steps, CLASSES or fewer, reach the value furthest from zero, either
+ * side, a whole one of at least 1 for `whole` values, as counts are.
  */
-export function classesOver(values: readonly number[], whole: boolean): Classes {
+export function classesOver(
+  values: readonly number[],
+  whole: boolean,
+  count: number = CLASSES,
+): Classes {
   const most = values.reduce((far, v) => Math.max(far, Math.abs(v)), 0);
-  const least = whole ? Math.max(most / CLASSES, 1) : most / CLASSES;
+  const least = whole ? Math.max(most / count, 1) : most / count;
   const { tenths, exponent } = most === 0 ? ONE : widthOver(least, whole);
-  const breaks = Array.from({ length: CLASSES }, (_, i) => decimal((i + 1) * tenths, exponent));
+  const breaks = Array.from({ length: count }, (_, i) => decimal((i + 1) * tenths, exponent));
   return { width: breaks[0]!, breaks };
 }
 
@@ -89,20 +93,28 @@ export function fillOf(step: number): string | undefined {
 /** How wide a swatch of a scale's legend stands at most, in px. */
 export const SWATCH_WIDE = 24;
 
-/** The strides a legend writes its breaks at, finest first: each, every other, the ends and zero. */
-const STRIDES = [1, 2, CLASSES] as const;
+/** The strides a legend writes its breaks at, finest first, before the ends and zero: each, every other. */
+const STRIDES = [1, 2] as const;
 
 /** The least room between two breaks' labels, in a tick's characters. */
 const BREAKS_APART = 1;
 
 /**
  * scaleOf gives the legend of `classes` in `wide` px: a swatch per class from
- * the furthest below zero where `signed` to the furthest above, SWATCH_WIDE
- * or fewer px each, and the breaks between them written under them, at the
- * finest stride whose labels stand apart in characters `ch` px wide.
+ * the furthest below zero where `signed` to the furthest above, in its `fill`,
+ * SWATCH_WIDE or fewer px each, and the breaks between them written under
+ * them, at the finest stride whose labels stand apart in characters `ch` px
+ * wide and that writes zero.
  */
-export function scaleOf(classes: Classes, signed: boolean, wide: number, ch: number): HTMLElement {
-  const steps = Array.from({ length: CLASSES }, (_, i) => i + 1);
+export function scaleOf(
+  classes: Classes,
+  signed: boolean,
+  wide: number,
+  ch: number,
+  fill: (step: number) => string | undefined = fillOf,
+): HTMLElement {
+  const count = classes.breaks.length;
+  const steps = Array.from({ length: count }, (_, i) => i + 1);
   const shown = signed ? [...steps.map((k) => -k).reverse(), ...steps] : steps;
   const up = [0, ...classes.breaks];
   const values = signed ? [...classes.breaks.map((b) => -b).reverse(), ...up] : up;
@@ -114,12 +126,13 @@ export function scaleOf(classes: Classes, signed: boolean, wide: number, ch: num
   const toward = (i: number): number => (i === 0 ? 0 : i === last ? 1 : 1 / 2);
   const widest = Math.max(...labels.map((label) => label.length));
   const needs = (widest * (1 + 1 / 2) + BREAKS_APART) * ch;
-  const stride = STRIDES.find((s) => s * swatch >= needs) ?? STRIDES.at(-1)!;
+  const strides = [...STRIDES.filter((s) => count % s === 0), count];
+  const stride = strides.find((s) => s * swatch >= needs) ?? count;
   const box = el("div", "chart-scale");
   box.style.setProperty("--swatch", `${swatch}px`);
   for (const k of shown) {
     const key = el("span", "chart-swatch");
-    key.style.setProperty("--fill", fillOf(k)!);
+    key.style.setProperty("--fill", fill(k)!);
     box.append(key);
   }
   for (const [i, label] of labels.entries()) {

@@ -10,6 +10,7 @@ import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
+import type { PlotRoom } from "./kind.ts";
 import type { Targets } from "./tooltip.ts";
 
 /** A row's thickness, in px: the dataviz skill's most for a bar. */
@@ -23,6 +24,17 @@ export const BAR_GAP = 2;
  * caption's words stand from the window's edge.
  */
 export const BARS_INSET = 10;
+
+/** The share of the plot the values' names take at most, and the gap after them. */
+const NAMES_MOST = 0.4;
+const NAMES_GAP = 8;
+
+/** trackWide gives how wide the track beside rows of `values` stands in `room`, after their names. */
+export function trackWide(values: readonly string[], room: PlotRoom): number {
+  const inside = room.width - 2 * BARS_INSET;
+  const longest = Math.max(0, ...values.map((value) => value.length));
+  return inside - Math.min(longest * room.ch, NAMES_MOST * inside) - NAMES_GAP;
+}
 
 /** A row of a value, which a label heads, past an axis's row of labels. */
 export const VALUE_ROWS = ".chart-bar-row:has(> .chart-bar-label)";
