@@ -43,7 +43,13 @@ export const QUESTIONS: readonly Question[] = [
       ["swarm", m.chart_kind_swarm],
     ],
   },
-  { words: m.chart_kinds_relate, kinds: [["scatter", m.chart_kind_scatter]] },
+  {
+    words: m.chart_kinds_relate,
+    kinds: [
+      ["scatter", m.chart_kind_scatter],
+      ["parallel", m.chart_kind_parallel],
+    ],
+  },
 ];
 
 /** KindTiles is the form's rows of kind tiles, which stand among its fields. */

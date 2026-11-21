@@ -82,7 +82,15 @@ const OBJECT = { ...SALES, id: "object", link: { path: "s3://acme-exports/sales-
 const PARTS = { ...SALES, id: "parts", link: undefined, parts: [{ name: "q3-1.csv", path: "" }] };
 const CARRIED = { ...SALES, id: "carried", link: undefined };
 const LOST = { ...SALES, id: "lost", link: { path: "" } };
-const SOURCES = [SALES, ADS, GONE, SUMS, TAKINGS, TWINS, OBJECT, PARTS, CARRIED, LOST];
+/** Then an export of four number columns after a column of names, as parallel coordinates take. */
+const DISCOUNT = { header: "discount", kind: "num", flagged: false } as const;
+const DAYS = { header: "days", kind: "num", flagged: false } as const;
+const MEASURES = {
+  ...SALES,
+  id: "measures",
+  band: banded([COLUMNS[REGION], COLUMNS[UNITS], COLUMNS[REVENUE], DISCOUNT, DAYS]),
+};
+const SOURCES = [SALES, ADS, GONE, SUMS, TAKINGS, TWINS, OBJECT, PARTS, CARRIED, LOST, MEASURES];
 
 /** What the form asks of the shell to insert `plot` over `source`. */
 const inserting = (plot: Plot, title = "", source = SALES.id, refresh = BY_HAND): string =>
@@ -190,7 +198,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a horizon, a histogram, a box plot, a beeswarm and a scatter, and opens on bars", () => {
+test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a horizon, a histogram, a box plot, a beeswarm, a scatter and parallel coordinates, of three number columns, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -207,8 +215,11 @@ test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heat
     m.chart_kind_box(),
     m.chart_kind_swarm(),
     m.chart_kind_scatter(),
+    m.chart_kind_parallel(),
   ];
-  expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
+  // The sales export has two number columns, and parallel coordinates take three.
+  const parallel = m.chart_kind_parallel();
+  expect(offered).toStrictEqual(kinds.map((words) => [words, words === parallel]));
   expect(kind.value).toBe("bars");
 });
 
@@ -1136,4 +1147,45 @@ test("a horizon of a date column selected draws one series, and one opened to ch
   press("Enter");
   await settle();
   expect(changed).toStrictEqual([inserting(plot), "closed"]);
+});
+
+test("parallel coordinates ask for three to eight number axes in order, the selected one first, each column once, and open on their axes", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: 2 }, MEASURES);
+  pick("kind", "parallel");
+  const axisWords = (count: number) =>
+    Array.from({ length: count }, (_, i) => m.chart_form_axis({ n: num(i + 1) }));
+  const fields = (count: number) => [
+    m.chart_form_source(),
+    ...QUESTION_WORDS,
+    ...axisWords(count),
+    m.chart_form_title_field(),
+    m.chart_form_refresh(),
+  ];
+  // Revenue, then the number columns after it and before it, and a fourth of none.
+  expect(shown(box)).toStrictEqual(fields(4));
+  expect(chosen("axis-1", "axis-2", "axis-3", "axis-4")).toStrictEqual(["2", "3", "4", ""]);
+  const taken = [...select("axis-2").options].filter((o) => o.disabled).map((o) => o.value);
+  expect(taken).toStrictEqual(["2", "4"]);
+  pick("axis-4", "1");
+  expect(shown(box)).toStrictEqual(fields(5));
+  const axes = [2, 3, 4, 1].map((col) => ({ col, header: MEASURES.band.columns[col]!.header }));
+  const plot: Plot = { t: "parallel", axes };
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(plot),
+  );
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(plot, "", MEASURES.id), "closed"]);
+  changing(plot, "", MEASURES);
+  expect(chosen("kind", "axis-1", "axis-2", "axis-3", "axis-4", "axis-5")).toStrictEqual([
+    "parallel",
+    "2",
+    "3",
+    "4",
+    "1",
+    "",
+  ]);
+  // An axis of none takes those after it away.
+  pick("axis-4", "");
+  expect(shown(document.querySelector<HTMLElement>(".chart-form")!)).toStrictEqual(fields(4));
 });
