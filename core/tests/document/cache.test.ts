@@ -95,9 +95,24 @@ test('a save writes each source cache under cache/<id>/ and reads it back as it 
   expect(back.extra.size, 'the cache is read, not carried').toBe(0);
 });
 
+/**
+ * atOneTime runs `run` with the clock stopped at SAVED_AT, so a second turning
+ * between two saves cannot part their modified times.
+ */
+function atOneTime<T>(run: () => T): T {
+  vi.setSystemTime(SAVED_AT);
+  try {
+    return run();
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 test('a cache leaves the format as it was, and the manifest and every other entry as a save without one writes them', () => {
-  const plain = writeDocument(workspace());
-  const cached = writeDocument(workspace(new Map([['orders', saved()]])));
+  const [plain, cached] = atOneTime(() => [
+    writeDocument(workspace()),
+    writeDocument(workspace(new Map([['orders', saved()]]))),
+  ]);
   expect(FORMAT_VERSION, 'this build reads format 6, as before').toBe(6);
   const formatOf = (uno: Uint8Array): unknown =>
     JSON.parse(strFromU8(unzipSync(uno)[MANIFEST_ENTRY]!)).format;
@@ -106,17 +121,12 @@ test('a cache leaves the format as it was, and the manifest and every other entr
 });
 
 test('a reader that drops cache/, as builds before 7a0c3a2b do, opens the workspace a save without one writes', () => {
-  // One save time for both, so a second turning between them cannot part
-  // their modified times.
-  vi.setSystemTime(SAVED_AT);
-  try {
+  atOneTime(() => {
     const cached = writeDocument(workspace(new Map([['orders', saved()]])));
     const stripped = zipSync(uncached(cached));
     const plain = readContainer('books.uno', writeDocument(workspace()), AT);
     expect(readContainer('books.uno', stripped, AT)).toStrictEqual(plain);
-  } finally {
-    vi.useRealTimers();
-  }
+  });
 });
 
 test('a reader that carries cache/ as entries it does not know writes it back, and this build reads it again', () => {
@@ -290,9 +300,11 @@ test('a source over its cap is saved without the folds of its charts first, then
 });
 
 test('a reader that drops cache/ opens a workspace with saved folds as one saved without them', () => {
-  const stripped = zipSync(uncached(writeDocument(charted())));
-  const plain = charted();
-  plain.cache = undefined;
-  const without = readContainer('books.uno', writeDocument(plain), AT);
-  expect(readContainer('books.uno', stripped, AT)).toStrictEqual(without);
+  atOneTime(() => {
+    const stripped = zipSync(uncached(writeDocument(charted())));
+    const plain = charted();
+    plain.cache = undefined;
+    const without = readContainer('books.uno', writeDocument(plain), AT);
+    expect(readContainer('books.uno', stripped, AT)).toStrictEqual(without);
+  });
 });
