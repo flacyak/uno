@@ -325,6 +325,29 @@ const SWARMED = BOX;
 const TO_SWARM = 2;
 
 /**
+ * The paralleled story's beats: a cell of Clicks selected, the chart form
+ * opened on it, its kind stepped from Histogram to Parallel coordinates, a
+ * fourth and a fifth axis chosen, Enter, a click on a line, and Right twice.
+ */
+const PARALLELED = {
+  column: 500,
+  open: 2_400,
+  kind: 4_400,
+  fourth: 9_400,
+  fifth: 11_400,
+  enter: 13_400,
+  cursor: 15_800,
+  right: 17_800,
+  stop: 21_000,
+};
+/** A cell of Clicks, the ads export's third column, after the gutter. */
+const CLICKS_CELL = "tbody tr:nth-child(3) td:nth-child(4)";
+/** How many Downs step the kinds from Histogram to Parallel coordinates, Tabs from the kinds to the fourth axis, and Rights along a line. */
+const TO_PARALLEL = 4;
+const TO_FOURTH = 4;
+const ALONG_LINE = 2;
+
+/**
  * The moving story's beats: the last of region's bars carried to the top by
  * its label, the cursor put on the second bar, Alt+Down twice, and Alt+Up.
  */
@@ -1060,6 +1083,7 @@ const STORIES: Record<string, Story> = {
   histogram: { end: HISTOGRAM.stop, script: playHistogram },
   box: { end: BOX.stop, script: playBox },
   swarmed: { end: SWARMED.stop, script: playSwarmed },
+  paralleled: { end: PARALLELED.stop, script: playParalleled },
   moving: { end: MOVING.end, script: playMoving },
   dots: { end: DOTS.stop, script: playDots },
   weekly: { end: WEEKLY.stop, script: playWeekly },
@@ -1365,6 +1389,43 @@ async function playSwarmed(win: BrowserWindow, at: Clock): Promise<void> {
   await at(SWARMED.down);
   press(win, "Down");
   await at(SWARMED.stop);
+}
+
+/**
+ * playParalleled performs the paralleled story: a cell of Clicks selected, the
+ * form opened on it by Ctrl+Shift+G, Down on the kinds from Histogram to
+ * Parallel coordinates, whose first three axes start on Clicks, a Down on the
+ * fourth axis and then the fifth for the next columns free, Enter, then a
+ * click on a line for its number and row, and Right along it twice.
+ */
+async function playParalleled(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(PARALLELED.column);
+  await pressOn(CLICKS_CELL);
+  await glideTo(KEYED_REST);
+  await at(PARALLELED.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(PARALLELED.kind);
+  // The keys open in Of, after the kinds.
+  press(win, "Tab", ["shift"]);
+  await presses(win, "Down", TO_PARALLEL, KIND_STEP_MS);
+  await glideTo('.chart-form select[name="axis-4"]');
+  await at(PARALLELED.fourth);
+  await presses(win, "Tab", TO_FOURTH, 0);
+  press(win, "Down");
+  await at(PARALLELED.fifth);
+  press(win, "Tab");
+  press(win, "Down");
+  await at(PARALLELED.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-parallel-line")', "the lines never drew");
+  await at(PARALLELED.cursor);
+  await pressOn(".chart .chart-along");
+  await at(PARALLELED.right);
+  await presses(win, "Right", ALONG_LINE, KIND_STEP_MS);
+  await at(PARALLELED.stop);
 }
 
 /**

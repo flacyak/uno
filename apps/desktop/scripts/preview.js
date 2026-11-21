@@ -78,6 +78,10 @@
  * - `swarmed`: selects revenue, opens the chart form on it by Ctrl+Shift+G,
  *   steps its kind to Beeswarm and By to region, presses Enter, then clicks a
  *   dot and presses Down. Goes to out/swarmed.gif.
+ * - `paralleled`: opens the ads export, selects a cell of Clicks, opens the
+ *   chart form on it by Ctrl+Shift+G, steps its kind to Parallel coordinates,
+ *   adds Leads and Conversions as its fourth and fifth axes, presses Enter,
+ *   then clicks a line and presses Right twice. Goes to out/paralleled.gif.
  * - `moving`: carries the last of region's bars to the top by its label, then
  *   steps the cursor and moves a bar with Alt+Down and Alt+Up. Goes to
  *   out/moving.gif.
@@ -99,7 +103,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|heated|horizoned|stacked|histogram|box|swarmed|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|heated|horizoned|stacked|histogram|box|swarmed|paralleled|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -165,6 +169,7 @@ const CHARTED = [
   "histogram",
   "box",
   "swarmed",
+  "paralleled",
   "moving",
   "dots",
   "sloped",
@@ -391,6 +396,13 @@ async function stageCharts(name, plots) {
   return uno;
 }
 
+/** stageAds lays out the paralleled story: the ads export, of seven number columns, alone in its folder. Returns its path. */
+async function stageAds() {
+  const csv = join(await freshDir("paralleled"), "google-ads.csv");
+  await copyFile(join(testdata, "google-ads-sales.csv"), csv);
+  return csv;
+}
+
 /** A date the fixture writes year first, and the same written day first. */
 const YEAR_FIRST = /^(\d{4})-(\d{2})-(\d{2}),/gmu;
 const DAY_FIRST = "$3/$2/$1,";
@@ -527,6 +539,7 @@ const staged = {
   histogram: () => stageCharts("histogram", []),
   box: () => stageCharts("box", []),
   swarmed: () => stageCharts("swarmed", []),
+  paralleled: stageAds,
   moving: () => stageCharts("moving", [REGION_BARS]),
   dots: () => stageCharts("dots", []),
   sloped: () => stageCharts("sloped", []),
