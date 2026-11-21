@@ -50,6 +50,7 @@ export {
   LEVEL_BATCH,
   PER,
   TimeFold,
+  sizer,
   sundayOf,
 } from './time.ts';
 export type {
@@ -69,6 +70,8 @@ export type {
   Ranked,
   SavedTimeSplit,
   SentValue,
+  SplitLevel,
+  TimeSplitSnapshot,
   TimeSplits,
   ValuePeriods,
 } from './timesplit.ts';

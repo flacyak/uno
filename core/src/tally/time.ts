@@ -86,6 +86,24 @@ const SIZES: Record<Per, [Held, (key: number) => number]> = {
   year: ['year', (year) => year],
 };
 
+/**
+ * sizer gives the key of the period of size `per` that a period held at
+ * HELD's place `level` falls in, from that period's key, or undefined where
+ * `per` is finer than the period held.
+ */
+export function sizer(
+  per: Per,
+  level: number,
+): ((key: number) => number) | undefined {
+  const [madeFrom, step] = SIZES[per];
+  const made = HELD.indexOf(madeFrom);
+  if (made < level) return undefined;
+  return (key) => {
+    for (let i = level; i < made; i++) key = COARSER[i]!(key);
+    return step(key);
+  };
+}
+
 /** sundayOf is the days from 1970-01-01 to the Sunday that labels `week`. */
 export function sundayOf(week: number): number {
   return week * WEEK_DAYS - SUNDAY_BEFORE_EPOCH;
@@ -305,13 +323,8 @@ export class TimeFold {
    * snapshot shows it.
    */
   batch(per: Per, offset: number): TimeLevel | undefined {
-    const [madeFrom, step] = SIZES[per];
-    const made = HELD.indexOf(madeFrom);
-    if (made < this.level || this.periods.size === 0) return undefined;
-    const keyOf = (key: number) => {
-      for (let i = this.level; i < made; i++) key = COARSER[i]!(key);
-      return step(key);
-    };
+    const keyOf = sizer(per, this.level);
+    if (keyOf === undefined || this.periods.size === 0) return undefined;
     const held = [...this.periods.keys()];
     const from = keyOf(Math.min(...held));
     const span = keyOf(Math.max(...held)) - from + 1;

@@ -10,6 +10,7 @@ import {
   DISTINCT_AT_MOST,
   PAIRS_AT_MOST,
   SPLIT_VALUES_SENT,
+  TimeFold,
   TimeSplitFold,
 } from '@tally';
 import type { Held, TimeSplits } from '@tally';
@@ -233,4 +234,65 @@ test('the values a chart draws are those of most rows, or the largest sum, and t
     'b',
     'a',
   ]);
+});
+
+test("a snapshot sends each value's periods at every size from the one asked for, one span for all, as a time fold of its rows alone", () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    // Rows over about four months, to the minute, of three values with a sum each.
+    const rows = Array.from(
+      { length: 200 },
+      () =>
+        [
+          REGIONS[Math.floor(random() * 3)]!,
+          written(Math.floor(random() * 120 * DAY_MINUTES)),
+          `${Math.floor(random() * 100) / 4}`,
+        ] as const,
+    );
+    const fold = new TimeSplitFold('day', 'point');
+    for (const r of rows) fold.add(...r);
+    const sent = fold.snapshot('day');
+    expect(sent.levels.map((l) => l.per)).toStrictEqual([
+      'day',
+      'week',
+      'month',
+      'quarter',
+      'year',
+    ]);
+    for (const level of sent.levels) {
+      for (const [i, { value }] of sent.values.entries()) {
+        const alone = new TimeFold('day', 'point');
+        for (const [v, date, cell] of rows)
+          if (v === value) alone.add(date, cell);
+        const own = alone.batch(level.per, 0)!;
+        const at = own.from - level.from;
+        expect(
+          level.rows[i]!.slice(at, at + own.span),
+          `${seed} ${value} ${level.per}`,
+        ).toStrictEqual(own.rows);
+        expect(level.sum[i]!.slice(at, at + own.span)).toStrictEqual(own.sum);
+        expect(
+          level.rows[i]!.filter(
+            (n, j) => n !== 0 && (j < at || j >= at + own.span),
+          ),
+        ).toStrictEqual([]);
+      }
+    }
+  }
+});
+
+test('a snapshot starts at hours where a row is dated past midnight, and no finer than the period held', () => {
+  const fold = new TimeSplitFold('day');
+  fold.add('North', '2024-03-04');
+  expect(fold.snapshot('auto').levels[0]!.per).toBe('day');
+  fold.add('North', '2024-03-04 09:30');
+  expect(fold.snapshot('auto').levels[0]!.per).toBe('hour');
+  expect(fold.snapshot('hour').levels[0]!.rows).toStrictEqual([
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+  ]);
+  for (let h = 0; h <= PAIRS_AT_MOST; h++)
+    fold.add('South', written(h * HOUR_MINUTES));
+  expect(fold.read().held).toBe('day');
+  expect(fold.snapshot('hour').levels[0]!.per).toBe('day');
+  expect(new TimeSplitFold('day').snapshot('auto').levels).toStrictEqual([]);
 });

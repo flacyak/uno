@@ -6,6 +6,7 @@
 import { END_MINUTE, FIRST_MINUTE, readDate } from '@date';
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
+import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
 import { Count, DISTINCT_AT_MOST, counted } from './groups.ts';
 import { isCount, isMark, isRecord } from './saved.ts';
@@ -15,12 +16,15 @@ import { PAIRS_AT_MOST } from './split.ts';
 import {
   COARSER,
   HELD,
+  LEVEL_BATCH,
+  PER,
   isReading,
   keyAt,
   restoredCount,
+  sizer,
   undate,
 } from './time.ts';
-import type { Held, Period, Undated } from './time.ts';
+import type { Held, Per, Period, Undated } from './time.ts';
 
 /** One value's rows per period held, undated, and past the bound at years. */
 class Group {
@@ -90,6 +94,27 @@ export interface Ranked {
   values: SentValue[];
   others: { values: number; rows: number; sum: number };
 }
+
+/** One size's periods for every value sent, dense from its first to its last, zeros included, at most LEVEL_BATCH of them. */
+export interface SplitLevel {
+  per: Per;
+  /** The key of the size's first period, and how many periods it spans to its last. */
+  from: number;
+  span: number;
+  /** Each value's rows per period, and its sums, empty when the fold counts rows, as values are sent. */
+  rows: number[][];
+  sum: number[][];
+}
+
+/** What a snapshot sends: the values a chart draws, each size from the one asked for, and what the fold left out. */
+export interface TimeSplitSnapshot extends Ranked {
+  levels: SplitLevel[];
+  dates: Undated;
+  skipped: Skipped;
+}
+
+/** The hours of a day, which a key held in hours past midnight is no whole number of. */
+const HOURS_A_DAY = 24;
 
 /** plain is a count's rows and sum as plain numbers. */
 const plain = ({ rows, sum }: Count) => ({ rows, sum: sum.value() });
@@ -238,6 +263,50 @@ export class TimeSplitFold {
     Object.assign(group.undated, none);
     Object.assign(group.unsplit, past);
     return [value, group];
+  }
+
+  /**
+   * snapshot sends the values `ranked` gives, each at every size from `per`
+   * to years made from the period held, every value from one first period,
+   * so their columns line up. Automatic starts at hours where a row is dated
+   * past midnight while hours are held, and at days otherwise.
+   */
+  snapshot(per: Per | 'auto'): TimeSplitSnapshot {
+    const ranked = this.ranked();
+    const groups = ranked.values.map(({ value }) => this.groups.get(value)!);
+    const keys = groups.flatMap((g) => [...g.periods.keys()]);
+    const timed = this.level === 0 && keys.some((k) => k % HOURS_A_DAY !== 0);
+    const first = per !== 'auto' ? per : timed ? 'hour' : 'day';
+    const levels = PER.slice(PER.indexOf(first)).flatMap((size) => {
+      const keyOf = sizer(size, this.level);
+      if (keyOf === undefined || keys.length === 0) return [];
+      const sized = keys.map(keyOf);
+      const from = Math.min(...sized);
+      const span = Math.max(...sized) - from + 1;
+      const length = Math.min(span, LEVEL_BATCH);
+      const each = groups.map((g) => {
+        const rows = Array.from({ length }, () => 0);
+        const sums = Array.from({ length }, () => new ExactSum());
+        for (const [key, c] of g.periods) {
+          const i = keyOf(key) - from;
+          if (i >= length) continue;
+          rows[i] = rows[i]! + c.rows;
+          sums[i]!.merge(c.sum);
+        }
+        return {
+          rows,
+          sum: this.mark === undefined ? [] : sums.map((s) => s.value()),
+        };
+      });
+      const [rows, sum] = [each.map((e) => e.rows), each.map((e) => e.sum)];
+      return [{ per: size, from, span, rows, sum }];
+    });
+    return {
+      ...ranked,
+      levels,
+      dates: { ...this.dates },
+      skipped: { ...this.skipped },
+    };
   }
 
   /**
