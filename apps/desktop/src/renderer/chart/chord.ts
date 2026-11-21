@@ -18,6 +18,12 @@ import { mark } from "./scatter.ts";
 /** How thick an arc is, in px: the legend's key, which wears the same colour. */
 export const ARC_WIDTH = 10;
 
+/** The line of the page's ground between two arcs, in px: the marks' surface gap. */
+export const ARC_GAP = 2;
+
+/** The least arc that keeps its gaps, in px round the rim: a gap's width of its own colour beside them. */
+export const ARC_LEAST = 2 * ARC_GAP;
+
 /** How finely a path is written: to a hundredth of a px. */
 const PX_SCALE = 100;
 
@@ -117,7 +123,8 @@ function circle(r: number): string {
 
 /**
  * fitRing places the arcs of `box`, as chord drew it, at the size its ring
- * stands at, each ARC_WIDTH thick at the rim.
+ * stands at, each ARC_WIDTH thick at the rim and ARC_GAP from the next,
+ * where it is long enough to keep its colour beside the gap.
  */
 export function fitRing(box: HTMLElement): void {
   const ring = box.querySelector(".chart-chord-ring");
@@ -125,9 +132,13 @@ export function fitRing(box: HTMLElement): void {
   // A ring not laid out yet has nothing to measure, and draws again as it takes a size.
   if (ring === null || across === 0) return;
   const outer = across / 2;
+  const rim = 2 * Math.PI * outer;
   ring.setAttribute("viewBox", `${at(-outer)} ${at(-outer)} ${at(across)} ${at(across)}`);
+  // Each end gives half a gap, so two arcs stand a whole one apart.
+  const trim = ARC_GAP / 2 / rim;
   for (const arc of ring.querySelectorAll<SVGElement>(".chart-chord-arc")) {
     const [from, to] = [Number(arc.dataset["from"]), Number(arc.dataset["to"])];
-    arc.setAttribute("d", band(from, to, outer));
+    const kept = to - from < 1 && (to - from) * rim >= ARC_LEAST;
+    arc.setAttribute("d", kept ? band(from + trim, to - trim, outer) : band(from, to, outer));
   }
 }

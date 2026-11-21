@@ -2,7 +2,7 @@
  * @fileoverview A chord chart's ring of a tally: an arc per node, and Other,
  * clockwise from the top in slot order, each its node's share of the flows
  * out and in, in its slot's colour, Other in the caption's ink, and placed at
- * the size the ring stands at, ARC_WIDTH thick.
+ * the size the ring stands at, ARC_WIDTH thick and ARC_GAP from the next.
  *
  * @vitest-environment happy-dom
  */
@@ -11,7 +11,7 @@ import { expect, test } from "vite-plus/test";
 
 import type { ChordPlot } from "@document";
 import type { ChordTally } from "@engine";
-import { ARC_WIDTH, arcs, chord, fitRing } from "@renderer/chart/chord";
+import { ARC_GAP, ARC_LEAST, ARC_WIDTH, arcs, chord, fitRing } from "@renderer/chart/chord";
 import { chord as kind } from "@renderer/chart/kinds/chord";
 import { OTHER_KEY } from "@renderer/chart/pie";
 
@@ -111,7 +111,7 @@ function rimOf(d: string): { start: [number, number]; end: [number, number]; inn
   return { start: [xs[0]!, xs[1]!], end: [xs[2]!, xs[3]!], inner: xs[4]! };
 }
 
-test("a fitted ring's arcs are ARC_WIDTH thick at its rim, each meeting the next, and a ring of one node is whole", () => {
+test("a fitted ring's arcs are ARC_WIDTH thick at its rim, ARC_GAP apart where they meet, and a ring of one node is whole", () => {
   const across = ACROSS;
   const box = fitted(AIRPORTS, across);
   const ring = box.querySelector(".chart-chord-ring")!;
@@ -126,7 +126,10 @@ test("a fitted ring's arcs are ARC_WIDTH thick at its rim, each meeting the next
     expect(Math.hypot(...rim.start)).toBeCloseTo(across / 2, close);
     expect(rim.inner).toBe(across / 2 - ARC_WIDTH);
     const next = rims[(i + 1) % rims.length]!;
-    expect(next.start).toStrictEqual(rim.end);
+    expect(Math.hypot(next.start[0] - rim.end[0], next.start[1] - rim.end[1])).toBeCloseTo(
+      ARC_GAP,
+      close,
+    );
   }
   const one = tallyOf(
     ["ORD"],
@@ -139,6 +142,26 @@ test("a fitted ring's arcs are ARC_WIDTH thick at its rim, each meeting the next
   expect(whole).toBe(
     "M0 -100A100 100 0 1 1 0 100A100 100 0 1 1 0 -100ZM0 -90A90 90 0 1 1 0 90A90 90 0 1 1 0 -90Z",
   );
+});
+
+test("an arc too short to keep its colour beside its gaps keeps its whole length", () => {
+  // At ACROSS px, ARC_LEAST is this share of the rim, and LAX's arc is about half of it.
+  const share = ARC_LEAST / (Math.PI * ACROSS);
+  const big = Math.round(1 / share);
+  const tally = tallyOf(
+    ["ORD", "LAX"],
+    [
+      [big, 0, 0],
+      [1, 0, 0],
+      [0, 0, 0],
+    ],
+  );
+  const [, lax] = [...fitted(tally, ACROSS).querySelectorAll(".chart-chord-arc")];
+  const { start } = rimOf(lax!.getAttribute("d")!);
+  // LAX starts right where ORD's share ends, with no half gap taken.
+  const turn = (2 * big + 1) / (2 * big + 2);
+  const close = 1;
+  expect(start[0]).toBeCloseTo((ACROSS / 2) * Math.sin(2 * Math.PI * turn), close);
 });
 
 test("a chord not laid out yet places no arc, to place them once it is", () => {
