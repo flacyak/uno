@@ -1,0 +1,71 @@
+/**
+ * @fileoverview A heatmap over periods: a row per value, largest first, and a
+ * cell per period at the finest size whose cells fit, each in the class of its
+ * rows or its sum, the accent's above zero and the pole's below, and a period
+ * of no rows in the rule. The cells are HTML in shares of the plot.
+ */
+
+import type { HeatTally } from "@engine";
+import { el } from "@renderer/shell/util";
+import type { SplitLevel } from "@tally";
+import { barsBox } from "./bars.ts";
+import type { PlotRoom } from "./kind.ts";
+import { classOf, classesOver, fillOf } from "./ramp.ts";
+import { BARS_INSET, row, rowsIn } from "./rows.ts";
+
+/** The most values a heatmap draws a row for. */
+export const HEAT_ROWS_AT_MOST = 12;
+
+/** The least room a period takes across, in px: a 4 px cell and the dataviz skill's 2 px gap. */
+export const HEAT_PITCH_LEAST = 6;
+
+/** The share of the plot the values' names take at most, and the gap after them, as bars' are. */
+const NAMES_MOST = 0.4;
+const NAMES_GAP = 8;
+
+/** The rows the periods' labels under the cells take. */
+const ROWS_BESIDE = 1;
+
+/** cellsWide gives how wide the cells of `tally` stand in `room`, after its values' names. */
+function cellsWide(tally: HeatTally, room: PlotRoom): number {
+  const inside = room.width - 2 * BARS_INSET;
+  const longest = Math.max(0, ...tally.values.map(({ value }) => value.length));
+  return inside - Math.min(longest * room.ch, NAMES_MOST * inside) - NAMES_GAP;
+}
+
+/** heatLevel gives the finest size of `tally` whose periods each get HEAT_PITCH_LEAST px of `room`, or the coarsest. */
+export function heatLevel(tally: HeatTally, room: PlotRoom): SplitLevel | undefined {
+  const wide = cellsWide(tally, room);
+  return tally.levels.find((l) => l.span * HEAT_PITCH_LEAST <= wide) ?? tally.levels.at(-1);
+}
+
+/**
+ * heatGrid draws `level` of `tally` in a plot `height` px high: a row per
+ * value that fits, at most HEAT_ROWS_AT_MOST, each a cell per period in the
+ * class of its rows, or of its sum where `summed`.
+ */
+export function heatGrid(
+  tally: HeatTally,
+  level: SplitLevel,
+  summed: boolean,
+  room: PlotRoom,
+  height: number,
+): HTMLElement {
+  const box = barsBox("chart-heat");
+  const fits = Math.max(rowsIn(height) - ROWS_BESIDE, 1);
+  const shown = Math.min(tally.values.length, HEAT_ROWS_AT_MOST, fits);
+  const amounts = (summed ? level.sum : level.rows).slice(0, shown);
+  const classes = classesOver(amounts.flat(), !summed);
+  for (const [i, { value }] of tally.values.slice(0, shown).entries()) {
+    const cells = el("div", "chart-heat-cells");
+    cells.style.setProperty("--span", `${level.rows[i]!.length}`);
+    for (const [p, rows] of level.rows[i]!.entries()) {
+      const cell = el("span", "chart-heat-cell");
+      const fill = rows > 0 ? fillOf(classOf(amounts[i]![p]!, classes)) : undefined;
+      if (fill !== undefined) cell.style.setProperty("--fill", fill);
+      cells.append(cell);
+    }
+    box.append(row(value, cells));
+  }
+  return box;
+}

@@ -1588,9 +1588,20 @@
   justify-self: center;
 }
 
-.chart-week-cell {
+.chart-week-cell,
+.chart-heat-cell {
   border-radius: 2px;
   background: var(--fill, var(--rule));
+}
+
+/* A heatmap over periods, from heat.ts: on bars' rows, a strip of cells per
+ * value, a share each of the track, the dataviz skill's 2 px apart, as tall as
+ * a bar. */
+.chart-heat-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--span), minmax(0, 1fr));
+  gap: var(--bar-gap);
+  height: 100%;
 }
 
 /* A scale's legend, from ramp.ts, over the cells it keys: a 10 px swatch per

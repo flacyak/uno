@@ -645,6 +645,68 @@ await writeFile(
   }),
 );
 
+// A workspace of two heatmaps over periods of a year of four regions' orders,
+// one row an order on the 10th of a month at noon: North's orders grow a
+// month at a time, South's fall, East's stay at 3 a month, and West orders
+// once in June. Each order is worth 100, and East's in March are a return of
+// 400 each. Rows per region per month in a new window's size at the sheet's
+// foot, and the sum of revenue per region per month in a window of the least
+// width at its top.
+const heatedFile = join(scratch, "sent", "heated.csv");
+const heatedMonths = 12;
+const heatedRegions = {
+  North: (m) => m + 1,
+  South: (m) => heatedMonths - m,
+  East: () => 3,
+  West: (m) => (m === 5 ? 1 : 0),
+};
+const heatedReturnMonth = 2;
+const heatedRows = Object.entries(heatedRegions).flatMap(([region, orders]) =>
+  Array.from({ length: heatedMonths }, (_, m) => m).flatMap((m) => {
+    const date = `2024-${String(m + 1).padStart(2, "0")}-10 12:00`;
+    const revenue = region === "East" && m === heatedReturnMonth ? -400 : 100;
+    return Array.from({ length: orders(m) }, () => `${region},${date},${revenue}`);
+  }),
+);
+await writeFile(heatedFile, `${["region,ordered,revenue", ...heatedRows].join("\n")}\n`);
+const heated = join(scratch, "sent", "heated.uno");
+const heatedSource = {
+  ...spreadSource,
+  id: "heated",
+  name: "heated.csv",
+  path: heatedFile,
+  rows: heatedRows.length,
+  cols: 3,
+};
+const heatedPlot = {
+  t: "heat",
+  by: { col: 0, header: "region" },
+  at: { col: 1, header: "ordered" },
+  per: "month",
+  order: "day",
+};
+const heatedChart = { source: heatedSource.id, title: "", refresh: 0 };
+await writeFile(
+  heated,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [heatedSource],
+    active: heatedSource.id,
+    log: [],
+    charts: [
+      { ...heatedChart, id: "c1", plot: heatedPlot, place: { ...chartSize, x: 0, y: 1 } },
+      {
+        ...heatedChart,
+        id: "c2",
+        plot: { ...heatedPlot, sum: { col: 2, header: "revenue" } },
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: heated,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -1008,6 +1070,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_SLOPED: sloped,
       UNO_SMOKE_WEEKLY: weekly,
       UNO_SMOKE_DAILY: daily,
+      UNO_SMOKE_HEATED: heated,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,
