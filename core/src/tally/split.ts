@@ -67,6 +67,28 @@ export interface Split {
   skipped: Skipped;
 }
 
+/** CHORD_NODES_AT_MOST is how many names a square sends apart from Other, the pie's ring. */
+export const CHORD_NODES_AT_MOST = 6;
+
+/** What a chord reads of a fold: the flows between the names its two columns share. */
+export interface Square {
+  /**
+   * At most CHORD_NODES_AT_MOST names, the most rows or sum out and in
+   * together first, ties in name order, each cut to a label.
+   */
+  nodes: string[];
+  /** A row per node and Other last, each a cell per node and Other last: the rows from one to the other. */
+  flows: Measured[][];
+  /** How many names the fold holds that Other stands for. */
+  others: number;
+  /** Rows a value counts apart from its series, past PAIRS_AT_MOST, which flow from it to Other. */
+  unsplit: number;
+  /** The rows of values first seen past DISTINCT_AT_MOST, which flow from Other to Other. */
+  rest: Measured;
+  /** Cells of the summed column, none when the fold counts rows. */
+  skipped: Skipped;
+}
+
 /** A value's cell in one series of a slope: its rows, their sum, and its numbers. */
 export interface Ended extends Measured {
   numbers: number;
@@ -343,6 +365,47 @@ export class SplitFold {
       others: { values: left.length, rows },
       rest: measured(this.rest),
       skipped,
+    };
+  }
+
+  /**
+   * square reads the fold as a chord's flows, from each value to each
+   * series: the names with the most out and in named, each pair a fold kept
+   * in its cell, and every other row from its value, or Other, to Other.
+   */
+  square(): Square {
+    const size = (m: Measured) =>
+      Math.abs(this.mark === undefined ? m.rows : m.sum);
+    const names = new Set([...this.groups.keys(), ...this.totals.keys()]);
+    const sized = [...names].map((name) => {
+      const group = this.groups.get(name);
+      const out = group === undefined ? 0 : size(merged(held(group)));
+      return { name, size: out + size(measured(this.totals.get(name))) };
+    });
+    sized.sort((a, b) => b.size - a.size || compareStrings(a.name, b.name));
+    const nodes = sized.slice(0, CHORD_NODES_AT_MOST).map(({ name }) => name);
+    const other = nodes.length;
+    const place = (name: string) => {
+      const at = nodes.indexOf(name);
+      return at < 0 ? other : at;
+    };
+    const side = { length: other + 1 };
+    const counts = Array.from(side, () => Array.from(side, (): Count[] => []));
+    let unsplit = 0;
+    for (const [value, group] of this.groups) {
+      const from = counts[place(value)]!;
+      for (const [series, cell] of group.cells) from[place(series)]!.push(cell);
+      from[other]!.push(group.unsplit);
+      unsplit += group.unsplit.rows;
+    }
+    counts[other]![other]!.push(this.rest);
+    return {
+      nodes: nodes.map(label),
+      flows: counts.map((row) => row.map(merged)),
+      others: names.size - other,
+      unsplit,
+      rest: measured(this.rest),
+      skipped: { ...this.skipped },
     };
   }
 
