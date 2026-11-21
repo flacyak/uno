@@ -67,6 +67,36 @@ export interface Split {
   skipped: Skipped;
 }
 
+/** A value's cell in one series of a slope: its rows, their sum, and its numbers. */
+export interface Ended extends Measured {
+  numbers: number;
+}
+
+/** One value's two ends of a slope. */
+export interface SlopeValue {
+  /** Cut to LABEL_AT_MOST code points when sent, so two can read the same. */
+  value: string;
+  /** Its cell in the first series and in the second, of no rows where it has none. */
+  ends: [Ended, Ended];
+  /** Whether rows of it count apart from their series, past PAIRS_AT_MOST, so its ends may lack some. */
+  unsplit: boolean;
+}
+
+/** What a slope reads of a fold: two of its series. */
+export interface Slope {
+  /**
+   * At most GROUPS_SENT values with a row in either series, or with rows
+   * apart from their series, the larger end first, ties in value order.
+   */
+  values: SlopeValue[];
+  /** The values with a row in either series not sent, and those rows. */
+  others: { values: number; rows: number };
+  /** The rows of values first seen past DISTINCT_AT_MOST. */
+  rest: Measured;
+  /** Cells of the summed column in the two series alone, none when the fold counts rows. */
+  skipped: Skipped;
+}
+
 /**
  * One count as a save writes it: its rows, and when summed their sum, the
  * cells that read as numbers, for a mean, and the blank ones.
@@ -260,6 +290,57 @@ export class SplitFold {
   }
 
   /**
+   * slope reads the fold's cells in the two series `ends` names, the value
+   * whose larger end is the largest first: by rows, by sum, or by the mean
+   * where `mean` says.
+   */
+  slope(ends: readonly [string, string], mean: boolean): Slope {
+    const size = ({ rows, sum, numbers }: Ended): number => {
+      if (this.mark === undefined) return rows;
+      if (!mean) return sum;
+      return numbers === 0 ? Number.NEGATIVE_INFINITY : sum / numbers;
+    };
+    const ranked = [...this.groups].flatMap(([value, group]) => {
+      const both: [Ended, Ended] = [
+        ended(group.cells.get(ends[0])),
+        ended(group.cells.get(ends[1])),
+      ];
+      const unsplit = group.unsplit.rows > 0;
+      const held = both.filter((end) => end.rows > 0);
+      if (held.length === 0 && !unsplit) return [];
+      const larger = Math.max(Number.NEGATIVE_INFINITY, ...held.map(size));
+      return [{ value, ends: both, unsplit, larger }];
+    });
+    // Two ends of no number tie as NaN, which goes to value order too.
+    ranked.sort(
+      (a, b) => b.larger - a.larger || compareStrings(a.value, b.value),
+    );
+    const left = ranked.splice(GROUPS_SENT);
+    // The cells the two series' rows left out, as the rest of a fold of them alone holds no other.
+    const skipped = { blank: 0, unparsed: 0 };
+    const cells = [...this.groups.values()].flatMap((g) =>
+      ends.flatMap((s) => g.cells.get(s) ?? []),
+    );
+    for (const { rows, numbers, blank } of this.mark === undefined
+      ? []
+      : [...cells, this.rest]) {
+      skipped.blank += blank;
+      skipped.unparsed += rows - numbers - blank;
+    }
+    const rows = left.reduce((n, v) => n + v.ends[0].rows + v.ends[1].rows, 0);
+    return {
+      values: ranked.map(({ value, ends: both, unsplit }) => ({
+        value: label(value),
+        ends: both,
+        unsplit,
+      })),
+      others: { values: left.length, rows },
+      rest: measured(this.rest),
+      skipped,
+    };
+  }
+
+  /**
    * snapshot reads the fold as plain numbers and strings, the values in
    * `moved` first, in its order, and the rest largest first.
    */
@@ -300,6 +381,11 @@ export class SplitFold {
       skipped: { ...this.skipped },
     };
   }
+}
+
+/** ended is a count as a slope's end reads it, of no rows where there is no count. */
+function ended(count: Count | undefined): Ended {
+  return { ...measured(count), numbers: count?.numbers ?? 0 };
 }
 
 /** held is every count of a group's rows. */

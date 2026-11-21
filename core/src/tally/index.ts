@@ -33,10 +33,13 @@ export { edgeOf } from './levels.ts';
 export type { Level } from './levels.ts';
 export { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from './split.ts';
 export type {
+  Ended,
   Measured,
   SavedCell,
   SavedSplit,
   SavedTally,
+  Slope,
+  SlopeValue,
   Split,
   SplitValue,
 } from './split.ts';

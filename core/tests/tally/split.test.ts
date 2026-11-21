@@ -331,3 +331,72 @@ test("a summing split fold moved by edits counts each cell's numbers and blanks 
     }
   }
 });
+
+test("a slope reads two series of a split fold, each value's cell in each as its rows, sum and numbers, the larger end first", () => {
+  const fold = summed([
+    ['East', '2024', '10'],
+    ['East', '2025', '30'],
+    ['East', '2025', 'n/a'],
+    ['West', '2024', '50'],
+    ['North', '2026', '99'],
+    ['North', '2026', ''],
+    ['South', '2025', '20'],
+  ]);
+  const { values, others, skipped } = fold.slope(['2024', '2025'], false);
+  // East's n/a is left out of the two states, and North's blank of neither.
+  expect(skipped).toStrictEqual({ blank: 0, unparsed: 1 });
+  // North has no row in either, and stands in no slope.
+  expect(values.map((v) => [v.value, v.ends])).toStrictEqual([
+    [
+      'West',
+      [
+        { rows: 1, sum: 50, numbers: 1 },
+        { rows: 0, sum: 0, numbers: 0 },
+      ],
+    ],
+    [
+      'East',
+      [
+        { rows: 1, sum: 10, numbers: 1 },
+        { rows: 2, sum: 30, numbers: 1 },
+      ],
+    ],
+    [
+      'South',
+      [
+        { rows: 0, sum: 0, numbers: 0 },
+        { rows: 1, sum: 20, numbers: 1 },
+      ],
+    ],
+  ]);
+  expect(others).toStrictEqual({ values: 0, rows: 0 });
+  // By mean, East's 30 over one number passes South's 20.
+  const means = fold.slope(['2024', '2025'], true).values.map((v) => v.value);
+  expect(means).toStrictEqual(['West', 'East', 'South']);
+  // A count ranks by rows: East's two.
+  const rows = folded([
+    ['a', 'x'],
+    ['b', 'y'],
+    ['b', 'y'],
+  ]).slope(['x', 'y'], false);
+  expect(rows.values.map((v) => v.value)).toStrictEqual(['b', 'a']);
+});
+
+test('a slope says which values a fold kept apart from their series past PAIRS_AT_MOST, and counts the values it sends none of', () => {
+  // Two series of every value fill the pairs, so v0's row in y has no cell.
+  const fold = new SplitFold();
+  const values = PAIRS_AT_MOST / 2;
+  for (let i = 0; i < values; i++) {
+    fold.add(`v${i}`, 'x');
+    fold.add(`v${i}`, 'z');
+  }
+  fold.add('v0', 'y');
+  const slope = fold.slope(['x', 'y'], false);
+  expect(slope.values.find((v) => v.value === 'v0')?.unsplit).toBe(true);
+  expect(slope.values.filter((v) => v.unsplit)).toHaveLength(1);
+  expect(slope.values).toHaveLength(GROUPS_SENT);
+  expect(slope.others).toStrictEqual({
+    values: values - GROUPS_SENT,
+    rows: values - GROUPS_SENT,
+  });
+});
