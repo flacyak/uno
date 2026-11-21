@@ -64,6 +64,12 @@ export type {
 } from './time.ts';
 export { DAY_HOURS, WEEK_DAYS, WEEK_HOURS, WeekFold } from './week.ts';
 export type { SavedWeek, Week } from './week.ts';
-export { TimeSplitFold } from './timesplit.ts';
-export type { SavedTimeSplit, TimeSplits, ValuePeriods } from './timesplit.ts';
+export { SPLIT_VALUES_SENT, TimeSplitFold } from './timesplit.ts';
+export type {
+  Ranked,
+  SavedTimeSplit,
+  SentValue,
+  TimeSplits,
+  ValuePeriods,
+} from './timesplit.ts';
 export type { Skipped } from './skipped.ts';

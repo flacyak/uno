@@ -6,7 +6,12 @@
 import { expect, test } from 'vite-plus/test';
 
 import { readDate } from '@date';
-import { DISTINCT_AT_MOST, PAIRS_AT_MOST, TimeSplitFold } from '@tally';
+import {
+  DISTINCT_AT_MOST,
+  PAIRS_AT_MOST,
+  SPLIT_VALUES_SENT,
+  TimeSplitFold,
+} from '@tally';
 import type { Held, TimeSplits } from '@tally';
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
 
@@ -187,4 +192,45 @@ test('past years, a cell that would pass the bound counts in its value unsplit, 
     0,
   );
   expect(rows).toBe(values.length * years);
+});
+
+test('the values a chart draws are those of most rows, or the largest sum, and the rest are counted apart', () => {
+  const fold = new TimeSplitFold('day', 'point');
+  // Value v has v + 1 rows, each worth 1.
+  const count = SPLIT_VALUES_SENT + 2;
+  const name = (v: number) => `v${String(v).padStart(2, '0')}`;
+  for (let v = 0; v < count; v++) {
+    for (let r = 0; r <= v; r++) fold.add(name(v), '2024-03-04', '1');
+  }
+  fold.add(name(0), '', '0.5');
+  const { values, others } = fold.ranked();
+  expect(values.map((v) => v.value)).toStrictEqual(
+    Array.from({ length: SPLIT_VALUES_SENT }, (_, i) => name(count - 1 - i)),
+  );
+  expect(values[0]).toStrictEqual({
+    value: name(count - 1),
+    rows: count,
+    sum: count,
+    undated: { rows: 0, sum: 0 },
+    unsplit: { rows: 0, sum: 0 },
+  });
+  // v01's 2 rows, and v00's 1 and its undated 0.5.
+  expect(others).toStrictEqual({ values: 2, rows: 4, sum: 3.5 });
+  // One row of 100 against three of 1: first by its sum, last by its rows.
+  const summing = new TimeSplitFold('day', 'point');
+  const counting = new TimeSplitFold('day');
+  for (const [v, cell] of [
+    ['a', '100'],
+    ['b', '1'],
+    ['b', '1'],
+    ['b', '1'],
+  ] as const) {
+    summing.add(v, '2024-03-04', cell);
+    counting.add(v, '2024-03-04', cell);
+  }
+  expect(summing.ranked().values.map((v) => v.value)).toStrictEqual(['a', 'b']);
+  expect(counting.ranked().values.map((v) => v.value)).toStrictEqual([
+    'b',
+    'a',
+  ]);
 });

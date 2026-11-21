@@ -73,6 +73,24 @@ export interface SavedTimeSplit {
   skipped: Skipped;
 }
 
+/** How many values a snapshot sends, largest first: more than a heatmap or a horizon draws rows. */
+export const SPLIT_VALUES_SENT = 16;
+
+/** A value a snapshot sends: its rows and sum in all, its undated rows and its rows past the bound. */
+export interface SentValue {
+  value: string;
+  rows: number;
+  sum: number;
+  undated: { rows: number; sum: number };
+  unsplit: { rows: number; sum: number };
+}
+
+/** The values a chart draws, largest first, and the rows of the rest, with the values they hold. */
+export interface Ranked {
+  values: SentValue[];
+  others: { values: number; rows: number; sum: number };
+}
+
 /** plain is a count's rows and sum as plain numbers. */
 const plain = ({ rows, sum }: Count) => ({ rows, sum: sum.value() });
 
@@ -220,6 +238,49 @@ export class TimeSplitFold {
     Object.assign(group.undated, none);
     Object.assign(group.unsplit, past);
     return [value, group];
+  }
+
+  /**
+   * ranked gives the SPLIT_VALUES_SENT values of most rows, or of the largest
+   * sum where the fold sums, ties in value order, and the rows and sum of the
+   * values past them and the rest.
+   */
+  ranked(): Ranked {
+    const summed = this.mark !== undefined;
+    const totals = [...this.groups].map(([value, g]) => {
+      const total = new Count();
+      for (const c of [...g.periods.values(), g.undated, g.unsplit]) {
+        total.rows += c.rows;
+        total.sum.merge(c.sum);
+      }
+      const { rows, sum } = plain(total);
+      return { value, g, total, rows, sum };
+    });
+    const size = (t: { rows: number; sum: number }) =>
+      summed ? t.sum : t.rows;
+    totals.sort((a, b) => size(b) - size(a) || (a.value < b.value ? -1 : 1));
+    const left = new Count();
+    for (const { total } of [
+      ...totals.slice(SPLIT_VALUES_SENT),
+      { total: this.rest },
+    ]) {
+      left.rows += total.rows;
+      left.sum.merge(total.sum);
+    }
+    const values = totals
+      .slice(0, SPLIT_VALUES_SENT)
+      .map(({ value, g, rows, sum }) => ({
+        value,
+        rows,
+        sum,
+        undated: plain(g.undated),
+        unsplit: plain(g.unsplit),
+      }));
+    const others = {
+      values: Math.max(totals.length - SPLIT_VALUES_SENT, 0),
+      ...plain(left),
+    };
+    return { values, others };
   }
 
   /** read is what the fold holds, as plain numbers. */
