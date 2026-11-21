@@ -40,7 +40,7 @@ const YEAR_MONTHS = 12;
  * Each held period but the year, as the key of the next coarser one, by
  * HELD's place. A key counts its periods since 1970-01-01 00:00.
  */
-const COARSER: ReadonlyArray<(key: number) => number> = [
+export const COARSER: ReadonlyArray<(key: number) => number> = [
   (hour) => Math.floor(hour / DAY_HOURS),
   (day) => {
     const { year, month } = civilFromDays(day);
