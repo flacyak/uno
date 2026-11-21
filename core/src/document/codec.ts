@@ -34,6 +34,9 @@ import type {
   SlopePlot,
   StackPlot,
   ParallelPlot,
+  MapBox,
+  MapPlot,
+  Projection,
   SwarmPlot,
   TimePlot,
   WeekPlot,
@@ -1346,6 +1349,57 @@ export function parseSwarm(where: string, value: unknown): SwarmPlot {
   const by = columnOf(where, p, 'by');
   if (by.col === of.col) throw new Error(`${where}: by and of name one column`);
   return { t: 'swarm', of, by };
+}
+
+/** What a map may be drawn in. */
+const PROJECTION: Expects<Projection> = {
+  is: (v): v is Projection => v === 'us' || v === 'world',
+  not: 'is not us or world',
+};
+
+/** The bounds a map's box keeps to, in degrees. */
+const LAT_AT_MOST = 90;
+const LON_AT_MOST = 180;
+
+/** A map's box: degrees on the globe, south below north and west of east. */
+const BOX: Expects<MapBox> = {
+  is: (v): v is MapBox => {
+    if (typeof v !== 'object' || v === null) return false;
+    const { south, west, north, east } = v as Record<string, unknown>;
+    const degrees = (d: unknown, most: number): d is number =>
+      typeof d === 'number' && Number.isFinite(d) && Math.abs(d) <= most;
+    return (
+      degrees(south, LAT_AT_MOST) &&
+      degrees(north, LAT_AT_MOST) &&
+      south < north &&
+      degrees(west, LON_AT_MOST) &&
+      degrees(east, LON_AT_MOST) &&
+      west < east
+    );
+  },
+  not: 'is not south, west, north and east in degrees, south below north and west of east',
+};
+
+/**
+ * parseMap reads a lat/lon map's plot: its `lat` and `lon` columns, two
+ * apart, a `sum` that is neither, and the `projection` and `box` it may name.
+ */
+export function parseMap(where: string, value: unknown): MapPlot {
+  const p = asRecord(value);
+  const lat = columnOf(where, p, 'lat');
+  const lon = columnOf(where, p, 'lon');
+  if (lat.col === lon.col)
+    throw new Error(`${where}: lat and lon name one column`);
+  const plot: MapPlot = { t: 'map', lat, lon };
+  if (p['sum'] !== undefined) {
+    plot.sum = columnOf(where, p, 'sum');
+    if (plot.sum.col === lat.col || plot.sum.col === lon.col)
+      throw new Error(`${where}: sum names a coordinate column`);
+  }
+  if (p['projection'] !== undefined)
+    plot.projection = required(p, 'projection', PROJECTION, where);
+  if (p['box'] !== undefined) plot.box = required(p, 'box', BOX, where);
+  return plot;
 }
 
 /**

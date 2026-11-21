@@ -13,6 +13,7 @@ import type {
   SlopePlot,
   StackPlot,
   ParallelPlot,
+  MapPlot,
   SwarmPlot,
   TimePlot,
   WeekPlot,
@@ -24,6 +25,7 @@ import {
   parseHeat,
   parseStacked,
   parseParallel,
+  parseMap,
   parseSwarm,
   parseWeek,
 } from '@document/codec';
@@ -230,6 +232,58 @@ describe('parseParallel', () => {
     expect(() => parseParallel(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
+  });
+});
+
+const LAT = { col: 2, header: 'lat' };
+const LON = { col: 3, header: 'lon' };
+
+describe('parseMap', () => {
+  test.each<MapPlot>([
+    { t: 'map', lat: LAT, lon: LON },
+    { t: 'map', lat: LAT, lon: LON, sum: REVENUE, projection: 'world' },
+    {
+      t: 'map',
+      lat: LAT,
+      lon: LON,
+      projection: 'us',
+      box: { south: 40.5, west: -74.25, north: 41, east: -73.75 },
+    },
+  ])('reads %j', (plot) => {
+    expect(parseMap(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'map', lat: LAT }, 'lon: col is not a column number'],
+    [{ t: 'map', lat: LAT, lon: LAT }, 'lat and lon name one column'],
+    [
+      { t: 'map', lat: LAT, lon: LON, sum: LON },
+      'sum names a coordinate column',
+    ],
+    [
+      { t: 'map', lat: LAT, lon: LON, projection: 'mercator' },
+      'projection is not us or world',
+    ],
+    [
+      {
+        t: 'map',
+        lat: LAT,
+        lon: LON,
+        box: { south: 41, west: -74, north: 40, east: -73 },
+      },
+      'box is not south, west, north and east in degrees, south below north and west of east',
+    ],
+    [
+      {
+        t: 'map',
+        lat: LAT,
+        lon: LON,
+        box: { south: 0, west: 0, north: 91, east: 1 },
+      },
+      'box is not south, west, north and east in degrees, south below north and west of east',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseMap(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });
 
