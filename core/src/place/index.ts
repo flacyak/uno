@@ -33,7 +33,9 @@ const COUNTRIES: readonly Country[] = table.countries;
 const REGIONS: Readonly<Record<string, readonly Region[]>> = table.regions;
 
 /** The countries whose regions a reading reads, by ISO 3166-1 alpha-2. */
-export const REGION_COUNTRIES: readonly string[] = Object.keys(REGIONS);
+export const REGION_COUNTRIES: readonly string[] = Object.keys(REGIONS).sort(
+  (a, b) => (a < b ? -1 : 1),
+);
 
 // What normalisation takes off: the marks NFKD splits from their letters,
 // every run of characters that is no letter or digit, and a leading "the".
@@ -104,4 +106,80 @@ function lookup(reading: Reading): Map<string, string> {
 export function readPlace(v: string, reading: Reading): string | undefined {
   const code = lookup(reading).get(placeKey(v));
   return code === SHARED ? undefined : code;
+}
+
+/** The least share of a sample's cells a reading must read to be inferred. */
+export const PLACE_SHARE_LEAST = 0.8;
+
+// A header's words: runs of letters, split again where lower case turns
+// upper, so `pickupLat` is `pickup` and `lat`.
+const LETTERS = /\p{L}+/gu;
+const CASE_TURN = /(\p{Ll})(\p{Lu})/gu;
+
+/** headerWords is `header` split into its words, in lower case. */
+export function headerWords(header: string): string[] {
+  const words = header.replace(CASE_TURN, '$1 $2').match(LETTERS) ?? [];
+  return words.map((w) => w.toLowerCase());
+}
+
+/** The header words that name each level, in English, Spanish and Portuguese. */
+const LEVEL_WORDS: Record<Reading['level'], ReadonlySet<string>> = {
+  country: new Set([
+    'country',
+    'countries',
+    'país',
+    'pais',
+    'nation',
+    'nación',
+  ]),
+  region: new Set([
+    'state',
+    'estado',
+    'province',
+    'provincia',
+    'província',
+    'region',
+    'región',
+    'região',
+  ]),
+};
+
+/** The region reading a tie between regions goes to, as most exports are. */
+const FIRST_REGION_COUNTRY = 'US';
+
+/**
+ * inferPlace names the reading `values`, a column's sampled cells, are
+ * places under, or undefined when none reads PLACE_SHARE_LEAST of its
+ * non-blank cells. The reading that reads the largest share wins. A tie goes
+ * to a reading of the level the header names, then to countries, then to
+ * the United States' regions, then to the first by code, so a column of
+ * `CA`, `DE` and `IN` reads as countries unless its header says state.
+ */
+export function inferPlace(
+  values: readonly string[],
+  header: string,
+): Reading | undefined {
+  const cells = values.map((v) => v.trim()).filter((v) => v !== '');
+  if (cells.length === 0) return undefined;
+  const words = headerWords(header);
+  const named = (level: Reading['level']) =>
+    words.some((w) => LEVEL_WORDS[level].has(w));
+  const countries = REGION_COUNTRIES.filter((c) => c !== FIRST_REGION_COUNTRY);
+  const regions = [FIRST_REGION_COUNTRY, ...countries].map(
+    (country): Reading => ({ level: 'region', country }),
+  );
+  const country: Reading = { level: 'country' };
+  const readings =
+    named('region') && !named('country')
+      ? [...regions, country]
+      : [country, ...regions];
+  let best: Reading | undefined;
+  let most = 0;
+  for (const reading of readings) {
+    const read = cells.filter(
+      (v) => readPlace(v, reading) !== undefined,
+    ).length;
+    if (read > most) [best, most] = [reading, read];
+  }
+  return most >= PLACE_SHARE_LEAST * cells.length ? best : undefined;
 }

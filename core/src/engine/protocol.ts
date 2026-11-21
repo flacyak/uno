@@ -13,6 +13,7 @@ import type { CarriedChart, Chart, ChartPlace, Plot } from '@document';
 import type { AuthMode, Connection, RoleTrust } from '@library';
 import type { Mark } from '@num';
 import type { Change } from '@pattern';
+import type { Reading } from '@place';
 import type { Said } from '@said';
 import type { Edit, Kind, Op } from '@sheet';
 import type { Entry, FileRef, Listing, SingleRef } from '@store';
@@ -52,6 +53,11 @@ export interface ColumnInfo {
    * milliseconds, from its sample. The column stays a number.
    */
   unit?: UnixUnit;
+  /**
+   * How the column's cells read as places, from its sample, as `inferPlace`
+   * names it. Absent when it is not a text column of places.
+   */
+  place?: Reading;
   /** The formula expression bound to the column, if any. */
   binding?: string;
 }

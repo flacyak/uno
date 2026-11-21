@@ -117,6 +117,23 @@ test('the engine names the unit of a column of Unix time', async () => {
   }
 });
 
+test('the engine names how a column of places reads, from its sample', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const csv =
+      'country,state,code,name\nGermany,TX,CA,Ada\nBrasil,NY,DE,Grace\nJapan,CA,IN,Edsger\n';
+    const src = await openOne(engine, { name: 'p.csv', blob: new Blob([csv]) });
+    expect(src.opened.columns.map((c) => c.place)).toEqual([
+      { level: 'country' },
+      { level: 'region', country: 'US' },
+      { level: 'country' },
+      undefined,
+    ]);
+  } finally {
+    done();
+  }
+});
+
 test('a band holds the rows around the viewport, and only those', async () => {
   const { engine, done } = connect(TINY);
   try {
