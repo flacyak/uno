@@ -95,6 +95,7 @@ function splitted(
       return back && splitted(counted, marks, back);
     },
     saved: () => fold.saved(),
+    whole: () => fold.whole(),
     behind:
       only === undefined
         ? undefined

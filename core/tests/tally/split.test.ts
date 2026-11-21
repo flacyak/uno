@@ -400,3 +400,19 @@ test('a slope says which values a fold kept apart from their series past PAIRS_A
     rows: values - GROUPS_SENT,
   });
 });
+
+test('a split fold is whole while every row is in its cell, none apart past PAIRS_AT_MOST or DISTINCT_AT_MOST', () => {
+  const fold = new SplitFold();
+  const values = PAIRS_AT_MOST / 2;
+  for (let i = 0; i < values; i++) {
+    fold.add(`v${i}`, 'x');
+    fold.add(`v${i}`, 'z');
+  }
+  expect(fold.whole()).toBe(true);
+  fold.add('v0', 'y');
+  expect(fold.whole()).toBe(false);
+  fold.remove('v0', 'y');
+  expect(fold.whole()).toBe(true);
+  for (let i = values; i <= DISTINCT_AT_MOST; i++) fold.add(`v${i}`, 'x');
+  expect(fold.whole()).toBe(false);
+});

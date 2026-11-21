@@ -268,10 +268,17 @@ export class Tallies {
     end: number,
     shown: (col: number) => (row: number) => string,
   ): void {
-    for (const t of this.feeding()) {
+    const feeding = this.feeding();
+    for (const t of feeding) {
       if (!takes(t, from)) continue;
       t.folder.fold(block, { from, end, shown });
       took(t, from, end);
+    }
+    // A fold behind that cannot hold every row in place can take no fold's place, so it stops.
+    for (const t of this.charts.values()) {
+      const { behind } = t;
+      const fed = behind !== undefined && feeding.includes(behind);
+      if (fed && behind.folder.whole?.() === false) t.behind = undefined;
     }
   }
 
@@ -413,7 +420,11 @@ function unfolded(): Omit<Folding, 'plot'> {
  */
 function filled(t: Tallying, total: number, indexed: boolean): Tallying {
   const { behind } = t;
-  const done = indexed && behind?.rows === total && behind.ahead === undefined;
+  const done =
+    indexed &&
+    behind?.rows === total &&
+    behind.ahead === undefined &&
+    behind.folder.whole?.() !== false;
   return behind === undefined || !done
     ? t
     : { ...t, ...behind, behind: undefined };

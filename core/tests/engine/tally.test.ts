@@ -858,6 +858,24 @@ test('a From or To changed before the fold behind is whole folds its two new sta
   expect(tallies.from()).toBe(ROWS);
 });
 
+test('a fold behind that cannot hold every row in its cell stops, so it never stands in for the exact fold of two states', () => {
+  const crowded: Folders = {
+    ...FOLDERS,
+    slope: (plot, headers, marks) => {
+      const folder = FOLDERS.slope(plot, headers, marks);
+      if (typeof folder === 'string' || folder.behind === undefined)
+        return folder;
+      return { ...folder, behind: { ...folder.behind, whole: () => false } };
+    },
+  };
+  const tallies = folded([CHANNEL_SLOPE], ROWS, crowded);
+  tallies.read(ROWS, true);
+  expect(tallies.from()).toBe(0);
+  fed(tallies, 0, TINY.blockRows);
+  expect(tallies.from()).toBeUndefined();
+  expect(tallies.saved()[CHANNEL_SLOPE.id]?.key).toMatch(/^pair /);
+});
+
 test('a source that cannot be read stops the fold behind a chart, so no pass reads it again and again', () => {
   const tallies = folded([CHANNEL_SLOPE]);
   tallies.read(ROWS, true);

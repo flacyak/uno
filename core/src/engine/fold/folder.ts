@@ -57,6 +57,8 @@ export interface Folder {
    * block.
    */
   readonly behind?: Folder;
+  /** whole says whether it holds every row it reads in place, so it can take the place of the fold it is behind. */
+  whole?(): boolean;
   /** mend folds again, alone, each block an edit left it inexact over. */
   mend(read: (block: number) => Promise<Block>): Promise<void>;
 }

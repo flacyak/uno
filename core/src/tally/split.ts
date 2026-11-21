@@ -289,6 +289,12 @@ export class SplitFold {
     return fold;
   }
 
+  /** whole says whether every row is in its value's cell, none in its unsplit rows or the rest. */
+  whole(): boolean {
+    if (this.rest.rows > 0) return false;
+    return [...this.groups.values()].every((group) => group.unsplit.rows === 0);
+  }
+
   /**
    * slope reads the fold's cells in the two series `ends` names, the value
    * whose larger end is the largest first: by rows, by sum, or by the mean
