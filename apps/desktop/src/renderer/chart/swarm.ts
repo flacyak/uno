@@ -6,11 +6,14 @@
 
 import type { SwarmTally } from "@engine";
 import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
+import { el } from "@renderer/shell/util";
 import type { Strip } from "@tally";
-import { axis } from "./axes.ts";
+import { axis, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
+import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
-import { BAR_GAP, BAR_THICK, rowsIn, trackWide } from "./rows.ts";
+import { BAR_GAP, BAR_THICK, row, rowsIn, trackWide } from "./rows.ts";
 
 /** A dot's width, the dataviz skill's marker, in px; two dots' middles stand at least this far apart. */
 export const DOT = 8;
@@ -93,4 +96,34 @@ export function packed(
     const dots = ys.map((y, d) => ({ at: at(strip.at[d]!), y }));
     return { label: labels[i]!, rows: each, strip, dots };
   });
+}
+
+/** swarm draws `strips` of `tally`, a line of those left out, and the axis's labels under them. */
+export function swarm(strips: readonly Packed[], tally: SwarmTally): HTMLElement {
+  const [scale, at] = spanOf(tally);
+  const box = barsBox("chart-swarm");
+  for (const { label, rows, dots } of strips) {
+    const track = el("div", "chart-swarm-track");
+    for (const dotted of dots) {
+      const dot = el("span", "chart-swarm-dot");
+      dot.style.setProperty("--at", `${dotted.at}`);
+      dot.style.setProperty("--y", `${dotted.y}px`);
+      track.append(dot);
+    }
+    const strip = row(label, track);
+    strip.style.setProperty("--strip-rows", `${rows}`);
+    box.append(strip);
+  }
+  const left = tally.strips.length + (tally.rest === undefined ? 0 : 1) - strips.length;
+  if (left > 0) box.append(el("div", "chart-bars-line", m.chart_bars_more({ count: num(left) })));
+  const ticks = el("div", "chart-ticks x");
+  for (const [i, label] of tickLabels(scale).entries()) {
+    label.style.setProperty("--at", `${at(scale.ticks[i]!)}`);
+    label.style.setProperty("--wide", `${label.textContent!.length}ch`);
+    ticks.append(label);
+  }
+  const under = el("div", "chart-bar-row chart-box-axis");
+  under.append(el("span"), ticks);
+  box.append(under);
+  return box;
 }

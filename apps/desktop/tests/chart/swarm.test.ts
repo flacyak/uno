@@ -10,7 +10,15 @@ import { expect, test } from "vite-plus/test";
 
 import type { SwarmPlot } from "@document";
 import type { SwarmTally } from "@engine";
-import { DOT, STRIPS_AT_MOST, tallOf, pack, packed } from "@renderer/chart/swarm";
+import {
+  DOT,
+  STRIPS_AT_MOST,
+  pack,
+  packed,
+  swarm as drawSwarm,
+  tallOf,
+} from "@renderer/chart/swarm";
+import { swarm } from "@renderer/chart/kinds/swarm";
 import type { Strip } from "@tally";
 
 const OF = { col: 1, header: "amount" };
@@ -80,4 +88,18 @@ test("a beeswarm draws at most eight strips and a line for the rest, fewer where
   expect(
     packed({ ...tallyOf([strips[0]!]), rest }, undefined, ROOM, TALL).map((p) => p.label),
   ).toStrictEqual(["r0", "Other"]);
+});
+
+test("a beeswarm draws a strip of its dots per value, a line for the strips left out, and its axis", () => {
+  const strips = Array.from({ length: STRIPS_AT_MOST + 2 }, (_, i) => stripOf(`r${i}`, [i, 50]));
+  const tally = tallyOf(strips);
+  const drawn = drawSwarm(packed(tally, undefined, ROOM, TALL), tally);
+  expect(drawn.querySelectorAll(".chart-swarm-track")).toHaveLength(STRIPS_AT_MOST);
+  expect(drawn.querySelectorAll(".chart-swarm-dot")).toHaveLength(2 * STRIPS_AT_MOST);
+  expect(drawn.querySelector(".chart-bars-line")?.textContent).toBe("+2 more");
+  const ticks = [...drawn.querySelectorAll(".chart-tick")].map((t) => t.textContent);
+  expect(ticks).toStrictEqual(["0", "50", "100"]);
+  expect(swarm(PLOT).drawing(tallyOf([], 0), ROOM)?.empty).toBe(true);
+  expect(swarm({ t: "swarm", of: OF }).title()).toBe("amount");
+  expect(swarm(PLOT).title()).toBe("amount per region");
 });

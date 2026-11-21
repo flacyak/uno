@@ -463,6 +463,39 @@ await writeFile(
   }),
 );
 
+// A workspace of two beeswarms of the box plots' amounts: a strip per region
+// in a window tall enough for four at the sheet's foot on the right, and one
+// strip of every amount in a window of the least width at its top on the left,
+// so neither stands over the selected cell and fades aside.
+const swarmed = join(scratch, "sent", "swarmed.uno");
+// Four strips of two rows, the axis's and the caption's take this much.
+const swarmTall = 400;
+await writeFile(
+  swarmed,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [boxedSource],
+    active: boxedSource.id,
+    log: [],
+    charts: [
+      {
+        ...boxedChart,
+        id: "c1",
+        plot: { t: "swarm", of: amountOf, by: { col: 0, header: "region" } },
+        place: { ...chartSize, height: swarmTall, x: 1, y: 1 },
+      },
+      {
+        ...boxedChart,
+        id: "c2",
+        plot: { t: "swarm", of: amountOf },
+        place: { ...chartSize, width: leastSize.width, x: 0, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: swarmed,
+  }),
+);
+
 // A workspace of two dot plots of an export of five carriers' delivery days,
 // their means a few tenths apart and Eagle's no number at all: the mean per
 // carrier in a new window's size at the sheet's foot, and the same in a
@@ -1093,6 +1126,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_STACKED: stacked,
       UNO_SMOKE_SPREAD: spread,
       UNO_SMOKE_BOXED: boxed,
+      UNO_SMOKE_SWARMED: swarmed,
       UNO_SMOKE_DOTTED: dotted,
       UNO_SMOKE_SLOPED: sloped,
       UNO_SMOKE_WEEKLY: weekly,

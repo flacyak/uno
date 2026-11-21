@@ -27,6 +27,7 @@ import { CHART_SLOPE } from "./chart-slope.ts";
 import { CHART_WEEK } from "./chart-week.ts";
 import { CHART_HEAT } from "./chart-heat.ts";
 import { CHART_HORIZON } from "./chart-horizon.ts";
+import { CHART_SWARM } from "./chart-swarm.ts";
 import { CHART_HISTOGRAM } from "./chart-histogram.ts";
 import { CHART_STACK } from "./chart-stack.ts";
 import { CHART_TIP } from "./chart-tip.ts";
@@ -113,6 +114,7 @@ const CHECKS: Record<string, Check[]> = {
   "chart-week": CHART_WEEK,
   "chart-heat": CHART_HEAT,
   "chart-horizon": CHART_HORIZON,
+  "chart-swarm": CHART_SWARM,
   "chart-move": CHART_MOVE,
   "chart-blank": CHART_BLANK,
   "chart-states": CHART_STATES,

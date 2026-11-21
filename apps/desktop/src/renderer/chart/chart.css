@@ -589,6 +589,29 @@
   white-space: nowrap;
 }
 
+/* A beeswarm's strips, from swarm.ts: each --strip-rows rows tall, its dots the
+ * dataviz skill's 8 px marker in the accent, ringed 2 px in the window's
+ * ground, --at of the track and --y off its middle. */
+.chart-swarm .chart-bar-row:has(> .chart-swarm-track) {
+  grid-row: span var(--strip-rows);
+}
+
+.chart-swarm-track {
+  position: relative;
+  align-self: stretch;
+}
+
+.chart-swarm-dot {
+  position: absolute;
+  top: calc(50% + var(--y) - 4px);
+  left: calc(var(--at) * 100% - 4px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
  * kept inside the tracks at either end. The clamp centres a label itself, so
  * it takes no x axis's half-label shift as well. A dot plot's centre on their
