@@ -618,6 +618,29 @@
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
+/* Parallel coordinates, from parallel.ts: an axis per column, --axes of
+ * them evenly spaced and --pitch-least apart at least, past which the plot
+ * scrolls sideways. */
+.chart-parallel {
+  --edge: 4ch;
+  height: 100%;
+  min-width: calc((var(--axes) - 1) * var(--pitch-least) + 2 * var(--edge));
+  padding: 10px var(--edge);
+  font-size: 11px;
+}
+
+.chart-parallel-plot {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-parallel-axis {
+  stroke: var(--rule);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
  * kept inside the tracks at either end. The clamp centres a label itself, so
  * it takes no x axis's half-label shift as well. A dot plot's centre on their

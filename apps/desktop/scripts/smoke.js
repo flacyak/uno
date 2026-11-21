@@ -496,6 +496,67 @@ await writeFile(
   }),
 );
 
+// A workspace of two parallel coordinates of an export of a thousand orders'
+// eight numbers: four axes in a new window's size at the sheet's foot on the
+// right, and all eight in a window of the least width at its top on the left,
+// which scrolls sideways to keep its axes apart.
+const parallelFile = join(scratch, "sent", "parallel.csv");
+// Each order's numbers hang on a base of its units, so lines run together,
+// apart and across, with a little noise each.
+const parallelColumns = {
+  units: (base) => base,
+  revenue: (base, i) => base * 3 + ((i * 13) % 200),
+  discount: (base) => 1_000 - base,
+  days: (_, i) => (i * 7) % 30,
+  weight: (base, i) => base / 2 + ((i * 11) % 100),
+  rating: (_, i) => 1 + (i % 5),
+  returns: (_, i) => (i * 17) % 50,
+  margin: (base, i) => base * 2 - ((i * 19) % 300),
+};
+const parallelHeads = Object.keys(parallelColumns);
+const parallelRows = Array.from({ length: 1_000 }, (_, i) =>
+  Object.values(parallelColumns)
+    .map((of) => of((i * 37) % 997, i))
+    .join(","),
+);
+await writeFile(parallelFile, `${[parallelHeads.join(","), ...parallelRows].join("\n")}\n`);
+const paralleled = join(scratch, "sent", "paralleled.uno");
+const parallelSource = {
+  ...spreadSource,
+  id: "paralleled",
+  name: "parallel.csv",
+  path: parallelFile,
+  rows: parallelRows.length,
+  cols: parallelHeads.length,
+};
+const axesOf = (count) => parallelHeads.slice(0, count).map((header, col) => ({ col, header }));
+const parallelChart = { source: parallelSource.id, title: "", refresh: 0 };
+await writeFile(
+  paralleled,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [parallelSource],
+    active: parallelSource.id,
+    log: [],
+    charts: [
+      {
+        ...parallelChart,
+        id: "c1",
+        plot: { t: "parallel", axes: axesOf(4) },
+        place: { ...chartSize, x: 1, y: 1 },
+      },
+      {
+        ...parallelChart,
+        id: "c2",
+        plot: { t: "parallel", axes: axesOf(parallelHeads.length) },
+        place: { ...chartSize, width: leastSize.width, x: 0, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: paralleled,
+  }),
+);
+
 // A workspace of two dot plots of an export of five carriers' delivery days,
 // their means a few tenths apart and Eagle's no number at all: the mean per
 // carrier in a new window's size at the sheet's foot, and the same in a
@@ -1127,6 +1188,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_SPREAD: spread,
       UNO_SMOKE_BOXED: boxed,
       UNO_SMOKE_SWARMED: swarmed,
+      UNO_SMOKE_PARALLELED: paralleled,
       UNO_SMOKE_DOTTED: dotted,
       UNO_SMOKE_SLOPED: sloped,
       UNO_SMOKE_WEEKLY: weekly,
