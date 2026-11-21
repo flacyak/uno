@@ -12,7 +12,9 @@ import { expect, test } from "vite-plus/test";
 import type { ParallelPlot } from "@document";
 import type { ParallelTally } from "@engine";
 import { parallel } from "@renderer/chart/kinds/parallel";
-import { LINES_DRAWN, parallelLines } from "@renderer/chart/parallel";
+import { LINES_DRAWN, parallelLines, parallelTargets } from "@renderer/chart/parallel";
+import { TIP_OFFSET, Tooltip } from "@renderer/chart/tooltip";
+import { el } from "@renderer/shell/util";
 
 const AXES = ["units", "revenue", "discount"].map((header, col) => ({ col, header }));
 const PLOT: ParallelPlot = { t: "parallel", axes: AXES };
@@ -69,4 +71,76 @@ test("parallel coordinates' caption counts the lines drawn of every row, as a sa
       .notes(),
   ).toStrictEqual([]);
   expect(parallel(PLOT).drawing(tallyOf([], 0), ROOM)?.empty).toBe(true);
+});
+
+/** Lays `at` out as a page would: `rect` is its box, and the sizes it reads. */
+function laidOut(at: Element, rect: DOMRect): void {
+  Object.defineProperties(at, {
+    getBoundingClientRect: { value: () => rect },
+    clientWidth: { value: rect.width },
+    clientHeight: { value: rect.height },
+    offsetWidth: { value: rect.width },
+    offsetHeight: { value: rect.height },
+  });
+}
+
+/** The plot's box in the page: its axes stand at 100, 200 and 300 px, from 50 px down to 150. */
+const PLOTTED = new DOMRect(100, 50, 200, 100);
+/** The window the box stands in, and the box's size, each roomy enough to keep the box where it stands. */
+const WINDOW = new DOMRect(0, 0, 400, 300);
+const BOX = new DOMRect(0, 0, 80, 60);
+
+test("parallel coordinates' targets step each line along its axes with Right and Left, to the next line with Down and Up, and say its number at its axis and its row", () => {
+  const tally = {
+    ...tallyOf([
+      [10, 25, 5],
+      [0, 100, 5],
+    ]),
+    rows: [4, 9],
+  };
+  const drawn = parallelLines(PLOT, tally);
+  laidOut(drawn.querySelector(".chart-parallel-plot")!, PLOTTED);
+  const targets = parallelTargets(PLOT, tally, drawn);
+  expect(targets.all).toHaveLength(6);
+  const read = (i: number) =>
+    targets.all[i]!.said().map((r) => `${r.value} ${r.label.textContent}`);
+  expect(read(1)).toStrictEqual(["25 revenue, row 5"]);
+  expect(read(3)).toStrictEqual(["0 units, row 10"]);
+  expect(targets.step?.("ArrowDown", 1)).toBe(4);
+  expect(targets.step?.("ArrowUp", 4)).toBe(1);
+  expect(targets.step?.("ArrowRight", 2)).toBe(2);
+  expect(targets.step?.("End", 3)).toBe(5);
+  expect(targets.step?.("ArrowDown", undefined)).toBe(0);
+  expect(targets.step?.("ArrowUp", undefined)).toBe(3);
+  expect(targets.step?.("ArrowRight", undefined)).toBeUndefined();
+  // The second line's point on the last axis, and the pointer at it: the line, at that axis.
+  const spot = targets.all[5]!.spot!();
+  expect([spot.x, spot.y]).toStrictEqual([300, 100]);
+  expect(targets.under(null, 298, 96)).toBe(5);
+  // Between the first two axes, nearer the first line than the second: the first line, at the nearer axis.
+  expect(targets.under(null, 160, 97)).toBe(1);
+  expect(targets.under(null, 160, 120)).toBeUndefined();
+});
+
+test("a step along one line says its number at the axis it is at, and stands the box by that axis's point", () => {
+  const tally = tallyOf([[10, 25, 5]]);
+  const drawn = parallelLines(PLOT, tally);
+  const within = el("div");
+  within.append(drawn);
+  document.body.append(within);
+  laidOut(drawn.querySelector(".chart-parallel-plot")!, PLOTTED);
+  laidOut(within, WINDOW);
+  const tip = new Tooltip(drawn, within, "tip");
+  within.append(tip.box);
+  laidOut(tip.box, BOX);
+  tip.show(parallelTargets(PLOT, tally, drawn));
+  const press = (key: string) =>
+    tip.step({ key, ctrl: false, alt: false, meta: false, shift: false, repeat: false });
+  const said = () => tip.box.querySelector(".chart-tip-words")?.textContent;
+  press("ArrowRight");
+  expect(said()).toBe("10 units, row 1");
+  expect(drawn.querySelector(".chart-parallel-line.cursor")).not.toBeNull();
+  press("ArrowRight");
+  expect(said()).toBe("25 revenue, row 1");
+  expect(tip.box.style.left).toBe(`${200 + TIP_OFFSET}px`);
 });

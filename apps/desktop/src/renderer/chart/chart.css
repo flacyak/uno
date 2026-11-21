@@ -677,6 +677,13 @@
   stroke-opacity: var(--line-opacity);
 }
 
+/* The line with the cursor darkens, as a scatter's point, at 2 px and full strength, in front. */
+.chart-parallel-line.cursor {
+  stroke: color-mix(in srgb, var(--accent) 80%, var(--ink));
+  stroke-width: 2px;
+  stroke-opacity: 1;
+}
+
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
  * kept inside the tracks at either end. The clamp centres a label itself, so
  * it takes no x axis's half-label shift as well. A dot plot's centre on their
@@ -1389,6 +1396,10 @@
 
   .chart-swarm-dot.cursor {
     background: Highlight;
+  }
+
+  .chart-parallel-line.cursor {
+    stroke: Highlight;
   }
 }
 
