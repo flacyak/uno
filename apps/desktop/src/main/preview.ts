@@ -348,6 +348,27 @@ const TO_FOURTH = 4;
 const ALONG_LINE = 2;
 
 /**
+ * The chorded story's beats: a cell of origin selected, the chart form opened
+ * on it, its kind stepped from Bars to Chord, Enter, a click on the ring, Home
+ * to ORD's arc, and Down twice along its ribbons.
+ */
+const CHORDED = {
+  column: 500,
+  open: 2_400,
+  kind: 4_400,
+  enter: 8_400,
+  cursor: 10_800,
+  home: 12_800,
+  down: 14_800,
+  stop: 18_000,
+};
+/** A cell of origin, the flights' first column, after the gutter. */
+const ORIGIN_CELL = "tbody tr:nth-child(3) td:nth-child(2)";
+/** How many Downs step the kinds from Bars to Chord, past those a file of names turns off, and along ORD's ribbons. */
+const TO_CHORD = 4;
+const ALONG_ARC = 2;
+
+/**
  * The moving story's beats: the last of region's bars carried to the top by
  * its label, the cursor put on the second bar, Alt+Down twice, and Alt+Up.
  */
@@ -1084,6 +1105,7 @@ const STORIES: Record<string, Story> = {
   box: { end: BOX.stop, script: playBox },
   swarmed: { end: SWARMED.stop, script: playSwarmed },
   paralleled: { end: PARALLELED.stop, script: playParalleled },
+  chorded: { end: CHORDED.stop, script: playChorded },
   moving: { end: MOVING.end, script: playMoving },
   dots: { end: DOTS.stop, script: playDots },
   weekly: { end: WEEKLY.stop, script: playWeekly },
@@ -1426,6 +1448,37 @@ async function playParalleled(win: BrowserWindow, at: Clock): Promise<void> {
   await at(PARALLELED.right);
   await presses(win, "Right", ALONG_LINE, KIND_STEP_MS);
   await at(PARALLELED.stop);
+}
+
+/**
+ * playChorded performs the chorded story: a cell of origin selected, the form
+ * opened on it by Ctrl+Shift+G, Down on the kinds from Bars to Chord, whose
+ * From starts on origin and To on dest, Enter, then a click on the ring, Home
+ * to ORD's arc for its flights out and in, and Down twice along its ribbons.
+ */
+async function playChorded(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(CHORDED.column);
+  await pressOn(ORIGIN_CELL);
+  await glideTo(KEYED_REST);
+  await at(CHORDED.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(CHORDED.kind);
+  // The keys open in By, after the kinds.
+  press(win, "Tab", ["shift"]);
+  await presses(win, "Down", TO_CHORD, KIND_STEP_MS);
+  await at(CHORDED.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-chord-arc[d]")', "the ring never drew");
+  await at(CHORDED.cursor);
+  await pressOn(".chart .chart-chord-ring");
+  await at(CHORDED.home);
+  press(win, "Home");
+  await at(CHORDED.down);
+  await presses(win, "Down", ALONG_ARC, KIND_STEP_MS);
+  await at(CHORDED.stop);
 }
 
 /**
