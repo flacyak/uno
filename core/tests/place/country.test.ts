@@ -6,7 +6,9 @@
 
 import { describe, expect, test } from 'vite-plus/test';
 
-import { placeKey, readCountry as read } from '@place';
+import { placeKey, readPlace } from '@place';
+
+const read = (v: string) => readPlace(v, { level: 'country' });
 
 describe('a country reads by its code', () => {
   test.each([
