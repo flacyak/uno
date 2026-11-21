@@ -4,7 +4,7 @@
  * row a bar tall, and a chart of one series one row with no name, inside its
  * window, and in both the legend over the bands, its breaks apart, and the
  * months' labels under them, each centred on its month; and a click on a
- * month rings it and says it.
+ * month rings it and says it, and its head and table say what it measures.
  *
  * They open the workspace smoke.js wrote of a year of four regions' orders.
  */
@@ -85,6 +85,20 @@ export const CHART_HORIZON: Check[] = [
       if (!(await until(() => december.classList.contains("cursor")))) return "North's December wears no cursor";
       const said = win.querySelector(".chart-tip-words").textContent.replace(/\\s/gu, " ");
       return said === "12 North, December 2024" ? "" : "the box says " + said;
+    `,
+  },
+  {
+    name: "a horizon's head says what it measures per region per month, and its table lists each region's months, North's December's twelve rows among them",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-horizon-table",
+    script: `
+      const win = document.querySelector(".chart");
+      const title = win.querySelector(".chart-title").textContent;
+      if (title !== "rows per region per month of ordered") return "the head says " + title;
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((c) => c.textContent).join(" | "));
+      if (lines[0] !== "region | month | rows") return "the table's head reads " + lines[0];
+      return lines.includes("North | Dec 2024 | 12") ? "" : "North's December is not 12 rows: " + lines.slice(1, 4).join(" / ");
     `,
   },
 ];

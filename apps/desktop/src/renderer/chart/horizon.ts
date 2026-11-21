@@ -7,7 +7,8 @@
  * target the pointer and the keys step through.
  */
 
-import type { HeatTally, TimeTally } from "@engine";
+import type { HeatTally } from "@engine";
+import type { SplitLevel, TimeLevel } from "@tally";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
@@ -50,24 +51,25 @@ export interface Horizon {
   others: { values: number; rows: number };
 }
 
-/** seriesOf gives `tally`'s series, of rows or sums, at its finest size whose periods get a px of `room`, none of no periods. */
-export function seriesOf(
-  tally: TimeTally | HeatTally,
-  summed: boolean,
+/** horizonLevel gives the finest of `levels` whose periods get a px of `room`, or the coarsest. */
+export function horizonLevel<L extends Periods>(
+  levels: readonly L[],
   room: PlotRoom,
-): Horizon | undefined {
-  const fits = (span: number) => span * PITCH_LEAST <= room.width - 2 * BARS_INSET;
-  if (tally.t === "time") {
-    const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
-    if (level === undefined) return undefined;
-    const rows = level.rows.reduce((all, each) => all + each, 0);
-    const amounts = summed ? level.sum : level.rows;
-    const series = [{ value: undefined, rows, counts: level.rows, amounts }];
-    const periods = { per: level.per, from: level.from + level.offset, span: level.rows.length };
-    return { periods, series, others: { values: 0, rows: 0 } };
-  }
-  const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
-  if (level === undefined) return undefined;
+): L | undefined {
+  return levels.find((l) => l.span * PITCH_LEAST <= room.width - 2 * BARS_INSET) ?? levels.at(-1);
+}
+
+/** timeSeries gives an over-time chart's `level` as a horizon of one series, of rows or sums. */
+export function timeSeries(level: TimeLevel, summed: boolean): Horizon {
+  const rows = level.rows.reduce((all, each) => all + each, 0);
+  const amounts = summed ? level.sum : level.rows;
+  const series = [{ value: undefined, rows, counts: level.rows, amounts }];
+  const periods = { per: level.per, from: level.from + level.offset, span: level.rows.length };
+  return { periods, series, others: { values: 0, rows: 0 } };
+}
+
+/** heatSeries gives a heatmap's `level` of `tally` as a horizon of a series per value, of rows or sums. */
+export function heatSeries(tally: HeatTally, level: SplitLevel, summed: boolean): Horizon {
   const series = (summed ? level.sum : level.rows).map((each, i) => {
     const { value, rows } = tally.values[i]!;
     return { value, rows, counts: level.rows[i]!, amounts: each };

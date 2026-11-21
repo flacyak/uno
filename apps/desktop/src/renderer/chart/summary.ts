@@ -114,7 +114,7 @@ export function spanned(plot: Extract<Plot, { t: "scatter" }>, tally: Sample): T
  * `plot` measures it: its first period and its last, and the one that holds
  * the most, with what it holds.
  */
-export function spannedOver({ sum }: TimePlot, level: TimeLevel): Told {
+export function spannedOver({ sum }: Pick<TimePlot, "sum">, level: TimeLevel): Told {
   const sizes = sum === undefined ? level.rows : level.sum;
   const most = sizes.reduce((at, size, i) => (size > sizes[at]! ? i : at), 0);
   const name = (i: number): string => fullName(level.per, level.from + i);

@@ -1,7 +1,15 @@
-/** @fileoverview A horizon chart's kind: rows, or a sum, per period, a row of folded bands per series. */
+/**
+ * @fileoverview A horizon chart's kind: rows, or a sum, per period, a row of
+ * folded bands per series, and the table and summary of the over-time chart
+ * or the heatmap whose fold it draws, at the size it draws.
+ */
 
 import type { HorizonPlot } from "@document";
-import { horizonRows, horizonTargets, seriesOf } from "../horizon.ts";
+import { heatSeries, horizonLevel, horizonRows, horizonTargets, timeSeries } from "../horizon.ts";
+import type { Horizon } from "../horizon.ts";
+import type { Drawing, PlotRoom } from "../kind.ts";
+import { heatOver, spannedOver } from "../summary.ts";
+import { heated, tableOf, timed } from "../table.ts";
 import type { ChartKind } from "../kind.ts";
 import { heatTitle } from "./heat.ts";
 import { timeTitle } from "./time.ts";
@@ -14,14 +22,34 @@ export const horizon: ChartKind<HorizonPlot> = (plot) => ({
   dated: { at: plot.at, reading: "order" in plot ? plot.order : plot.unit },
   valued: plot.by === undefined ? [plot.at] : [plot.by, plot.at],
   drawing: (tally, room) => {
-    if (tally.t !== "time" && tally.t !== "heat") return undefined;
     const summed = plot.sum !== undefined;
-    const horizon = seriesOf(tally, summed, room);
-    if (horizon === undefined || horizon.series.length === 0) return { ...undrawn, empty: true };
+    if (tally.t === "time") {
+      const level = horizonLevel(tally.levels, room);
+      if (level === undefined) return { ...undrawn, empty: true };
+      return {
+        ...drawn(timeSeries(level, summed), summed, room),
+        table: (called) => tableOf(timed(plot, tally, level), called),
+        told: () => spannedOver(plot, level),
+      };
+    }
+    const { by, sum } = plot;
+    if (tally.t !== "heat" || by === undefined) return undefined;
+    const level = horizonLevel(tally.levels, room);
+    if (level === undefined) return { ...undrawn, empty: true };
     return {
-      ...undrawn,
-      draw: (height) => horizonRows(horizon, summed, room, height),
-      targets: (drawn) => horizonTargets(horizon, summed, drawn),
+      ...drawn(heatSeries(tally, level, summed), summed, room),
+      table: (called) => tableOf(heated({ by, sum }, tally, level), called),
+      told: () => heatOver(tally, level, summed),
     };
   },
 });
+
+/** drawn gives the drawing of `horizon`, of rows or sums where `summed`, in `room`, and its targets. */
+function drawn(horizon: Horizon, summed: boolean, room: PlotRoom): Drawing {
+  return {
+    ...undrawn,
+    empty: horizon.series.length === 0,
+    draw: (height) => horizonRows(horizon, summed, room, height),
+    targets: (box) => horizonTargets(horizon, summed, box),
+  };
+}

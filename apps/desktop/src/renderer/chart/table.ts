@@ -202,7 +202,7 @@ function rowNamed(text: string): HTMLTableCellElement {
  * line of the summed column's cells it could not add.
  */
 export function timed(
-  { sum }: TimePlot,
+  { sum }: Pick<TimePlot, "sum">,
   tally: TimeTally,
   level: TimeLevel,
 ): [HTMLElement[], HTMLElement[]] {
@@ -254,7 +254,7 @@ export function weekly({ sum }: WeekPlot, tally: WeekTally): [HTMLElement[], HTM
  * and the cells left out.
  */
 export function heated(
-  plot: HeatPlot,
+  plot: Pick<HeatPlot, "by" | "sum">,
   tally: HeatTally,
   level: SplitLevel,
 ): [HTMLElement[], HTMLElement[]] {
