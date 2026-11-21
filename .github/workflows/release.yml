@@ -1,22 +1,24 @@
-# One button releases uno: Actions, release, Run workflow, a version, Run.
+# One button releases uno: Actions, release, Run workflow, Run.
 #
-# The version typed there is the release's. It becomes the tag, v<version>,
-# the name of every zip, and the version the packaged app reports; the
-# package.json files stay at 0.0.0. Each platform is packaged on a runner of
-# its own kind, since a macOS app is signed on macOS and a Windows executable
-# stamped on Windows, and one job then publishes every zip and their checksums
-# as one GitHub release, with notes written from the pull requests since the
-# last one. A version that is no version, or already released, stops the run
-# before a runner is started.
+# The version counts up from the last release's tag: patch unless the button
+# is told minor or major (scripts/next-version.sh). It becomes the tag,
+# v<version>, the name of every zip, and the version the packaged app reports;
+# the package.json files stay at 0.0.0. Each platform is packaged on a runner
+# of its own kind, since a macOS app is signed on macOS and a Windows
+# executable stamped on Windows, and one job then publishes every zip and
+# their checksums as one GitHub release, with notes written from the pull
+# requests since the last one.
 name: release
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "The version to release, such as 0.2.0, or 0.3.0-rc.1 for a prerelease. The tag is v<version>."
+      bump:
+        description: "The part of the version that counts up from the last release: patch for fixes, minor for features, major for a break."
         required: true
-        type: string
+        type: choice
+        default: patch
+        options: [patch, minor, major]
 
 permissions:
   contents: write
@@ -26,38 +28,26 @@ concurrency:
   group: release
 
 jobs:
-  # Refuses a bad version here, before six runners build on it.
+  # The version is settled here, once, before six runners build on it.
   version:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.check.outputs.version }}
-      tag: ${{ steps.check.outputs.tag }}
-      prerelease: ${{ steps.check.outputs.prerelease }}
+      version: ${{ steps.next.outputs.version }}
+      tag: ${{ steps.next.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check the version
-        id: check
+      - name: Count the version up
+        id: next
         env:
-          VERSION: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error title=Not a version::'$VERSION' is not a version such as 0.2.0 or 0.3.0-rc.1."
-            exit 1
-          fi
-          tag="v$VERSION"
-          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
-            echo "::error title=Already released::The tag $tag exists. Pick the next version."
-            exit 1
-          fi
-          # A dash marks a prerelease, as in 0.3.0-rc.1.
-          prerelease=false
-          [[ "$VERSION" == *-* ]] && prerelease=true
+          version="$(scripts/next-version.sh "$BUMP")"
+          echo "::notice title=Releasing::v$version"
           {
-            echo "version=$VERSION"
-            echo "tag=$tag"
-            echo "prerelease=$prerelease"
+            echo "version=$version"
+            echo "tag=v$version"
           } >> "$GITHUB_OUTPUT"
 
   # One zip per job, each on the runner that can finish it: the macOS bundle
@@ -159,10 +149,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.version.outputs.tag }}
           VERSION: ${{ needs.version.outputs.version }}
-          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
           set -euo pipefail
-          flags=()
-          [[ "$PRERELEASE" == true ]] && flags+=(--prerelease)
           gh release create "$TAG" --target "$GITHUB_SHA" --title "uno $VERSION" \
-            --generate-notes "${flags[@]}" release-artifacts/*
+            --generate-notes release-artifacts/*

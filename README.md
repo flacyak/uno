@@ -60,7 +60,8 @@ The top of the script says what it limits and how to change the limits.
 
 ## Releasing
 
-A release is one button: Actions, release, Run workflow, type the version, Run.
-The version is the release's tag, `v<version>`, the name of every zip and what the packaged app reports; `0.3.0-rc.1` marks a prerelease.
+A release is one button: Actions, release, Run workflow, Run.
+The version counts up from the last release's tag, the patch unless the button is told minor or major, as `scripts/next-version.sh` does.
+It is the release's tag, `v<version>`, the name of every zip and what the packaged app reports.
 The workflow packages the app on macOS, Windows and Linux runners for x64 and arm64, drives the Linux zip through the whole smoke, and publishes the six zips and their checksums as one GitHub release with notes from the pull requests since the last one.
 The macOS app is ad-hoc signed, so Gatekeeper asks before its first start: right click, Open.
