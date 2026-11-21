@@ -11,7 +11,16 @@ import { expect, test } from "vite-plus/test";
 
 import type { ChordPlot } from "@document";
 import type { ChordTally } from "@engine";
-import { ARC_GAP, ARC_LEAST, ARC_WIDTH, arcs, chord, fitRing } from "@renderer/chart/chord";
+import {
+  ARC_GAP,
+  ARC_LEAST,
+  ARC_WIDTH,
+  arcs,
+  chord,
+  fitRing,
+  ribbons,
+} from "@renderer/chart/chord";
+import type { Ribbon } from "@renderer/chart/chord";
 import { chord as kind } from "@renderer/chart/kinds/chord";
 import { OTHER_KEY } from "@renderer/chart/pie";
 
@@ -92,6 +101,91 @@ test("Other's arc comes last in the caption's ink, and a flow at or below zero h
   );
   expect(arcs(ROWS, none)).toStrictEqual([]);
   expect(kind(ROWS).drawing(none, { width: 0, ch: 0 })?.empty).toBe(true);
+});
+
+/** `ribbons` with every turn and share in fourteenths, rounded to a millionth of one. */
+function inFourteenths(ribbons: Ribbon[]): Ribbon[] {
+  const fourteenths = 14;
+  const places = 6;
+  const of = (turn: number) => Number((turn * fourteenths).toFixed(places));
+  return ribbons.map((r) => ({
+    ...r,
+    ends: [
+      [of(r.ends[0][0]), of(r.ends[0][1])],
+      [of(r.ends[1][0]), of(r.ends[1][1])],
+    ],
+    share: of(r.share),
+  }));
+}
+
+test("a chord's ribbons stand on both arcs as wide as the flow both ways, in the busier sender's colour, the widest first, a flow to itself folded on its arc", () => {
+  // ORD's arc holds LAX's ribbon first, its nearest before it, then JFK's, its nearest after it.
+  expect(inFourteenths(ribbons(ROWS, AIRPORTS))).toStrictEqual([
+    {
+      places: [0, 1],
+      ends: [
+        [1, 6],
+        [6, 11],
+      ],
+      share: 5,
+      key: "var(--chart-1)",
+    },
+    {
+      places: [0, 2],
+      ends: [
+        [0, 1],
+        [13, 14],
+      ],
+      share: 1,
+      key: "var(--chart-1)",
+    },
+    {
+      places: [2, 2],
+      ends: [
+        [11, 12],
+        [12, 13],
+      ],
+      share: 1,
+      key: "var(--chart-3)",
+    },
+  ]);
+});
+
+test("a ribbon wears the colour of the place that sends more of it, the earlier on a tie, Other's its ink", () => {
+  const tally = tallyOf(
+    ["ORD", "JFK"],
+    [
+      [0, 1, 0],
+      [2, 0, 1],
+      [0, 3, 0],
+    ],
+  );
+  const worn = ribbons(ROWS, tally).map(({ places, key }) => [places, key]);
+  expect(worn).toStrictEqual([
+    [[2, 1], OTHER_KEY],
+    [[1, 0], "var(--chart-2)"],
+  ]);
+  const tied = tallyOf(
+    ["ORD", "JFK"],
+    [
+      [0, 1, 0],
+      [1, 0, 0],
+      [0, 0, 0],
+    ],
+  );
+  expect(ribbons(ROWS, tied).map(({ places }) => places)).toStrictEqual([[0, 1]]);
+  expect(
+    ribbons(
+      ROWS,
+      tallyOf(
+        ["ORD"],
+        [
+          [0, 0],
+          [0, 0],
+        ],
+      ),
+    ),
+  ).toStrictEqual([]);
 });
 
 /** The ring `tally` draws, fitted as a ring `across` px wide. */

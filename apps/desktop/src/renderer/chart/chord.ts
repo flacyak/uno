@@ -70,6 +70,74 @@ export function arcs(plot: ChordPlot, tally: ChordTally): Arc[] {
   });
 }
 
+/** One end of a ribbon on its arc: where it starts and ends, turns clockwise from the top. */
+export type End = [from: number, to: number];
+
+/** A ribbon between two places' arcs, or a place's arc and itself. */
+export interface Ribbon {
+  /** The places it joins, the one that sends more of it first, on a tie the earlier. */
+  places: [number, number];
+  /** Where it stands on each's arc, in the order of `places`. */
+  ends: [End, End];
+  /** Its width at either end, a share of the ring. */
+  share: number;
+  /** The colour of the place that sends more of it. */
+  key: string;
+}
+
+/**
+ * ribbons gives a ribbon per two places with a flow between them either way,
+ * and per place with a flow to itself, the widest first. Each stands on both
+ * arcs as wide as the flow both ways, a place's own flow on its arc twice,
+ * folded in two. Along an arc, the ribbons to the arcs before it come first,
+ * the nearest first, its own in the middle, and those to the arcs after it
+ * last, the nearest last, so no two ribbons between neighbours cross.
+ */
+export function ribbons(plot: ChordPlot, tally: ChordTally): Ribbon[] {
+  const size = sizeOf(plot);
+  const flow = (p: number, q: number) => size(tally.flows[p]![q]!);
+  const ring = arcs(plot, tally);
+  const whole = tally.flows.reduce(
+    (n, out, p) => n + out.reduce((m, _, q) => m + 2 * flow(p, q), 0),
+    0,
+  );
+  const count = ring.length;
+  const half = Math.floor((count - 1) / 2);
+  const ends = new Map<string, End>();
+  for (const [a, { place, from }] of ring.entries()) {
+    const near = (offset: number) => ring[(a + offset + count) % count]!.place;
+    const before = Array.from({ length: half }, (_, t) => near(-1 - t));
+    const after = Array.from({ length: count - 1 - half }, (_, t) => near(count - 1 - half - t));
+    let reached = from;
+    for (const q of [...before, place, ...after]) {
+      const width = (flow(place, q) + flow(q, place)) / whole;
+      ends.set(`${place} ${q}`, [reached, reached + width]);
+      reached += width;
+    }
+  }
+  const endOf = (p: number, q: number) => ends.get(`${p} ${q}`)!;
+  const made = ring.flatMap(({ place: p }) =>
+    ring.flatMap(({ place: q }): Ribbon[] => {
+      const [from, to] = endOf(p, q);
+      if (q < p || to === from) return [];
+      const places: [number, number] = flow(q, p) > flow(p, q) ? [q, p] : [p, q];
+      const middle = (from + to) / 2;
+      const both: [End, End] =
+        p === q
+          ? [
+              [from, middle],
+              [middle, to],
+            ]
+          : [endOf(...places), endOf(places[1], places[0])];
+      const key = keyOf(places[0], tally.nodes.length);
+      // A place's own flow is folded in two, each half its width.
+      const share = (p === q ? flow(p, p) : flow(p, q) + flow(q, p)) / whole;
+      return [{ places, ends: both, share, key }];
+    }),
+  );
+  return made.sort((a, b) => b.share - a.share);
+}
+
 /**
  * chord draws `tally`'s ring as `plot` measures it, its arcs still to place
  * by fitRing. A chord of no flow draws nothing.
