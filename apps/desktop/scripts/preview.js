@@ -66,6 +66,9 @@
  * - `moving`: carries the last of region's bars to the top by its label, then
  *   steps the cursor and moves a bar with Alt+Down and Alt+Up. Goes to
  *   out/moving.gif.
+ * - `dots`: selects region, opens the chart form on it by Ctrl+Shift+G, steps
+ *   its kind to Dot plot and Of to revenue, presses Enter, then clicks a
+ *   region's row and moves it up with Alt+Up. Goes to out/dots.gif.
  * - `dotted`: points at a row of mean revenue per region's dots for what it
  *   says, moves it with Alt+Down, then carries the last row by its label to
  *   the top. Goes to out/dotted.gif.
@@ -77,7 +80,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|histogram|box|moving|dotted|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|stacked|histogram|box|moving|dots|dotted|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -140,6 +143,7 @@ const CHARTED = [
   "histogram",
   "box",
   "moving",
+  "dots",
   "dotted",
 ];
 /** The stories whose GIFs go to out/, as docs/ shows none of them. */
@@ -469,6 +473,7 @@ const staged = {
   histogram: () => stageCharts("histogram", []),
   box: () => stageCharts("box", []),
   moving: () => stageCharts("moving", [REGION_BARS]),
+  dots: () => stageCharts("dots", []),
   dotted: () => stageCharts("dotted", [MEAN_DOTS]),
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];

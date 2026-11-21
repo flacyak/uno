@@ -21,6 +21,7 @@ export const QUESTIONS: readonly Question[] = [
     words: m.chart_kinds_compare,
     kinds: [
       ["bars", m.chart_kind_bars],
+      ["dots", m.chart_kind_dots],
       ["pie", m.chart_kind_pie],
     ],
   },

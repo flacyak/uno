@@ -30,6 +30,7 @@ export const LABELS: ReadonlyArray<() => string> = [
   m.chart_form_by,
   m.chart_form_sum,
   m.chart_form_split,
+  m.chart_form_measure,
   m.chart_form_x,
   m.chart_form_y,
   m.chart_form_title_field,

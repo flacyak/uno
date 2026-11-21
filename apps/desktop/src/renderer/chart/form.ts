@@ -169,6 +169,15 @@ export class ChartForm {
   private readonly boxBy = select("box-by");
   private readonly boxed = field(m.chart_form_by(), this.boxBy);
   private readonly span: Span;
+  /** The number column a dot plot is of, or "" for none, which counts the rows, and how it measures it. */
+  private readonly dotsOf = select("dots-of");
+  private readonly measure = select("measure");
+  private readonly dotted = [
+    field(m.chart_form_of(), this.dotsOf),
+    field(m.chart_form_measure(), this.measure),
+  ];
+  /** The values a person moved among the rows of the bars or dots the form opened on, kept while their column stays. */
+  private readonly moved: { by: ChartColumn; order: string[] } | undefined;
   /** How the chart opened on reads its dates, which it keeps while its date column stays. */
   private readonly read: TimePlot | undefined;
   /** The fields an over-time chart asks for before Sum of, and those bars and a pie ask for. */
@@ -209,6 +218,12 @@ export class ChartForm {
     this.read = changes && opening.chart.plot.t === "time" ? opening.chart.plot : undefined;
     const was = opening.t === "change" ? opening.chart.plot : undefined;
     this.span = was?.t === "histogram" || was?.t === "box" ? was.span : "most";
+    const order = was?.t === "dots" ? was.order : undefined;
+    this.moved = was?.t === "dots" && order !== undefined ? { by: was.by, order } : undefined;
+    this.measure.append(
+      option(m.chart_form_mean(), "mean"),
+      option(m.chart_form_sum_word(), "sum"),
+    );
     const label = changes ? m.chart_edit() : m.chart_form_title();
     const heading = changes
       ? m.chart_form_title_chart({ title: opening.chart.title || madeTitle(opening.chart.plot) })
@@ -233,6 +248,7 @@ export class ChartForm {
     this.at.addEventListener("change", () => this.dated());
     this.by.addEventListener("change", () => this.ask());
     this.of.addEventListener("change", () => this.ask());
+    this.dotsOf.addEventListener("change", () => this.ask());
     this.per.append(...PERS.map(([per, words]) => option(words(), per)));
 
     if (opening.t === "insert") this.inserts(opening.col);
@@ -248,6 +264,8 @@ export class ChartForm {
       this.y,
       this.of,
       this.boxBy,
+      this.dotsOf,
+      this.measure,
     ]) {
       column.addEventListener("change", () => this.name());
     }
@@ -274,6 +292,7 @@ export class ChartForm {
       this.spread,
       this.boxed,
       ...this.grouped,
+      ...this.dotted,
       ...this.paired,
       field(m.chart_form_title_field(), this.title),
       field(m.chart_form_refresh(), schedule),
@@ -325,8 +344,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column; the form makes no dot plot yet.
-    this.kind.value = plot.t === "stack" || plot.t === "dots" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time") {
       this.per.value = plot.per;
@@ -337,7 +356,11 @@ export class ChartForm {
       const by = plot.t === "box" ? plot.by : undefined;
       const unused = [undefined, undefined, undefined, undefined, undefined];
       this.offer(this.placeAt(plot.of), [...unused, plot.of, by]);
-    } else this.offer(this.placeAt(plot.by), [plot.t === "dots" ? plot.of : plot.sum]);
+    } else if (plot.t === "dots") {
+      this.measure.value = plot.measure ?? "mean";
+      const unused = [undefined, undefined, undefined, undefined, undefined, undefined, undefined];
+      this.offer(this.placeAt(plot.by), [...unused, plot.of]);
+    } else this.offer(this.placeAt(plot.by), [plot.sum]);
   }
 
   /** placeAt gives where the source holds `column`, or else its first column. */
@@ -381,6 +404,7 @@ export class ChartForm {
     this.y.replaceChildren();
     this.of.replaceChildren();
     this.boxBy.replaceChildren(option(m.chart_form_box_none(), ""));
+    this.dotsOf.replaceChildren(option(m.chart_form_sum_none(), ""));
     for (const [i, c] of columns.entries()) {
       this.by.append(fromFile(c.header, i));
       this.split.append(fromFile(c.header, i));
@@ -388,7 +412,7 @@ export class ChartForm {
       // Cells that do not read as numbers are left out of a sum or a scatter and counted.
       if (c.kind !== "num" && !c.flagged) continue;
       numbers.push(i);
-      for (const offered of [this.sum, this.x, this.y, this.of]) {
+      for (const offered of [this.sum, this.x, this.y, this.of, this.dotsOf]) {
         offered.append(fromFile(c.header, i));
       }
     }
@@ -407,6 +431,7 @@ export class ChartForm {
     this.sum.value = String(sum ?? "");
     this.split.value = String(this.placed(kept[4]) ?? "");
     this.boxBy.value = String(this.placed(kept[6]) ?? "");
+    this.dotsOf.value = String(held(kept[7]) ?? "");
     this.x.value = String(xAt ?? "");
     this.y.value = String(yAt ?? "");
     this.of.value = String(held(kept[5]) ?? (numbers.includes(by) ? by : (numbers[0] ?? "")));
@@ -437,7 +462,9 @@ export class ChartForm {
     this.spread.hidden = !spreads;
     this.boxed.hidden = t !== "box";
     this.grouped[0]!.hidden = t === "scatter" || t === "time" || spreads;
-    this.grouped[1]!.hidden = t === "scatter" || spreads;
+    this.grouped[1]!.hidden = t === "scatter" || t === "dots" || spreads;
+    this.dotted[0]!.hidden = t !== "dots";
+    this.dotted[1]!.hidden = t !== "dots" || this.dotsOf.value === "";
     // A box plot splits by another column, never by its numbers'.
     for (const made of this.boxBy.options) made.disabled = made.value === this.of.value;
     if (this.boxBy.value === this.of.value) this.boxBy.value = "";
@@ -464,11 +491,26 @@ export class ChartForm {
     }
     const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
+    if (this.kind.value === "dots") return this.dots(by);
     const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
     if (t === "bars" && this.split.value !== "") {
       return { t: "stack", by, split: this.column(this.split.value), ...sum };
     }
     return { t, by, ...sum };
+  }
+
+  /**
+   * dots gives a dot plot per value of `by`, of Of's column at Measure's
+   * measure, or of the rows where Of names none, standing the values a person
+   * moved first while `by` is the column they were moved in.
+   */
+  private dots(by: ChartColumn): Plot {
+    const moved = this.moved;
+    const kept = moved?.by.col === by.col && moved.by.header === by.header;
+    const order = moved !== undefined && kept ? { order: moved.order } : {};
+    if (this.dotsOf.value === "") return { t: "dots", by, ...order };
+    const measure = this.measure.value === "sum" ? "sum" : "mean";
+    return { t: "dots", by, of: this.column(this.dotsOf.value), measure, ...order };
   }
 
   /**

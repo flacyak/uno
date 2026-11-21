@@ -326,6 +326,24 @@ const TO_REGION = 2;
  */
 const MOVING = { carry: 600, cursor: 4_000, down: 5_400, up: 8_000, end: 10_400 };
 /**
+ * The dots story's beats: region selected, the chart form opened on it, its
+ * kind stepped from Bars to Dot plot, Of stepped to revenue, Enter, a click on
+ * a region's row, and Alt+Up.
+ */
+const DOTS = {
+  column: 500,
+  open: 2_400,
+  kind: 4_400,
+  of: 6_400,
+  enter: 9_400,
+  cursor: 11_800,
+  up: 13_800,
+  stop: 16_400,
+};
+/** The fixture's third region cell, which the dots story selects. */
+const REGION_CELL = "tbody tr:nth-child(3) td:nth-child(3)";
+
+/**
  * The dotted story's beats: the pointer on the second row of dots, Alt+Down,
  * and the last row carried to the top by its label.
  */
@@ -966,6 +984,7 @@ const STORIES: Record<string, Story> = {
   histogram: { end: HISTOGRAM.stop, script: playHistogram },
   box: { end: BOX.stop, script: playBox },
   moving: { end: MOVING.end, script: playMoving },
+  dots: { end: DOTS.stop, script: playDots },
   dotted: { end: DOTTED.end, script: playDotted },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
@@ -1231,6 +1250,40 @@ async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
   await at(BOX.down);
   press(win, "Down");
   await at(BOX.stop);
+}
+
+/**
+ * playDots performs the dots story: region selected, the form opened on it by
+ * Ctrl+Shift+G, its kind stepped to Dot plot and Of to revenue, its mean,
+ * Enter, then a click on a region's row for what it says, and Alt+Up.
+ */
+async function playDots(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(DOTS.column);
+  await pressOn(REGION_CELL);
+  await glideTo(KEYED_REST);
+  await at(DOTS.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(DOTS.kind);
+  // The keys open in By, after the kinds, and Right steps Bars to Dot plot.
+  press(win, "Tab", ["shift"]);
+  press(win, "Right");
+  await glideTo('.chart-form select[name="dots-of"]');
+  await at(DOTS.of);
+  press(win, "Tab");
+  press(win, "Tab");
+  // Of offers None, then the number columns, as Sum of does.
+  await presses(win, "Down", TO_REVENUE, KIND_STEP_MS);
+  await at(DOTS.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-dot")', "the dot plot never drew");
+  await at(DOTS.cursor);
+  await pressOn(".chart .chart-bar-row:nth-child(2) .chart-bar-label");
+  await at(DOTS.up);
+  press(win, "Up", ["alt"]);
+  await at(DOTS.stop);
 }
 
 /**

@@ -23,7 +23,7 @@ test("each question is a row of its kinds' tiles, one radio group the form names
     ...[...row.querySelectorAll(".chart-tile")].map((tile) => tile.textContent),
   ]);
   expect(rows).toStrictEqual([
-    [m.chart_kinds_compare(), m.chart_kind_bars(), m.chart_kind_pie()],
+    [m.chart_kinds_compare(), m.chart_kind_bars(), m.chart_kind_dots(), m.chart_kind_pie()],
     [m.chart_kinds_trend(), m.chart_kind_time()],
     [m.chart_kinds_spread(), m.chart_kind_histogram(), m.chart_kind_box()],
     [m.chart_kinds_relate(), m.chart_kind_scatter()],
@@ -64,7 +64,7 @@ test("Tab stops once on a form's radio group, at the kind chosen", () => {
       new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
     );
   tab();
-  expect(document.activeElement).toBe(radios(tiles)[1]);
+  expect(document.activeElement).toBe(radios(tiles).find((radio) => radio.value === "pie"));
   tab();
   expect(document.activeElement).toBe(after);
   form.close();
