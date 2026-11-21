@@ -64,4 +64,6 @@ export type {
 } from './time.ts';
 export { DAY_HOURS, WEEK_DAYS, WEEK_HOURS, WeekFold } from './week.ts';
 export type { SavedWeek, Week } from './week.ts';
+export { TimeSplitFold } from './timesplit.ts';
+export type { TimeSplits, ValuePeriods } from './timesplit.ts';
 export type { Skipped } from './skipped.ts';

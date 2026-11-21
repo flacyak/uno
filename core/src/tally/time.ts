@@ -50,7 +50,7 @@ const COARSER: ReadonlyArray<(key: number) => number> = [
 ];
 
 /** The key of the period at HELD's place `level` that `minute` falls in. */
-function keyAt(minute: number, level: number): number {
+export function keyAt(minute: number, level: number): number {
   let key = Math.floor(minute / HOUR_MINUTES);
   for (let i = 0; i < level; i++) key = COARSER[i]!(key);
   return key;
