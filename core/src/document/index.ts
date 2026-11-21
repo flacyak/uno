@@ -73,6 +73,7 @@ export type {
   HorizonPlot,
   ParallelPlot,
   SwarmPlot,
+  ChordPlot,
   Plot,
   Reading,
   SlopePlot,

@@ -33,6 +33,7 @@ import type {
   Reading,
   SlopePlot,
   StackPlot,
+  ChordPlot,
   ParallelPlot,
   SwarmPlot,
   TimePlot,
@@ -1336,6 +1337,24 @@ export function parseHorizon(where: string, value: unknown): HorizonPlot {
   const at = columnOf(where, p, 'at');
   const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
   return { t: 'horizon', at, ...sum, per, ...readingOf(where, p) };
+}
+
+/**
+ * parseChord reads a chord chart's plot: its `from` and `to` columns, two
+ * different ones, and a `sum` it may name, which is neither.
+ */
+export function parseChord(where: string, value: unknown): ChordPlot {
+  const p = asRecord(value);
+  const [from, to] = [columnOf(where, p, 'from'), columnOf(where, p, 'to')];
+  if (from.col === to.col)
+    throw new Error(`${where}: from and to name one column`);
+  if (p['sum'] === undefined) return { t: 'chord', from, to };
+  const sum = columnOf(where, p, 'sum');
+  for (const [key, column] of Object.entries({ from, to })) {
+    if (sum.col === column.col)
+      throw new Error(`${where}: sum and ${key} name one column`);
+  }
+  return { t: 'chord', from, to, sum };
 }
 
 /** parseSwarm reads a beeswarm's plot: its column `of` numbers, and a column `by` of strips it may name. */
