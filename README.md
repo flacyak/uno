@@ -32,6 +32,8 @@ vp run preview    # film docs/preview.gif: the browse story
                   # `vp run preview chart` films docs/chart.gif
 ```
 
+`vp run package -- --version 0.0.0-local` zips the built app for this machine as `apps/desktop/out/package/uno-0.0.0-local-<os>-<arch>.zip`; `--platform` and `--arch` name another target.
+
 Three tiers of the tests, sized to what a change can break, each one command:
 
 ```bash
@@ -55,3 +57,10 @@ scripts/bounded.sh reap --orphans     # stop what dead or unbounded runs left
 
 Every copy of the script shares one queue, so a run from an older branch's copy still waits its turn.
 The top of the script says what it limits and how to change the limits.
+
+## Releasing
+
+A release is one button: Actions, release, Run workflow, type the version, Run.
+The version is the release's tag, `v<version>`, the name of every zip and what the packaged app reports; `0.3.0-rc.1` marks a prerelease.
+The workflow packages the app on macOS, Windows and Linux runners for x64 and arm64, drives the Linux zip through the whole smoke, and publishes the six zips and their checksums as one GitHub release with notes from the pull requests since the last one.
+The macOS app is ad-hoc signed, so Gatekeeper asks before its first start: right click, Open.
