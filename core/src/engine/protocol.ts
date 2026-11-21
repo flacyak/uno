@@ -29,7 +29,7 @@ import type {
   Times,
 } from '@tally';
 import type { MeanGroup, Skipped, Slope, Spread, Spreads } from '@tally';
-import type { TimeSplitSnapshot, Week } from '@tally';
+import type { Square, TimeSplitSnapshot, Week } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -392,6 +392,13 @@ export interface SwarmTally extends Swarm {
   coverage: Coverage;
 }
 
+/** A chord chart's tally: the flows between its nodes, the most out and in first, and Other. */
+export interface ChordTally extends Square {
+  t: 'chord';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /**
  * Tally is a chart's fold of its source, read as plain numbers, strings and
  * arrays, or why the source could not be read. Each names the plot it reads,
@@ -411,6 +418,7 @@ export type Tally =
   | BoxTally
   | SwarmTally
   | ParallelTally
+  | ChordTally
   | { t: 'unread'; plot: Plot; said: Said };
 
 /**

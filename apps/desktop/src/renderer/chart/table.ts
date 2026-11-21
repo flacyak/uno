@@ -12,6 +12,7 @@
 
 import type {
   ChartColumn,
+  ChordPlot,
   DotsPlot,
   HeatPlot,
   ParallelPlot,
@@ -25,6 +26,7 @@ import type {
 import { DISTINCT_AT_MOST } from "@engine";
 import type {
   BoxTally,
+  ChordTally,
   Groups,
   ParallelTally,
   Sample,
@@ -40,6 +42,7 @@ import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
+import { PAIRS_AT_MOST } from "@tally";
 import type { Level, SplitLevel, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
 import { middle } from "./box.ts";
@@ -511,6 +514,42 @@ export function paralleled(
   const said = el("td", "", m.chart_table_unsampled({ rows: m.rows_count({ count: left }) }));
   said.colSpan = heads.length;
   return [heads, [...rows, row(said)]];
+}
+
+/**
+ * squared gives a chord chart's headers and rows: its square, a row per node
+ * it runs from and a column per node it runs to, Other last in both, and a
+ * total of each row; then a line of the rows a pair past PAIRS_AT_MOST or a
+ * value past DISTINCT_AT_MOST counts in Other, where there are any.
+ */
+export function squared(plot: ChordPlot, tally: ChordTally): [HTMLElement[], HTMLElement[]] {
+  const measure = (g: Measured): number => (plot.sum === undefined ? g.rows : g.sum);
+  const named = (place: number) => tally.nodes[place] ?? m.chart_pie_other();
+  const isOther = (place: number) => place === tally.nodes.length;
+  const heads = [
+    header(columnLabel(plot.from.header, plot.from.col), true),
+    ...tally.flows.map((_, q) =>
+      tally.nodes[q] === ""
+        ? header(m.chart_blank_value(), false, true)
+        : header(named(q), !isOther(q), true),
+    ),
+    header(m.chart_stack_total(), false, true),
+  ];
+  const rows = tally.flows.map((out, p) => {
+    const total = out.reduce((n, flow) => n + measure(flow), 0);
+    const head = isOther(p) ? rowNamed(m.chart_pie_other()) : rowHead(named(p));
+    return row(head, ...out.map((flow) => digits(measure(flow))), digits(total));
+  });
+  const lines = [
+    ...(tally.unsplit > 0 ? [m.chart_stack_unsplit({ count: num(PAIRS_AT_MOST) })] : []),
+    ...(tally.rest.rows > 0 ? [m.chart_bars_past({ count: num(DISTINCT_AT_MOST) })] : []),
+  ];
+  for (const said of lines) {
+    const line = el("td", "chart-table-line", said);
+    line.colSpan = heads.length;
+    rows.push(row(line));
+  }
+  return [heads, rows];
 }
 
 export function tableOf([heads, rows]: [HTMLElement[], HTMLElement[]], called: Node): HTMLElement {

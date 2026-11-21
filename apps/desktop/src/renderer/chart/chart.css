@@ -1208,6 +1208,32 @@
   visibility: hidden;
 }
 
+/* A chord chart's arc, from chord.ts, wears the `--key` it sets, and a whole
+ * ring is a band between two circles. */
+.chart-chord-arc {
+  fill: var(--key);
+  fill-rule: evenodd;
+}
+
+/* The hatch chord.ts draws, which every other slot wears under forced colours. */
+.chart-chord-hatch-ground {
+  fill: Canvas;
+}
+
+.chart-chord-hatch-line {
+  fill: CanvasText;
+}
+
+/* A ribbon wears its `--key` over a ring of the window's ground under it, 2 px
+ * past its edge, so one over another stands apart where they cross. */
+.chart-chord-ribbon {
+  fill: var(--key);
+  stroke: var(--surface);
+  stroke-width: calc(2 * var(--ribbon-ring));
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
 /* The mark the cursor is on, from tooltip.ts. A bar moves a fifth of the way
  * from the accent to the ink, over a wash of the accent across its row, as a
  * column does over its period's slot, a slice the same from its own colour,
@@ -1263,7 +1289,9 @@
   vector-effect: non-scaling-stroke;
 }
 
-.chart-slice.cursor {
+.chart-slice.cursor,
+.chart-chord-arc.cursor,
+.chart-chord-ribbon.cursor {
   fill: color-mix(in srgb, var(--key) 80%, var(--ink));
 }
 
@@ -1357,7 +1385,8 @@
 }
 
 /* A forced palette would take the marks' colour away, so they wear the text's,
- * and a pie's slices, its thinnest too, stand apart by the page's. */
+ * and a pie's slices, its thinnest too, stand apart by the page's. chart-forced
+ * smoke checks each kind of the catalogue. */
 @media (forced-colors: active) {
   .chart-bar,
   .chart-column,
@@ -1369,6 +1398,73 @@
   .chart-point,
   .chart-slice {
     fill: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  /* A box plot's boxes and whiskers, and a dot plot's and a beeswarm's dots,
+   * ringed in the page's ground where a box's median and a far value stand. */
+  .chart-box,
+  .chart-dot,
+  .chart-swarm-dot {
+    background: CanvasText;
+    box-shadow: 0 0 0 2px Canvas;
+    forced-color-adjust: none;
+  }
+
+  .chart-whisker {
+    border-color: CanvasText;
+    background: linear-gradient(CanvasText 0 0) center / 100% 2px no-repeat;
+    forced-color-adjust: none;
+  }
+
+  /* A chord's arcs and ribbons, every other slot hatched and Other grey, and
+   * a ribbon's ring the page's ground. */
+  .chart-chord-arc,
+  .chart-chord-ribbon {
+    fill: CanvasText;
+    stroke: Canvas;
+    forced-color-adjust: none;
+  }
+
+  .chart-chord-arc {
+    stroke: none;
+  }
+
+  .chart-horizon-bands .chart-horizon-band {
+    fill: var(--hatch);
+    forced-color-adjust: none;
+  }
+
+  .chart-chord-arc.hatched,
+  .chart-chord-ribbon.hatched {
+    fill: var(--hatch);
+  }
+
+  .chart-chord-arc.other,
+  .chart-chord-ribbon.other {
+    fill: GrayText;
+  }
+
+  .chart-median,
+  .chart-past {
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+
+  /* A slope's lines and its dots, ringed in the page's ground, and parallel
+   * coordinates' faint lines and their axes. */
+  .chart-slope-line,
+  .chart-slope-own,
+  .chart-parallel-axis,
+  .chart-parallel-line {
+    stroke: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .chart-slope-dot {
+    fill: CanvasText;
+    stroke: Canvas;
     forced-color-adjust: none;
   }
 
@@ -1397,7 +1493,9 @@
   }
 
   .chart-point.cursor,
-  .chart-slice.cursor {
+  .chart-slice.cursor,
+  .chart-chord-arc.cursor,
+  .chart-chord-ribbon.cursor {
     fill: Highlight;
   }
 
@@ -1761,6 +1859,19 @@
   column-gap: 0;
 }
 
+/* A band wears its ramp step's colour, and under forced colours its hatch. */
+.chart-horizon-band {
+  fill: var(--fill);
+}
+
+.chart-hatch-ground {
+  fill: Canvas;
+}
+
+.chart-hatch-line {
+  fill: CanvasText;
+}
+
 .chart-horizon-bands {
   display: block;
   overflow: visible;
@@ -1808,4 +1919,23 @@
   bottom: 0;
   left: calc(var(--at) * var(--swatch));
   translate: calc(var(--toward) * -100%) 0;
+}
+
+/* The ramp's classes, under forced colours and in print, where no colour
+ * reads, wear the dataviz skill's ordered hatch in place of theirs: lines of
+ * the text's colour at 45 degrees above zero and 135 below, closer with each
+ * class out from zero, so a class still reads by its texture. */
+@media (forced-colors: active), print {
+  .chart-stepped {
+    --hatch-line: 1px;
+    --hatch-widest: 10px;
+    --hatch-closer: 2px;
+    forced-color-adjust: none;
+    print-color-adjust: exact;
+    background: repeating-linear-gradient(
+      calc(90deg - 45deg * sign(var(--step))),
+      CanvasText 0 var(--hatch-line),
+      Canvas 0 calc(var(--hatch-widest) - var(--hatch-closer) * abs(var(--step)))
+    );
+  }
 }

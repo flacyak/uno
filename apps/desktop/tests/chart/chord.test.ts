@@ -1,0 +1,401 @@
+/**
+ * @fileoverview A chord chart's ring of a tally: an arc per node, and Other,
+ * clockwise from the top in slot order, each its node's share of the flows
+ * out and in, in its slot's colour, Other in the caption's ink, and placed at
+ * the size the ring stands at, ARC_WIDTH thick and ARC_GAP from the next.
+ *
+ * @vitest-environment happy-dom
+ */
+
+import { expect, test } from "vite-plus/test";
+
+import type { ChordPlot } from "@document";
+import type { ChordTally } from "@engine";
+import type { Targets } from "@renderer/chart/tooltip";
+import {
+  ARC_GAP,
+  ARC_LEAST,
+  ARC_WIDTH,
+  arcs,
+  chord,
+  chordTargets,
+  fitRing,
+  ribbons,
+} from "@renderer/chart/chord";
+import type { Ribbon } from "@renderer/chart/chord";
+import { chord as kind } from "@renderer/chart/kinds/chord";
+import { OTHER_KEY } from "@renderer/chart/pie";
+
+const ROWS: ChordPlot = {
+  t: "chord",
+  from: { col: 0, header: "origin" },
+  to: { col: 1, header: "dest" },
+};
+const SUMS: ChordPlot = { ...ROWS, sum: { col: 2, header: "seats" } };
+const WHOLE = { rows: 1, total: 1, complete: true };
+/** How wide a fitted ring stands, in px. */
+const ACROSS = 200;
+
+/** A tally of `nodes` and Other, each flow its rows and ten times as many seats, or `sums` where given. */
+function tallyOf(
+  nodes: string[],
+  rows: number[][],
+  sums = rows.map((r) => r.map((n) => n * 10)),
+): ChordTally {
+  return {
+    t: "chord",
+    plot: ROWS,
+    coverage: WHOLE,
+    nodes,
+    flows: rows.map((r, i) => r.map((n, j) => ({ rows: n, sum: sums[i]![j]! }))),
+    others: 0,
+    unsplit: 0,
+    rest: { rows: 0, sum: 0 },
+    skipped: { blank: 0, unparsed: 0 },
+  };
+}
+
+/** ORD sends JFK 3 and LAX 1, JFK sends ORD 2, and LAX sends itself 1; Other sends and takes none. */
+const AIRPORTS = tallyOf(
+  ["ORD", "JFK", "LAX"],
+  [
+    [0, 3, 1, 0],
+    [2, 0, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 0],
+  ],
+);
+
+test("a chord's arcs run clockwise from the top in slot order, each its node's flows out and in, a flow to itself both", () => {
+  // ORD 4 out and 2 in, JFK 2 and 3, LAX 1 and 1 of its own and 1 in: 14 in all.
+  const whole = 14;
+  expect(arcs(ROWS, AIRPORTS)).toStrictEqual([
+    { place: 0, from: 0, to: 6 / whole, key: "var(--chart-1)" },
+    { place: 1, from: 6 / whole, to: 11 / whole, key: "var(--chart-2)" },
+    { place: 2, from: 11 / whole, to: 1, key: "var(--chart-3)" },
+  ]);
+});
+
+test("Other's arc comes last in the caption's ink, and a flow at or below zero has no width", () => {
+  const tally = tallyOf(
+    ["ORD"],
+    [
+      [1, 1],
+      [1, 1],
+    ],
+    [
+      [-5, 2],
+      [2, 4],
+    ],
+  );
+  // ORD's flow to itself sums below zero, so its arc is its 2 out and 2 in, and Other's its 4 to itself twice.
+  const whole = 16;
+  expect(arcs(SUMS, tally)).toStrictEqual([
+    { place: 0, from: 0, to: 4 / whole, key: "var(--chart-1)" },
+    { place: 1, from: 4 / whole, to: 1, key: OTHER_KEY },
+  ]);
+  const none = tallyOf(
+    ["ORD"],
+    [
+      [0, 0],
+      [0, 0],
+    ],
+  );
+  expect(arcs(ROWS, none)).toStrictEqual([]);
+  expect(kind(ROWS).drawing(none, { width: 0, ch: 0 })?.empty).toBe(true);
+});
+
+/** `ribbons` with every turn and share in fourteenths, rounded to a millionth of one. */
+function inFourteenths(ribbons: Ribbon[]): Ribbon[] {
+  const fourteenths = 14;
+  const places = 6;
+  const of = (turn: number) => Number((turn * fourteenths).toFixed(places));
+  return ribbons.map((r) => ({
+    ...r,
+    ends: [
+      [of(r.ends[0][0]), of(r.ends[0][1])],
+      [of(r.ends[1][0]), of(r.ends[1][1])],
+    ],
+    share: of(r.share),
+  }));
+}
+
+test("a chord's ribbons stand on both arcs as wide as the flow both ways, in the busier sender's colour, the widest first, a flow to itself folded on its arc", () => {
+  // ORD's arc holds LAX's ribbon first, its nearest before it, then JFK's, its nearest after it.
+  expect(inFourteenths(ribbons(ROWS, AIRPORTS))).toStrictEqual([
+    {
+      places: [0, 1],
+      ends: [
+        [1, 6],
+        [6, 11],
+      ],
+      share: 5,
+      key: "var(--chart-1)",
+    },
+    {
+      places: [0, 2],
+      ends: [
+        [0, 1],
+        [13, 14],
+      ],
+      share: 1,
+      key: "var(--chart-1)",
+    },
+    {
+      places: [2, 2],
+      ends: [
+        [11, 12],
+        [12, 13],
+      ],
+      share: 1,
+      key: "var(--chart-3)",
+    },
+  ]);
+});
+
+test("a ribbon wears the colour of the place that sends more of it, the earlier on a tie, Other's its ink", () => {
+  const tally = tallyOf(
+    ["ORD", "JFK"],
+    [
+      [0, 1, 0],
+      [2, 0, 1],
+      [0, 3, 0],
+    ],
+  );
+  const worn = ribbons(ROWS, tally).map(({ places, key }) => [places, key]);
+  expect(worn).toStrictEqual([
+    [[2, 1], OTHER_KEY],
+    [[1, 0], "var(--chart-2)"],
+  ]);
+  const tied = tallyOf(
+    ["ORD", "JFK"],
+    [
+      [0, 1, 0],
+      [1, 0, 0],
+      [0, 0, 0],
+    ],
+  );
+  expect(ribbons(ROWS, tied).map(({ places }) => places)).toStrictEqual([[0, 1]]);
+  expect(
+    ribbons(
+      ROWS,
+      tallyOf(
+        ["ORD"],
+        [
+          [0, 0],
+          [0, 0],
+        ],
+      ),
+    ),
+  ).toStrictEqual([]);
+});
+
+/** The ring `tally` draws, fitted as a ring `across` px wide. */
+function fitted(tally: ChordTally, across: number): HTMLElement {
+  const box = chord(ROWS, tally);
+  const ring = box.querySelector(".chart-chord-ring")!;
+  Object.defineProperty(ring, "getBoundingClientRect", { value: () => ({ width: across }) });
+  fitRing(box);
+  return box;
+}
+
+/** The start and end of an arc's rim, and the radius of its inner edge, as `d` writes them. */
+function rimOf(d: string): { start: [number, number]; end: [number, number]; inner: number } {
+  const [, ...xs] = /^M(\S+) (\S+)A\S+ \S+ 0 [01] 1 (\S+) (\S+)L\S+ \S+A(\S+) /u
+    .exec(d)!
+    .map(Number);
+  return { start: [xs[0]!, xs[1]!], end: [xs[2]!, xs[3]!], inner: xs[4]! };
+}
+
+test("a fitted ring's arcs are ARC_WIDTH thick at its rim, ARC_GAP apart where they meet, and a ring of one node is whole", () => {
+  const across = ACROSS;
+  const box = fitted(AIRPORTS, across);
+  const ring = box.querySelector(".chart-chord-ring")!;
+  expect(ring.getAttribute("viewBox")).toBe("-100 -100 200 200");
+  const rims = [...box.querySelectorAll(".chart-chord-arc")].map((arc) =>
+    rimOf(arc.getAttribute("d")!),
+  );
+  expect(rims).toHaveLength(3);
+  // A tenth of a px either way, as a path rounds each point to a hundredth.
+  const close = 1;
+  for (const [i, rim] of rims.entries()) {
+    expect(Math.hypot(...rim.start)).toBeCloseTo(across / 2, close);
+    expect(rim.inner).toBe(across / 2 - ARC_WIDTH);
+    const next = rims[(i + 1) % rims.length]!;
+    expect(Math.hypot(next.start[0] - rim.end[0], next.start[1] - rim.end[1])).toBeCloseTo(
+      ARC_GAP,
+      close,
+    );
+  }
+  const one = tallyOf(
+    ["ORD"],
+    [
+      [1, 0],
+      [0, 0],
+    ],
+  );
+  const whole = fitted(one, ACROSS).querySelector(".chart-chord-arc")!.getAttribute("d");
+  expect(whole).toBe(
+    "M0 -100A100 100 0 1 1 0 100A100 100 0 1 1 0 -100ZM0 -90A90 90 0 1 1 0 90A90 90 0 1 1 0 -90Z",
+  );
+});
+
+test("an arc too short to keep its colour beside its gaps keeps its whole length", () => {
+  // At ACROSS px, ARC_LEAST is this share of the rim, and LAX's arc is about half of it.
+  const share = ARC_LEAST / (Math.PI * ACROSS);
+  const big = Math.round(1 / share);
+  const tally = tallyOf(
+    ["ORD", "LAX"],
+    [
+      [big, 0, 0],
+      [1, 0, 0],
+      [0, 0, 0],
+    ],
+  );
+  const [, lax] = [...fitted(tally, ACROSS).querySelectorAll(".chart-chord-arc")];
+  const { start } = rimOf(lax!.getAttribute("d")!);
+  // LAX starts right where ORD's share ends, with no half gap taken.
+  const turn = (2 * big + 1) / (2 * big + 2);
+  const close = 1;
+  expect(start[0]).toBeCloseTo((ACROSS / 2) * Math.sin(2 * Math.PI * turn), close);
+});
+
+test("a fitted chord's ribbons stand ARC_GAP inside the arcs, the widest first, each end along its arc as the arc stands trimmed", () => {
+  const box = fitted(AIRPORTS, ACROSS);
+  const drawn = [...box.querySelectorAll<SVGElement>(".chart-chord-ribbon")];
+  expect(drawn.map((r) => r.style.getPropertyValue("--key"))).toStrictEqual([
+    "var(--chart-1)",
+    "var(--chart-1)",
+    "var(--chart-3)",
+  ]);
+  // ORD's ribbon to JFK ends where ORD's arc does, half a gap short of 6 of 14.
+  const [, x, y, endX, endY] = /^M(\S+) (\S+)A\S+ \S+ 0 0 1 (\S+) (\S+)Q0 0 /u
+    .exec(drawn[0]!.getAttribute("d")!)!
+    .map(Number);
+  const inside = ACROSS / 2 - ARC_WIDTH - ARC_GAP;
+  const close = 1;
+  expect(Math.hypot(x!, y!)).toBeCloseTo(inside, close);
+  const end = 6 / 14 - ARC_GAP / 2 / (Math.PI * ACROSS);
+  expect(endX).toBeCloseTo(inside * Math.sin(2 * Math.PI * end), close);
+  expect(endY).toBeCloseTo(-inside * Math.cos(2 * Math.PI * end), close);
+});
+
+test("a chord names each arc past its middle, and lists its names beside the ring each with its arc's colour, Other and a blank cell in the app's words", () => {
+  const tally = tallyOf(
+    ["ORD", ""],
+    [
+      [0, 1, 0],
+      [0, 0, 0],
+      [0, 0, 1],
+    ],
+  );
+  const box = chord(ROWS, tally);
+  const labels = [...box.querySelectorAll<HTMLElement>(".chart-slice-label")];
+  expect(labels.map((l) => l.textContent)).toStrictEqual(["ORD", "(blank)", "Other"]);
+  // ORD's arc runs a quarter of the ring from the top, so its name stands past its middle, an eighth round.
+  const eighth = Math.SQRT1_2;
+  const close = 6;
+  expect(Number(labels[0]!.style.getPropertyValue("--x"))).toBeCloseTo(eighth, close);
+  expect(Number(labels[0]!.style.getPropertyValue("--y"))).toBeCloseTo(-eighth, close);
+  const listed = [...box.querySelectorAll(".chart-legend li")];
+  expect(listed.map((li) => li.textContent)).toStrictEqual(["ORD", "(blank)", "Other"]);
+  const keys = [...box.querySelectorAll<HTMLElement>(".chart-legend-key")].map((k) =>
+    k.style.getPropertyValue("--key"),
+  );
+  expect(keys).toStrictEqual(["var(--chart-1)", "var(--chart-2)", OTHER_KEY]);
+});
+
+/** What each of `targets` says: its readings' values and labels, and each one's key where it has one. */
+function saidBy(targets: Targets): string[][] {
+  return targets.all.map((target) =>
+    target
+      .said()
+      .map(
+        ({ value, label, key }) =>
+          `${value} ${label.textContent}${key === undefined ? "" : ` ${key}`}`,
+      ),
+  );
+}
+
+test("a chord's arcs say their node's flows out and in, and each ribbon, under each of its arcs in turn, its flow either way keyed by where it runs from", () => {
+  const box = chord(ROWS, AIRPORTS);
+  const targets = chordTargets(ROWS, AIRPORTS, box);
+  const ribbon = [...box.querySelectorAll(".chart-chord-ribbon")];
+  // ORD stands under LAX's ribbon first, then JFK's; LAX under its own, then ORD's.
+  expect(targets.all.map(({ mark }) => mark)).toStrictEqual([
+    ...box.querySelectorAll(".chart-chord-arc"),
+    ribbon[1],
+    ribbon[0],
+    ribbon[0],
+    ribbon[2],
+    ribbon[1],
+  ]);
+  const [ord, jfk, lax] = ["1", "2", "3"].map((slot) => `var(--chart-${slot})`);
+  expect(saidBy(targets).slice(0, 5)).toStrictEqual([
+    ["4 from ORD", "2 to ORD"],
+    ["2 from JFK", "3 to JFK"],
+    ["1 from LAX", "2 to LAX"],
+    [`1 ORD to LAX ${ord}`, `0 LAX to ORD ${lax}`],
+    [`3 ORD to JFK ${ord}`, `2 JFK to ORD ${jfk}`],
+  ]);
+  expect(saidBy(targets).at(-2)).toStrictEqual([`1 LAX to LAX ${lax}`]);
+  expect(targets.all.map(({ key }) => key)).toStrictEqual([ord, jfk, lax, ord, ord, ord, lax, ord]);
+  expect(targets.under(ribbon[2]!, 0, 0)).toBe(6);
+});
+
+test("Right and Left step a chord's arcs, End to the last, and Down and Up along the ribbons of the arc the cursor is on or under", () => {
+  const box = chord(ROWS, AIRPORTS);
+  const { step, keys } = chordTargets(ROWS, AIRPORTS, box);
+  expect(keys).toStrictEqual(["ArrowDown", "ArrowUp"]);
+  // Arcs 0 to 2, then ORD's two ribbons at 3 and 4, JFK's one at 5, and LAX's two at 6 and 7.
+  const walk = (keys: string[], from?: number) =>
+    keys.reduce<number | undefined>((at, key) => step!(key, at) ?? at, from);
+  expect(walk(["ArrowRight", "ArrowRight", "ArrowRight", "ArrowRight"])).toBe(2);
+  expect(walk(["ArrowLeft"])).toBe(2);
+  expect(walk(["End"], 0)).toBe(2);
+  expect(walk(["ArrowDown"], 0)).toBe(3);
+  expect(walk(["ArrowDown", "ArrowDown", "ArrowDown"], 0)).toBe(4);
+  expect(walk(["ArrowUp"], 4)).toBe(3);
+  expect(walk(["ArrowUp"], 3)).toBe(0);
+  expect(walk(["ArrowDown"], 2)).toBe(6);
+  // From a ribbon, Right steps from the arc it stands under.
+  expect(walk(["ArrowRight"], 5)).toBe(2);
+  expect(step!("Home", 5)).toBeUndefined();
+});
+
+test("where no colour reads, every other slot's arc and ribbons wear a hatch of the chart's own, and Other's grey", () => {
+  const tally = tallyOf(
+    ["ORD", "JFK"],
+    [
+      [0, 2, 0],
+      [1, 0, 1],
+      [1, 0, 0],
+    ],
+  );
+  const [one, two] = [chord(ROWS, tally), chord(ROWS, tally)];
+  const worn = (box: HTMLElement, marks: string) =>
+    [...box.querySelectorAll(marks)].map((mark) => mark.getAttribute("class"));
+  expect(worn(one, ".chart-chord-arc")).toStrictEqual([
+    "chart-chord-arc",
+    "chart-chord-arc hatched",
+    "chart-chord-arc other",
+  ]);
+  // ORD sends JFK more than JFK sends it, Other sends ORD its one, and JFK sends Other its one.
+  expect(worn(one, ".chart-chord-ribbon")).toStrictEqual([
+    "chart-chord-ribbon",
+    "chart-chord-ribbon other",
+    "chart-chord-ribbon hatched",
+  ]);
+  const hatch = (box: HTMLElement) => box.style.getPropertyValue("--hatch");
+  const id = one.querySelector("pattern")!.id;
+  expect(hatch(one)).toBe(`url(#${id})`);
+  expect(hatch(two)).not.toBe(hatch(one));
+});
+
+test("a chord not laid out yet places no arc or ribbon, to place them once it is", () => {
+  for (const mark of fitted(AIRPORTS, 0).querySelectorAll(
+    ".chart-chord-arc, .chart-chord-ribbon",
+  )) {
+    expect(mark.getAttribute("d")).toBeNull();
+  }
+});

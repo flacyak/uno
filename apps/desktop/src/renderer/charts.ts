@@ -64,6 +64,7 @@ function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
   if (plot.t === "scatter") return [plot.x, plot.y];
   if (plot.t === "parallel") return plot.axes;
   if (plot.t === "stack") return [plot.by, plot.split, plot.sum];
+  if (plot.t === "chord") return [plot.from, plot.to, plot.sum];
   if (plot.t === "histogram") return [plot.of];
   if (plot.t === "box" || plot.t === "swarm") return [plot.of, plot.by];
   if (plot.t === "dots") return [plot.by, plot.of];

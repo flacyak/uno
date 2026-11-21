@@ -77,6 +77,7 @@ export type {
   PlacesPlot,
   Projection,
   SwarmPlot,
+  ChordPlot,
   Plot,
   Reading,
   SlopePlot,

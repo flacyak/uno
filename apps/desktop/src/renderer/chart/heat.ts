@@ -13,7 +13,7 @@ import type { SplitLevel } from "@tally";
 import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
 import { fullName } from "./periods.ts";
-import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
+import { classOf, classesOver, scaleOf, wear } from "./ramp.ts";
 import { row, rowsIn, trackWide } from "./rows.ts";
 import { TICK_GAP } from "./scatter.ts";
 import { ticksOf } from "./timeAxis.ts";
@@ -74,8 +74,7 @@ export function heatGrid(
     cells.style.setProperty("--span", `${level.rows[i]!.length}`);
     for (const [p, rows] of level.rows[i]!.entries()) {
       const cell = el("span", "chart-heat-cell");
-      const fill = rows > 0 ? fillOf(classOf(amounts[i]![p]!, classes)) : undefined;
-      if (fill !== undefined) cell.style.setProperty("--fill", fill);
+      if (rows > 0) wear(cell, classOf(amounts[i]![p]!, classes));
       cells.append(cell);
     }
     box.append(row(value, cells));

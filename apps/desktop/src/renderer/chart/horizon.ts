@@ -17,7 +17,7 @@ import { periodsUnder } from "./heat.ts";
 import { fullName } from "./periods.ts";
 import type { Periods } from "./heat.ts";
 import type { PlotRoom } from "./kind.ts";
-import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
+import { HATCH_LINE, classOf, classesOver, fillOf, hatchOf, scaleOf } from "./ramp.ts";
 import type { Classes } from "./ramp.ts";
 import { BARS_INSET, row, rowsIn, trackWide } from "./rows.ts";
 import { TICK_GAP, mark } from "./scatter.ts";
@@ -98,11 +98,54 @@ function bandOf(amounts: readonly number[], band: number, k: number): string {
   return `M0 1${heights.map((h, i) => `V${1 - h}H${i + 1}`).join("")}V1Z`;
 }
 
+/** How many hatches the page has made, so each band's pattern has an id of its own. */
+let hatches = 0;
+
+/** hatchFor gives `drawn` the hatch band `k` wears under forced colours, its ramp step's, in screen px once fitHatches runs, and its url. */
+function hatchFor(drawn: SVGSVGElement, k: number): string {
+  const { pitch, angle } = hatchOf(Math.sign(k) * BAND_STEPS[Math.abs(k) - 1]!);
+  const pattern = mark("pattern", "");
+  pattern.id = `chart-horizon-hatch-${++hatches}`;
+  pattern.dataset["angle"] = `${angle}`;
+  const sized = { width: `${pitch}`, height: `${pitch}` };
+  for (const [name, value] of Object.entries({ patternUnits: "userSpaceOnUse", ...sized })) {
+    pattern.setAttribute(name, value);
+  }
+  const [ground, line] = [mark("rect", "chart-hatch-ground"), mark("rect", "chart-hatch-line")];
+  for (const [name, value] of Object.entries(sized)) ground.setAttribute(name, value);
+  for (const [name, value] of Object.entries({ ...sized, width: `${HATCH_LINE}` })) {
+    line.setAttribute(name, value);
+  }
+  pattern.append(ground, line);
+  drawn.querySelector("defs")!.append(pattern);
+  return `url(#${pattern.id})`;
+}
+
+/**
+ * fitHatches undoes each row's stretch in its bands' hatches, so their lines
+ * stand as far apart on the screen in every row: a row's viewBox is a unit a
+ * period across and one high, stretched to the px it stands in.
+ */
+export function fitHatches(box: HTMLElement): void {
+  for (const drawn of box.querySelectorAll<SVGSVGElement>(".chart-horizon-bands")) {
+    const { width, height } = drawn.getBoundingClientRect();
+    // A row not laid out yet has nothing to measure, and draws again as it takes a size.
+    if (width === 0 || height === 0) continue;
+    const view = drawn.viewBox.baseVal;
+    const [across, up] = [view.width / width, view.height / height];
+    for (const pattern of drawn.querySelectorAll("pattern")) {
+      const angle = pattern.dataset["angle"];
+      pattern.setAttribute("patternTransform", `scale(${across} ${up}) rotate(${angle})`);
+    }
+  }
+}
+
 /** strip draws `amounts` in a row as folded bands, each `band` an amount, above zero and below. */
 function strip(amounts: readonly number[], band: number): SVGSVGElement {
   const drawn = mark("svg", "chart-horizon-bands");
   drawn.setAttribute("viewBox", `0 0 ${amounts.length} 1`);
   drawn.setAttribute("preserveAspectRatio", "none");
+  drawn.append(mark("defs", ""));
   for (const sign of [1, -1]) {
     for (const k of BAND_STEPS.keys()) {
       const path = mark("path", "chart-horizon-band");
@@ -114,7 +157,8 @@ function strip(amounts: readonly number[], band: number): SVGSVGElement {
           k,
         ),
       );
-      path.style.fill = bandFill(sign * (k + 1)) ?? "";
+      path.style.setProperty("--fill", bandFill(sign * (k + 1)) ?? "");
+      path.style.setProperty("--hatch", hatchFor(drawn, sign * (k + 1)));
       drawn.append(path);
     }
   }

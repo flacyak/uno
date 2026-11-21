@@ -265,6 +265,23 @@ const REVENUE_SWARM: Chart = {
   plot: { t: 'swarm', of: column(REVENUE) },
 };
 
+/** The fixture's rows from each region to each channel, and its revenue so. */
+const REGION_CHORD: Chart = {
+  ...REGION_ROWS,
+  id: 'c16',
+  plot: { t: 'chord', from: column(REGION), to: column(CHANNEL) },
+};
+const REVENUE_CHORD: Chart = {
+  ...REGION_ROWS,
+  id: 'c17',
+  plot: {
+    t: 'chord',
+    from: column(REGION),
+    to: column(CHANNEL),
+    sum: column(REVENUE),
+  },
+};
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -278,6 +295,15 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
     return { t: 'sample', plot, coverage, ...pointsOf(fold.snapshot()) };
+  }
+  if (plot.t === 'chord') {
+    const { from, to, sum } = plot;
+    const fold = new SplitFold(sum === undefined ? undefined : 'point');
+    for (let r = 0; r < rows; r++) {
+      const cells = sum === undefined ? '' : cell(r, sum);
+      fold.add(cell(r, from), cell(r, to), cells);
+    }
+    return { t: 'chord', plot, coverage, ...fold.square() };
   }
   if (plot.t === 'stack') {
     const { by, split, sum } = plot;
@@ -1978,6 +2004,31 @@ test('parallel coordinates folded a block at a time read as the pure sample of t
   const reopened = new Tallies();
   reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
   reopened.attach(PARALLEL, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test("a chord chart folded a block at a time reads as the pure square of its rows, moves by an edit, and reads back from a save as a stack's fold of its columns", async () => {
+  const charts = [REGION_CHORD, REVENUE_CHORD];
+  const tallies = folded(charts);
+  expect(tallies.read(ROWS, true)).toStrictEqual(
+    charts.map((chart) => [chart.id, pure(chart.plot)]),
+  );
+  // A chord folds as a stack of its two columns does, under the same key.
+  expect(tallies.saved()[REVENUE_CHORD.id]?.key).toBe(
+    `split ${REGION} ${CHANNEL} ${REVENUE}`,
+  );
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, CHANNEL, 'mail');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = charts.map((chart) => [chart.id, pure(chart.plot, sheet)]);
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  for (const chart of charts) reopened.attach(chart, HEADERS);
   expect(reopened.from()).toBe(ROWS);
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });

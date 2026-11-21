@@ -16,6 +16,7 @@ import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
+import { chord } from "@renderer/chart/kinds/chord";
 import { dots } from "@renderer/chart/kinds/dots";
 import { slope } from "@renderer/chart/kinds/slope";
 import { heat } from "@renderer/chart/kinds/heat";
@@ -200,6 +201,7 @@ test("each plot kind has its module", () => {
     horizon,
     swarm,
     parallel,
+    chord,
   });
 });
 
@@ -218,6 +220,21 @@ test("a slope chart's kind titles what it measures per value and its two states"
   expect(slope({ ...plot, of: REVENUE, measure: "sum" }).title()).toBe(
     "sum of revenue per region, 2024 to 2025",
   );
+});
+
+test("a chord chart's kind titles what flows from its from column to its to column, and reads its names from both", () => {
+  const [from, to] = [REGION, { col: 2, header: "channel" }];
+  const rows = chord({ t: "chord", from, to });
+  expect([rows.title(), rows.valued, rows.numbered]).toStrictEqual([
+    "rows from region to channel",
+    [from, to],
+    [],
+  ]);
+  const sums = chord({ t: "chord", from, to, sum: REVENUE });
+  expect([sums.title(), sums.numbered]).toStrictEqual([
+    "sum of revenue from region to channel",
+    [REVENUE],
+  ]);
 });
 
 test("a slope chart's kind reads its values, its states and its numbers from its columns", () => {

@@ -39,7 +39,7 @@ export const CHART_HORIZON: Check[] = [
       const rows = [...split.querySelectorAll(".chart-horizon-bands")];
       if (rows.some((r) => Math.abs(r.getBoundingClientRect().height - ${ROW}) > 0.5)) return "a row is " + rows.map((r) => r.getBoundingClientRect().height).join() + " tall";
       if (rows.some((r) => r.querySelectorAll("path").length !== ${BANDS} * ${ARMS})) return "a row has not three bands each way";
-      const fills = [...rows[0].querySelectorAll("path")].map((p) => p.style.fill).slice(0, ${BANDS}).join();
+      const fills = [...rows[0].querySelectorAll("path")].map((p) => p.style.getPropertyValue("--fill")).slice(0, ${BANDS}).join();
       if (fills !== "var(--seq-2),var(--seq-3),var(--seq-4)") return "North's bands wear " + fills;
       if (alone.querySelectorAll(".chart-horizon-bands").length !== 1 || alone.querySelector(".chart-bar-label") !== null) return "the chart of one series draws more than one nameless row";
       const box = alone.getBoundingClientRect();

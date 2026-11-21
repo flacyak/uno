@@ -28,6 +28,8 @@ import { CHART_WEEK } from "./chart-week.ts";
 import { CHART_HEAT } from "./chart-heat.ts";
 import { CHART_HORIZON } from "./chart-horizon.ts";
 import { CHART_PARALLEL } from "./chart-parallel.ts";
+import { CHART_CHORD } from "./chart-chord.ts";
+import { CHART_FORCED, CHART_FORCED_HORIZON, CHART_FORCED_RAMP } from "./chart-forced.ts";
 import { CHART_SWARM } from "./chart-swarm.ts";
 import { CHART_HISTOGRAM } from "./chart-histogram.ts";
 import { CHART_STACK } from "./chart-stack.ts";
@@ -117,6 +119,8 @@ const CHECKS: Record<string, Check[]> = {
   "chart-horizon": CHART_HORIZON,
   "chart-swarm": CHART_SWARM,
   "chart-parallel": CHART_PARALLEL,
+  "chart-chord": CHART_CHORD,
+  "chart-forced": [...CHART_FORCED, ...CHART_FORCED_RAMP, CHART_FORCED_HORIZON],
   "chart-move": CHART_MOVE,
   "chart-blank": CHART_BLANK,
   "chart-states": CHART_STATES,
@@ -251,6 +255,13 @@ async function shoot(win: BrowserWindow, name: string): Promise<void> {
   const path = join(dir, `${name}.png`);
   await writeFile(path, image.toPNG());
   console.log(`smoke: screenshot ${path}`);
+}
+
+/** forcedColors makes `win` draw under forced colours, or as it does without, as a high-contrast theme would. */
+async function forcedColors(win: BrowserWindow, on: boolean): Promise<void> {
+  await win.webContents.debugger.sendCommand("Emulation.setEmulatedMedia", {
+    features: [{ name: "forced-colors", value: on ? "active" : "none" }],
+  });
 }
 
 /**
@@ -400,6 +411,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
       const started = performance.now();
       let ok = true;
       try {
+        if (check.forced === true) await forcedColors(win, true);
         if (check.ask !== undefined) await ask("smoke", check.ask);
         if (check.send !== undefined) win.webContents.send(...check.send);
         if (check.pick !== undefined) pick(check.pick);
@@ -438,6 +450,7 @@ export async function runSmoke(win: BrowserWindow, quit: (code: number) => void)
         console.error(`  FAIL ${check.name}: ${(err as Error).message}`);
         ok = false;
       }
+      if (check.forced === true) await forcedColors(win, false);
       if (!ok) failed++;
       timed.push({ group, name: check.name, ms: Math.round(performance.now() - started), ok });
     }
