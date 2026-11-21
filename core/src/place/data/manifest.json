@@ -2,11 +2,12 @@
   "source": {
     "commit": "ca96624a56bd078437bca8184e78163e5039ad19",
     "layers": {
-      "ne_10m_admin_0_countries_usa": "d3166691d3d86f113c0d8db52506f4b72936513691d1593f47010fed01fc0b93"
+      "ne_10m_admin_0_countries_usa": "d3166691d3d86f113c0d8db52506f4b72936513691d1593f47010fed01fc0b93",
+      "ne_10m_admin_1_states_provinces": "22d0e3ad85eb3e27f17cabf8ba2d50e554fbc27a87796ff891d958185da62fb5"
     },
     "icu": "78.3"
   },
   "hashes": {
-    "places.json": "252101efd2cbd6e9ee6c45db2f9020a8468164496676c49a084550e40f6b8285"
+    "places.json": "4a3ee920868a52cf0baee70f725aaa558e5118c4f8888df3766dfa69a1f4280a"
   }
 }
