@@ -72,6 +72,21 @@ export interface SavedSample {
   pages: Array<{ first: number; span: number; least: Point; most: Point }>;
 }
 
+/** SavedSample of any number of columns, with a number of each in place of x and y. */
+export interface SavedSampled extends Omit<
+  SavedSample,
+  'marks' | 'kept' | 'pages'
+> {
+  marks: Mark[];
+  kept: number[][];
+  pages: Array<{
+    first: number;
+    span: number;
+    least: number[];
+    most: number[];
+  }>;
+}
+
 /** The least and most of each column over the plotted rows of PAGE_BLOCKS blocks. */
 class Page {
   /**
@@ -210,22 +225,20 @@ export class SampleFold {
   }
 
   /** saved is what the fold holds, with each page's least and most. */
-  saved(): SavedSample {
-    const kept = [...this.kept].map(([row, v]): SavedSample['kept'][number] =>
-      v === undefined ? [row] : [row, v[0]!, v[1]!],
+  saved(): SavedSampled {
+    const kept = [...this.kept].map(([row, v]) =>
+      v === undefined ? [row] : [row, ...v],
     );
     const pages = [...this.pages].flatMap(([first, page]) => {
       const [least, most] = extentOf([page], this.marks.length);
       const [leastOf, mostOf] = [page.least[0]!, page.most[0]!];
       const span = 1 + leastOf.findLastIndex((v, i) => v <= mostOf[i]!);
-      const [l, m] = [pointOf(least), pointOf(most)];
-      return l.x <= m.x ? [{ first, span, least: l, most: m }] : [];
+      return least[0]! <= most[0]! ? [{ first, span, least, most }] : [];
     });
     const { last, plotted } = this;
     const skipped = { ...this.skipped };
     const counts = { last, plotted, skipped, stale: this.stale() };
-    const [x, y] = this.marks;
-    return { marks: { x: x!, y: y! }, kept, ...counts, pages };
+    return { marks: [...this.marks], kept, ...counts, pages };
   }
 
   /**
@@ -234,28 +247,30 @@ export class SampleFold {
    * coarse: an edit that takes its least or most folds each block again.
    */
   static restored(saved: unknown): SampleFold | undefined {
-    if (!isRecord(saved) || !isRecord(saved['marks'])) return undefined;
-    const { x, y } = saved['marks'];
+    if (!isRecord(saved) || !Array.isArray(saved['marks'])) return undefined;
+    const marks: unknown[] = saved['marks'];
     const { kept, last, plotted, stale, pages } = saved;
     const skipped = restoredSkipped(saved['skipped']);
-    if (!isMark(x) || !isMark(y) || skipped === undefined) return undefined;
+    if (marks.length === 0 || !marks.every(isMark) || skipped === undefined)
+      return undefined;
     if (!isCount(plotted) || !(last === undefined || isCount(last)))
       return undefined;
     if (!Array.isArray(kept) || kept.length > KEPT_AT_MOST) return undefined;
-    if (!kept.every(isKept) || !Array.isArray(stale) || !stale.every(isCount))
+    const columns = marks.length;
+    if (!kept.every((k) => isKept(k, columns))) return undefined;
+    if (!Array.isArray(stale) || !stale.every(isCount)) return undefined;
+    if (!Array.isArray(pages) || !pages.every((p) => isPage(p, columns)))
       return undefined;
-    if (!Array.isArray(pages) || !pages.every(isPage)) return undefined;
-    const fold = new SampleFold([x, y]);
-    for (const k of kept)
-      fold.kept.set(k[0], k.length === 3 ? [k[1], k[2]] : undefined);
+    const fold = new SampleFold(marks);
+    for (const [row, ...v] of kept)
+      fold.kept.set(row, v.length > 0 ? v : undefined);
     fold.last = last;
     fold.plotted = plotted;
     Object.assign(fold.skipped, skipped);
     for (const block of stale) fold.stales.add(block);
     for (const { first, span, least, most } of pages) {
       const page = fold.page(first);
-      const [l, m] = [least, most].map(({ x, y }) => [x, y]);
-      for (let b = first; b < first + span; b++) page.set(b, l!, m!);
+      for (let b = first; b < first + span; b++) page.set(b, least, most);
       page.coarse = span;
     }
     return fold;
@@ -335,25 +350,30 @@ function extentOf(
   return [least, most];
 }
 
-/** isKept says whether `v` is a kept row as a save writes it. */
-function isKept(v: unknown): v is SavedSample['kept'][number] {
+/** isKept says whether `v` is a kept row of `columns` as a save writes it. */
+function isKept(v: unknown, columns: number): v is number[] {
   if (!Array.isArray(v) || !isCount(v[0])) return false;
-  return v.length === 1 || (v.length === 3 && isPoint({ x: v[1], y: v[2] }));
+  const values: unknown[] = v.slice(1);
+  return v.length === 1 || (values.length === columns && isNumbers(values));
 }
 
 /** isPage says whether `v` is a page's least and most as a save writes it. */
-function isPage(v: unknown): v is SavedSample['pages'][number] {
+function isPage(
+  v: unknown,
+  columns: number,
+): v is SavedSampled['pages'][number] {
   if (!isRecord(v)) return false;
   const { first, span, least, most } = v;
-  if (!isPoint(least) || !isPoint(most)) return false;
+  if (!isNumbers(least) || !isNumbers(most)) return false;
+  if (least.length !== columns || most.length !== columns) return false;
   const inPage = isCount(span) && span > 0 && span <= PAGE_BLOCKS;
-  const ordered = least.x <= most.x && least.y <= most.y;
+  const ordered = least.every((l, k) => l <= most[k]!);
   return isCount(first) && first % PAGE_BLOCKS === 0 && inPage && ordered;
 }
 
-/** isPoint says whether `v` is a point of two finite numbers. */
-function isPoint(v: unknown): v is Point {
-  return isRecord(v) && Number.isFinite(v['x']) && Number.isFinite(v['y']);
+/** isNumbers says whether `v` is a list of finite numbers. */
+function isNumbers(v: unknown): v is number[] {
+  return Array.isArray(v) && v.every((n) => Number.isFinite(n));
 }
 
 /** pointOf is the point of a scatter's x and y. */
@@ -372,4 +392,31 @@ export function pointsOf(sampled: Sampled): Sample {
     most: pointOf(sampled.most),
     skipped,
   };
+}
+
+/** savedPoints is the save of a fold of a scatter's x and y, as a scatter's save writes it. */
+export function savedPoints(saved: SavedSampled): SavedSample {
+  const [x, y] = saved.marks;
+  const pages = saved.pages.map((p) => ({
+    ...p,
+    least: pointOf(p.least),
+    most: pointOf(p.most),
+  }));
+  const kept = saved.kept as SavedSample['kept'];
+  return { ...saved, marks: { x: x!, y: y! }, kept, pages };
+}
+
+/** restoredPoints is the fold of a scatter's x and y that `saved` holds, or undefined where it holds none. */
+export function restoredPoints(saved: unknown): SampleFold | undefined {
+  const pair = (p: unknown) => (isRecord(p) ? [p['x'], p['y']] : undefined);
+  if (!isRecord(saved) || !Array.isArray(saved['pages'])) return undefined;
+  const pages: unknown[] = saved['pages'];
+  const paired = pages.map((p) =>
+    isRecord(p) ? { ...p, least: pair(p['least']), most: pair(p['most']) } : p,
+  );
+  return SampleFold.restored({
+    ...saved,
+    marks: pair(saved['marks']),
+    pages: paired,
+  });
 }

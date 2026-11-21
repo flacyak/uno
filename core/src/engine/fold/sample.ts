@@ -5,7 +5,7 @@
 
 import type { Plot } from '@document';
 import type { Mark } from '@num';
-import { SampleFold, pointsOf } from '@tally';
+import { SampleFold, pointsOf, restoredPoints, savedPoints } from '@tally';
 import { markOf, placeOf } from './folder.ts';
 import type { Block, Folder, MakeFolder } from './folder.ts';
 
@@ -58,11 +58,12 @@ function sampled(
       sample.marks[0] === markOf(now, x) && sample.marks[1] === markOf(now, y),
     again: (now) => sampled(x, y, now),
     restored(saved) {
-      const back = SampleFold.restored(saved);
+      const back = restoredPoints(saved);
       return back && sampled(x, y, marks, back);
     },
     /** A sample an edit left stale is left out, to fold again on open. */
-    saved: () => (sample.stale().length > 0 ? undefined : sample.saved()),
+    saved: () =>
+      sample.stale().length > 0 ? undefined : savedPoints(sample.saved()),
     tally: (plot, coverage) => ({
       t: 'sample',
       plot,
