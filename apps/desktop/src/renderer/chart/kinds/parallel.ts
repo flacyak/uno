@@ -1,8 +1,10 @@
 /** @fileoverview Parallel coordinates' kind: a line per sampled row across an axis per number column. */
 
 import type { ParallelPlot } from "@document";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import type { ChartKind } from "../kind.ts";
-import { parallelLines } from "../parallel.ts";
+import { LINES_DRAWN, parallelLines } from "../parallel.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -14,9 +16,15 @@ export const parallel: ChartKind<ParallelPlot> = (plot) => ({
   drawing: (tally) => {
     if (tally.t !== "parallel") return undefined;
     if (tally.plotted === 0) return { ...undrawn, empty: true };
+    const shown = Math.min(tally.values.length, LINES_DRAWN);
     return {
       ...undrawn,
       draw: () => parallelLines(plot, tally),
+      notes: () => {
+        if (shown >= tally.plotted) return [];
+        const rows = m.rows_count({ count: tally.plotted });
+        return [m.chart_rows_sampled({ shown: num(shown), rows })];
+      },
     };
   },
 });

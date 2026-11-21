@@ -618,10 +618,11 @@
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
-/* Parallel coordinates, from parallel.ts: labels and an axis per column,
- * --axes of them evenly spaced and --pitch-least apart at least, past which
- * the plot scrolls sideways. A label is centred on its axis, two pitches wide
- * at most, and ends in an ellipsis. */
+/* Parallel coordinates, from parallel.ts: a column of labels and an axis
+ * per column, --axes of them evenly spaced and --pitch-least apart at least,
+ * past which the plot scrolls sideways; each sampled row a 1 px accent line at
+ * --line-opacity, so a crowd of lines reads dark and a lone one faint. A label
+ * is centred on its axis, two pitches wide at most, and ends in an ellipsis. */
 .chart-parallel {
   --edge: 4ch;
   display: grid;
@@ -660,10 +661,20 @@
   overflow: visible;
 }
 
-.chart-parallel-axis {
-  stroke: var(--rule);
+.chart-parallel-axis,
+.chart-parallel-line {
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
+}
+
+.chart-parallel-axis {
+  stroke: var(--rule);
+}
+
+.chart-parallel-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: var(--line-opacity);
 }
 
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
