@@ -7,6 +7,42 @@
  * Other styles live beside the module that uses them and are imported by it.
  * The grid's styles load with the grid, when the first file opens. */
 
+/* The mono font ships with the app, so every machine draws mono text alike.
+ * These are the faces the app draws in. font-display: block keeps a face's
+ * text unshown until the face is in, so no frame draws it in a fallback.
+ * The licence, OFL.txt, is beside the files. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  src: url("./fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+  src: url("./fonts/JetBrainsMono-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 500;
+  font-style: italic;
+  font-display: block;
+  src: url("./fonts/JetBrainsMono-MediumItalic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+  src: url("./fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
+}
+
 :root {
   --paper: #eff2f3;
   --surface: #fbfcfc;

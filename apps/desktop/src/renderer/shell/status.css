@@ -7,12 +7,17 @@
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
-  padding: 7px 14px;
-  border-top: 1px solid var(--rule);
+  padding: var(--status-pad) 14px;
+  border-top: var(--status-border) solid var(--rule);
   background: var(--sunken);
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-2);
+  /* A grid row high, whatever the font's own line height: the line takes
+   * what a row leaves inside the border and the padding. */
+  --status-pad: 7px;
+  --status-border: 1px;
+  line-height: calc(var(--row-h) - var(--status-border) - 2 * var(--status-pad));
 }
 
 /* One line, however narrow. The mode and the cell keep their width; the file
