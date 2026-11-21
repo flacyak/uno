@@ -2,7 +2,7 @@
 
 import type { SlopePlot } from "@document";
 import type { ChartKind } from "../kind.ts";
-import { fitSlopes, sloped, slopes } from "../slope.ts";
+import { fitSlopes, slopeTargets, sloped, slopes } from "../slope.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -19,5 +19,6 @@ export const slope: ChartKind<SlopePlot> = (plot) => ({
           empty: tally.values.length === 0,
           draw: () => slopes(sloped(plot, tally)),
           fit: fitSlopes,
+          targets: (drawn) => slopeTargets(sloped(plot, tally), drawn),
         },
 });

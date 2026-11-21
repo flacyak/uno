@@ -696,7 +696,8 @@
   overflow: visible;
 }
 
-.chart-slope-line {
+.chart-slope-line,
+.chart-slope-own {
   stroke: var(--accent);
   stroke-width: 2px;
   stroke-linecap: round;
@@ -707,6 +708,16 @@
   stroke: var(--surface);
   stroke-width: calc(2 * var(--ring));
   paint-order: stroke;
+}
+
+/* The value under the cursor stands over the rest, its own line over theirs, which fade. */
+.chart-slope-value:not(.cursor) > .chart-slope-own {
+  display: none;
+}
+
+.chart-slope-plot:has(.cursor) > .chart-slope-line,
+.chart-slope-plot:has(.cursor) > .chart-slope-value:not(.cursor) {
+  opacity: var(--faded);
 }
 
 /* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it

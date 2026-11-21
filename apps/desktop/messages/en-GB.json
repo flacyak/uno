@@ -542,6 +542,8 @@
   "chart_inserted": "inserted {title}",
   "chart_bars_more": "+{count} more",
   "chart_dots_none": "no numbers",
+  "chart_slope_in": "in {state}",
+  "chart_slope_none": "none",
   "chart_dots_rows": [
     {
       "declarations": ["input count", "local plural = count: plural"],

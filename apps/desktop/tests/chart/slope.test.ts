@@ -10,7 +10,7 @@ import { expect, test } from "vite-plus/test";
 
 import type { SlopePlot } from "@document";
 import type { SlopeTally } from "@engine";
-import { SLOPES_AT_MOST, sloped, slopes } from "@renderer/chart/slope";
+import { SLOPES_AT_MOST, slopeTargets, sloped, slopes } from "@renderer/chart/slope";
 import type { Ended } from "@tally";
 
 const REGION = { col: 0, header: "region" };
@@ -86,8 +86,9 @@ test("a slope's lines run from each value's From end to its To end on one scale 
   const drawn = slopes(sloped(SUMS, tally));
   expect(thirds(drawn, "chart-slope-line", "y1")).toStrictEqual([0, 3]);
   expect(thirds(drawn, "chart-slope-line", "y2")).toStrictEqual([2, 1]);
-  const dots = [...drawn.querySelectorAll("svg > *")].slice(-4);
-  expect(dots.every((dot) => dot.classList.contains("chart-slope-dot"))).toBe(true);
+  // Each value's dots stand in its group, after every line.
+  const groups = [...drawn.querySelectorAll("svg > *")].slice(-2);
+  expect(groups.every((g) => g.matches(".chart-slope-value:has(.chart-slope-dot)"))).toBe(true);
 });
 
 test("a value with rows at one end only draws its one dot and no line, and one standing nowhere draws nothing", () => {
@@ -134,4 +135,30 @@ test("a slope's From ends say their numbers at their left and its To ends their 
   expect([blank.title, blank.style.top]).toStrictEqual(["(blank)", "100%"]);
   const wides = ["--from-wide", "--to-wide"].map((at) => drawn.style.getPropertyValue(at));
   expect(wides).toStrictEqual(["4ch", "20ch"]);
+});
+
+test("a slope's value says its change as a share, named, and each end in its state; Down and Up step the values; the pointer finds the nearest line", () => {
+  const drawing = sloped(
+    SUMS,
+    tallyOf([
+      ["East", end(10, 1), end(30, 1)],
+      ["West", end(40, 1), NONE],
+    ]),
+  );
+  const drawn = slopes(drawing);
+  const targets = slopeTargets(drawing, drawn);
+  const said = (i: number) =>
+    targets.all[i]!.said().map((r) => `${r.value} ${r.label.textContent}`.trim());
+  expect(said(0)).toStrictEqual(["+200% East", "10 in 2024", "30 in 2025"]);
+  expect(said(1)).toStrictEqual(["West", "40 in 2024", "none in 2025"]);
+  expect([
+    targets.step!("ArrowDown", undefined),
+    targets.step!("ArrowUp", undefined),
+  ]).toStrictEqual([0, 1]);
+  // A plot 100 px square at the page's corner: East runs from its foot up to a third from its top.
+  const plot = drawn.querySelector(".chart-slope-plot")!;
+  plot.getBoundingClientRect = () => new DOMRect(0, 0, 100, 100);
+  expect(targets.under(plot, 50, 70)).toBe(0);
+  expect(targets.under(plot, 10, 4)).toBe(1);
+  expect(targets.under(plot, 50, 2)).toBeUndefined();
 });

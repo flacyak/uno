@@ -8,20 +8,29 @@
 import type { SlopePlot } from "@document";
 import type { SlopeTally } from "@engine";
 import { m } from "@paraglide/messages";
-import { num } from "@renderer/locale";
+import { num, percent as share } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import type { Ended } from "@tally";
 import { axis } from "./axes.ts";
 import { TIP_GAP } from "./bars.ts";
 import { LEGEND_NAME_AT_MOST } from "./legend.ts";
 import { BARS_INSET } from "./rows.ts";
-import { POINT_RADIUS, gridline, mark, percent } from "./scatter.ts";
+import { rowSteps } from "./rows.ts";
+import { POINT_OPACITY, POINT_RADIUS, gridline, mark, percent } from "./scatter.ts";
+import { ACCENT, named } from "./tooltip.ts";
+import type { Reading, Targets } from "./tooltip.ts";
 
 /** The ring of the window's ground round a dot, in px: the dataviz skill's 2 px. */
 const RING = 2;
 
 /** Where the From end and the To end stand across the plot. */
 const ENDS_AT = ["0", "100%"] as const;
+
+/** Where a value's group keeps the share of the scale each of its ends stands at. */
+const SHARES = ["from", "to"] as const;
+
+/** How far from a value's line, in px, the pointer still finds it: half the dataviz skill's least target. */
+const HIT_REACH = 12;
 
 /** The most values a slope draws, the largest first: past a dozen, lines cross into a tangle. */
 export const SLOPES_AT_MOST = 12;
@@ -113,15 +122,21 @@ export function slopes({ rows, states, more }: Slopes): HTMLElement {
   const finite = ends.filter(Number.isFinite);
   const scale = finite.length === 0 ? axis(0, 0) : axis(Math.min(...finite), Math.max(...finite));
   const [low, high] = [scale.ticks[0]!, scale.ticks.at(-1)!];
+  const share = (at: number) => Math.min(Math.max((at - low) / (high - low), 0), 1);
   // SVG counts down from the top, and the scale up from its least.
-  const y = (at: number) => percent(1 - Math.min(Math.max((at - low) / (high - low), 0), 1));
+  const y = (at: number) => percent(1 - share(at));
   const plot = mark("svg", "chart-slope-plot");
   plot.setAttribute("aria-hidden", "true");
   plot.append(...ENDS_AT.map((x) => gridline("y", x, "0", x, "100%")));
-  const dots: SVGCircleElement[] = [];
+  plot.style.setProperty("--faded", `${POINT_OPACITY}`);
+  // Each value's dots, and its own line shown while it wears the cursor, which
+  // stand over every line, so no line runs across another's end.
+  const values: SVGGElement[] = [];
   for (const [from, to] of rows.map((row) => row.ends)) {
+    const value = mark("g", "chart-slope-value");
     if (from !== undefined && to !== undefined) {
       plot.append(line("chart-slope-line", ENDS_AT[0], y(from), ENDS_AT[1], y(to)));
+      value.append(line("chart-slope-own", ENDS_AT[0], y(from), ENDS_AT[1], y(to)));
     }
     for (const [i, at] of [from, to].entries()) {
       if (at === undefined) continue;
@@ -129,11 +144,12 @@ export function slopes({ rows, states, more }: Slopes): HTMLElement {
       dot.setAttribute("cx", ENDS_AT[i]!);
       dot.setAttribute("cy", y(at));
       dot.setAttribute("r", `${POINT_RADIUS}`);
-      dots.push(dot);
+      value.append(dot);
+      value.dataset[SHARES[i]!] = `${share(at)}`;
     }
+    values.push(value);
   }
-  // Every dot stands over every line, so no line runs across another's end.
-  plot.append(...dots);
+  plot.append(...values);
   const [from, to] = [el("div", "chart-slope-ends from"), el("div", "chart-slope-ends to")];
   // A side is as wide as its state's name and its widest label, a To end's name cut as a key's.
   const wides = [[wide(states[0])], [wide(states[1])]];
@@ -177,4 +193,54 @@ export function fitSlopes(box: HTMLElement): void {
       else taken.push(at);
     }
   }
+}
+
+/** standing gives where a value of ends `from` and `to` stands `along` the plot: on its line, at a lone end within `reach`, or none. */
+function standing(from?: number, to?: number, along = 0, reach = 0): number | undefined {
+  if (from !== undefined && to !== undefined) {
+    return from + (to - from) * Math.min(Math.max(along, 0), 1);
+  }
+  if (from !== undefined) return along <= reach ? from : undefined;
+  return to !== undefined && along >= 1 - reach ? to : undefined;
+}
+
+/**
+ * slopeTargets gives the values of `drawn`, as slopes drew `drawing`: each
+ * worth its change as a share of its From end, named by its value, and each
+ * end in its state. The pointer finds the value whose line, or lone dot,
+ * stands nearest it within HIT_REACH, and Down and Up step the values.
+ */
+export function slopeTargets({ rows, states }: Slopes, drawn: HTMLElement): Targets {
+  const plot = drawn.querySelector<SVGSVGElement>(".chart-slope-plot")!;
+  const values = [...plot.querySelectorAll<SVGGElement>(".chart-slope-value")];
+  const all = values.map((value, i) => {
+    const { label, ends } = rows[i]!;
+    const [from, to] = ends;
+    const said = (): Reading[] => {
+      // A change is of a From end other than none or 0, as a share of it.
+      const changed = from && to !== undefined ? (to - from) / Math.abs(from) : undefined;
+      const change = changed === undefined ? "" : `${changed > 0 ? "+" : ""}${share(changed)}`;
+      const at = (end: number | undefined, state: string): Reading => ({
+        value: end === undefined ? m.chart_slope_none() : num(end),
+        label: el("span", "", m.chart_slope_in({ state })),
+      });
+      return [{ value: change, label: named(label) }, at(from, states[0]), at(to, states[1])];
+    };
+    return { mark: value, at: value.lastElementChild!, front: true, key: ACCENT, said };
+  });
+  const under = (_hit: EventTarget | null, x: number, y: number): number | undefined => {
+    const box = plot.getBoundingClientRect();
+    const along = (x - box.left) / box.width;
+    let [nearest, off]: [number | undefined, number] = [undefined, HIT_REACH];
+    for (const [i, value] of values.entries()) {
+      const [from, to] = SHARES.map((key) => value.dataset[key]).map((at) =>
+        at === undefined ? undefined : Number(at),
+      );
+      const at = standing(from, to, along, HIT_REACH / box.width);
+      const by = at === undefined ? off : Math.abs(box.top + (1 - at) * box.height - y);
+      if (by < off) [nearest, off] = [i, by];
+    }
+    return nearest;
+  };
+  return { all, under, ...rowSteps(all.length) };
 }

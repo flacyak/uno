@@ -73,4 +73,18 @@ export const CHART_SLOPE: Check[] = [
       return "";
     `,
   },
+  {
+    name: "the pointer on North's line says its change, its 2024 and its 2025, and fades the other lines",
+    // The axes are the plot's first two lines, and South's and North's its next.
+    hover: ".chart:first-child .chart-slope-plot > line:nth-of-type(4)",
+    shot: "chart-slope-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-slope-value.cursor") !== null))) return "no line wears the cursor";
+      const said = win.querySelector(".chart-tip-words").textContent;
+      if (!/^\\+40% North.*100 in 2024.*140 in 2025$/.test(said)) return "the box says " + said;
+      const faded = [...win.querySelectorAll(".chart-slope-plot > .chart-slope-line")].every((line) => Number(getComputedStyle(line).opacity) < 1);
+      return faded ? "" : "the other lines stand at full strength";
+    `,
+  },
 ];
