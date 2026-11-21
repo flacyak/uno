@@ -134,3 +134,8 @@ test("a beeswarm's dots step in value order with Right and Left, to the next str
   expect(targets.step?.("ArrowUp", undefined)).toBe(3);
   expect(targets.step?.("ArrowRight", 0)).toBeUndefined();
 });
+
+test("a beeswarm's caption counts the rows its table lists where no drawing drew", () => {
+  const drawing = swarm(PLOT).drawing(tallyOf([stripOf("North", [10, 20, 30])]), ROOM)!;
+  expect(drawing.notes()).toStrictEqual(["3 of 1,000 rows, a sample"]);
+});

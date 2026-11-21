@@ -6,6 +6,8 @@ import { num } from "@renderer/locale";
 import type { ChartKind } from "../kind.ts";
 import { packed, swarm as drawSwarm, swarmTargets } from "../swarm.ts";
 import type { Packed } from "../swarm.ts";
+import { swarmOver } from "../summary.ts";
+import { swarmed, tableOf } from "../table.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -21,17 +23,21 @@ export const swarm: ChartKind<SwarmPlot> = (plot) => ({
     if (tally.t !== "swarm") return undefined;
     if (tally.plotted === 0) return { ...undrawn, empty: true };
     const whole = plot.by === undefined ? named(plot.of) : undefined;
-    // The caption counts the dots the last drawing drew.
-    let drawn: Packed[] = [];
+    // The caption counts the dots the last drawing drew, or the rows the table lists where none drew.
+    let drawn: Packed[] | undefined;
     return {
       ...undrawn,
       draw: (height) => {
         drawn = packed(tally, whole, room, height);
         return drawSwarm(drawn, tally);
       },
-      targets: (box) => swarmTargets(drawn, box),
+      targets: (box) => swarmTargets(drawn ?? [], box),
+      table: (called) => tableOf(swarmed(plot, tally), called),
+      told: () => swarmOver(plot, tally),
       notes: () => {
-        const shown = drawn.reduce((sum, { dots }) => sum + dots.length, 0);
+        const strips = [...tally.strips, ...(tally.rest === undefined ? [] : [tally.rest])];
+        const listed = strips.map(({ at }) => at.length);
+        const shown = (drawn?.map(({ dots }) => dots.length) ?? listed).reduce((a, b) => a + b, 0);
         if (shown >= tally.plotted) return [];
         const rows = m.rows_count({ count: tally.plotted });
         return [m.chart_rows_sampled({ shown: num(shown), rows })];

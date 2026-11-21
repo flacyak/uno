@@ -9,8 +9,8 @@
  * apart from them, so a window can mark them as the file's.
  */
 
-import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
-import type { Group, Groups, HeatTally, Sample, StackTally, WeekTally } from "@engine";
+import type { ChartColumn, Plot, StackPlot, SwarmPlot, TimePlot } from "@document";
+import type { Group, Groups, HeatTally, Sample, StackTally, SwarmTally, WeekTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent, places } from "@renderer/locale";
@@ -198,4 +198,22 @@ export function summaryOf(title: string, name: string, rows: number, told?: Told
     values: list(each.slice(0, SUMMARY_VALUES)),
     more: more > 0 ? m.chart_summary_more({ count: num(more) }) : "",
   };
+}
+
+/**
+ * swarmOver gives what a beeswarm's summary says past its rows: how many rows
+ * it plots and its number's least and most, then its strips, the most rows
+ * first, each with its rows, and how many come after the SUMMARY_VALUES named.
+ */
+export function swarmOver(plot: SwarmPlot, tally: SwarmTally): Told {
+  const span = m.chart_summary_swarm({
+    rows: m.rows_count({ count: tally.plotted }),
+    of: columnLabel(plot.of.header, plot.of.col),
+    least: num(tally.least),
+    most: num(tally.most),
+  });
+  if (plot.by === undefined) return { span, each: [], more: 0 };
+  const each = tally.strips.map((s) => `${named(s.value)} ${num(s.plotted)}`);
+  if (tally.rest !== undefined) each.push(`${m.chart_pie_other()} ${num(tally.rest.plotted)}`);
+  return { span, each, more: Math.max(each.length - SUMMARY_VALUES, 0) };
 }

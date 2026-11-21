@@ -72,4 +72,20 @@ export const CHART_SWARM: Check[] = [
       return /^[\\d,.]+ East, row [\\d,]+$/u.test(said) ? "" : "the box says " + said;
     `,
   },
+  {
+    name: "a beeswarm's table lists each region's sampled rows by amount with their rows, and a line of those it did not sample",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-swarm-table",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((c) => c.textContent).join(" | "));
+      if (lines[0] !== "region | amount | row") return "the table's head reads " + lines[0];
+      if (!lines.some((line) => /^East \\| [\\d,]+ rows not sampled$/u.test(line))) return "no line counts East's rows not sampled";
+      const listed = win.querySelectorAll(".chart-table tbody td[colspan]").length;
+      const sampled = lines.length - 1 - listed;
+      const caption = win.querySelector(".chart-caption").textContent;
+      return caption.includes(sampled + " of ${ROWS} rows, a sample") ? "" : "the caption reads " + caption + " of a table of " + sampled;
+    `,
+  },
 ];

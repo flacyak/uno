@@ -17,6 +17,7 @@ import type {
   Plot,
   SlopePlot,
   StackPlot,
+  SwarmPlot,
   TimePlot,
   WeekPlot,
 } from "@document";
@@ -28,6 +29,7 @@ import type {
   SlopeTally,
   SpreadTally,
   StackTally,
+  SwarmTally,
   TimeTally,
   WeekTally,
   HeatTally,
@@ -450,6 +452,38 @@ export function binned(
  * caption of `called`, what the head calls the chart, in the window's
  * scroller.
  */
+/**
+ * swarmed gives a beeswarm's headers and rows: its strip's name where it has
+ * a column of them, its number and its row; each strip's sampled rows in order
+ * of their number, and a line per strip of how many of its rows it did not
+ * sample, so every row with a number is accounted for.
+ */
+export function swarmed(plot: SwarmPlot, tally: SwarmTally): [HTMLElement[], HTMLElement[]] {
+  const named =
+    plot.by === undefined ? [] : [header(columnLabel(plot.by.header, plot.by.col), true)];
+  const heads = [
+    ...named,
+    header(columnLabel(plot.of.header, plot.of.col), true, true),
+    header(m.chart_table_row(), false, true),
+  ];
+  const strips = tally.rest === undefined ? tally.strips : [...tally.strips, tally.rest];
+  const rows = strips.flatMap((strip) => {
+    const other = strip === tally.rest;
+    const head = (): HTMLElement[] =>
+      named.length === 0 ? [] : [other ? rowNamed(m.chart_pie_other()) : rowHead(strip.value)];
+    const order = strip.at.map((_, i) => i).sort((a, b) => strip.at[a]! - strip.at[b]!);
+    const sampled = order.map((i) =>
+      row(...head(), digits(strip.at[i]!), digits(strip.rows[i]! + 1)),
+    );
+    const left = strip.plotted - strip.at.length;
+    if (left === 0) return sampled;
+    const said = el("td", "", m.chart_table_unsampled({ rows: m.rows_count({ count: left }) }));
+    said.colSpan = 2;
+    return [...sampled, row(...head(), said)];
+  });
+  return [heads, rows];
+}
+
 export function tableOf([heads, rows]: [HTMLElement[], HTMLElement[]], called: Node): HTMLElement {
   const box = el("div", "chart-table chart-scrolls themed-bar");
   const made = el("table");
