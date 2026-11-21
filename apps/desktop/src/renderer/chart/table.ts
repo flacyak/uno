@@ -34,12 +34,12 @@ import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { DAY_HOURS } from "@tally";
 import type { Level, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
 import { middle } from "./box.ts";
 import { measuresOf } from "./dots.ts";
 import { endsOf } from "./slope.ts";
+import { slotsOf } from "./week.ts";
 import type { DotsTally } from "./dots.ts";
 import type { Boxed } from "./box.ts";
 import { edgeWords } from "./histogram.ts";
@@ -219,25 +219,28 @@ export function timed(
 
 /**
  * weekly gives a week heatmap's heads and rows: a row per hour of the week,
- * Sunday 00:00 first, empty ones too, under its day and hour, with its rows
- * and its sum where the plot sums; one for the rows with no date, where there
- * are any; and a line of the cells left out.
+ * Sunday 00:00 first, empty ones too, under its day and hour, or per day in a
+ * grid of days, with its rows and its sum where the plot sums; one for the
+ * rows with no date, where there are any; and a line of the cells left out.
  */
 export function weekly({ sum }: WeekPlot, tally: WeekTally): [HTMLElement[], HTMLElement[]] {
-  const heads = [PER_WORDS.day(), PER_WORDS.hour()].map((word) => header(word, false));
+  const { across, cells: slots } = slotsOf(tally);
+  const named = across > 1 ? [PER_WORDS.day(), PER_WORDS.hour()] : [PER_WORDS.day()];
+  const heads = named.map((word) => header(word, false));
   heads.push(header(m.chart_table_rows(), false, true));
   if (sum !== undefined) heads.push(header(columnLabel(sum.header, sum.col), true, true));
   const cells = (rows: number, summed: number): HTMLElement[] =>
     sum === undefined ? [digits(rows)] : [digits(rows), digits(summed)];
-  const rows = tally.hours.map(({ rows, sum: summed }, i) => {
-    const day = rowNamed(dayName(Math.floor(i / DAY_HOURS), "long"));
-    return row(day, rowNamed(clockName(i % DAY_HOURS)), ...cells(rows, summed));
+  const rows = slots.map(({ rows, sum: summed }, i) => {
+    const day = rowNamed(dayName(Math.floor(i / across), "long"));
+    const hour = across > 1 ? [rowNamed(clockName(i % across))] : [];
+    return row(day, ...hour, ...cells(rows, summed));
   });
   const { undated } = tally;
   if (undated.rows > 0) {
-    const named = rowNamed(m.chart_table_undated());
-    named.colSpan = 2;
-    rows.push(row(named, ...cells(undated.rows, undated.sum)));
+    const none = rowNamed(m.chart_table_undated());
+    none.colSpan = named.length;
+    rows.push(row(none, ...cells(undated.rows, undated.sum)));
   }
   return [heads, [...rows, ...leftOut(tally, heads.length)]];
 }

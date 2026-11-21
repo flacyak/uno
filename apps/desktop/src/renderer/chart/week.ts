@@ -12,7 +12,7 @@ import type { WeekTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { DAY_HOURS, WEEK_DAYS, WEEK_HOURS } from "@tally";
+import { DAY_HOURS, WEEK_DAYS } from "@tally";
 import type { PlotRoom } from "./kind.ts";
 import { dayName, hourName, weekHourName } from "./periods.ts";
 import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
@@ -30,9 +30,39 @@ const LABELS_APART = 1;
 /** The gap between a week heatmap's cells, in px: the dataviz skill's between fills. */
 const CELL_GAP = 2;
 
-/** amountsOf gives each hour of `tally`'s rows, or its sum where `summed`, Sunday 00:00 first. */
-export function amountsOf(tally: WeekTally, summed: boolean): number[] {
-  return tally.hours.map((hour) => (summed ? hour.sum : hour.rows));
+/** What a week heatmap draws a cell of: its rows, and their sum where it sums. */
+export interface Slot {
+  readonly rows: number;
+  readonly sum: number;
+}
+
+/** A week heatmap's cells: as many to a day as `across`, Sunday's first, and what each is called. */
+export interface Slots {
+  readonly across: number;
+  readonly cells: readonly Slot[];
+  readonly nameOf: (at: number) => string;
+}
+
+/**
+ * slotsOf gives the cells of `tally`: an hour of the week each, or a day each
+ * where no row is dated past midnight, as a column of plain dates has none.
+ */
+export function slotsOf(tally: WeekTally): Slots {
+  if (tally.timed > 0) return { across: DAY_HOURS, cells: tally.hours, nameOf: weekHourName };
+  const cells = Array.from({ length: WEEK_DAYS }, (_, d) =>
+    tally.hours
+      .slice(d * DAY_HOURS, (d + 1) * DAY_HOURS)
+      .reduce((day, hour) => ({ rows: day.rows + hour.rows, sum: day.sum + hour.sum }), {
+        rows: 0,
+        sum: 0,
+      }),
+  );
+  return { across: 1, cells, nameOf: (d) => dayName(d, "long") };
+}
+
+/** amountsOf gives each of `slots`' rows, or its sum where `summed`. */
+export function amountsOf({ cells }: Slots, summed: boolean): number[] {
+  return cells.map((slot) => (summed ? slot.sum : slot.rows));
 }
 
 /** cellsWide gives how wide a week heatmap's cells stand in `room`, after a column of day names `daysCh` characters wide. */
@@ -66,21 +96,25 @@ function labelled(step: number): [HTMLElement, HTMLElement] {
   return [days, hours];
 }
 
-/** weekGrid draws `tally`'s hours as cells, each in the class of its rows, or of its sum where `summed`. */
+/**
+ * weekGrid draws `tally`'s hours as cells, or its days where no row is dated
+ * past midnight, each in the class of its rows, or of its sum where `summed`.
+ */
 export function weekGrid(tally: WeekTally, summed: boolean, room: PlotRoom): HTMLElement {
+  const slots = slotsOf(tally);
   const box = el("div", "chart-week");
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--tick-gap", `${TICK_GAP}px`);
   box.style.setProperty("--gap", `${CELL_GAP}px`);
   box.style.setProperty("--days", `${WEEK_DAYS}`);
-  box.style.setProperty("--hours", `${DAY_HOURS}`);
+  box.style.setProperty("--hours", `${slots.across}`);
   const names = Array.from({ length: WEEK_DAYS }, (_, d) => dayName(d, "short"));
   const daysCh = Math.max(...names.map((n) => n.length));
   const [days, hours] = labelled(hourStep(room, daysCh));
   const cells = el("div", "chart-week-cells");
-  const amounts = amountsOf(tally, summed);
+  const amounts = amountsOf(slots, summed);
   const classes = classesOver(amounts, !summed);
-  for (const [i, { rows }] of tally.hours.entries()) {
+  for (const [i, { rows }] of slots.cells.entries()) {
     const cell = el("span", "chart-week-cell");
     const step = rows > 0 ? classOf(amounts[i]!, classes) : undefined;
     if (step !== undefined) cell.dataset["step"] = `${step}`;
@@ -90,36 +124,45 @@ export function weekGrid(tally: WeekTally, summed: boolean, room: PlotRoom): HTM
   }
   const signed = amounts.some((amount) => amount < 0);
   const scale = scaleOf(classes, signed, cellsWide(room, daysCh), room.ch);
-  box.append(scale, days, cells, hours);
+  box.append(scale, days, cells);
+  if (slots.across > 1) box.append(hours);
   return box;
 }
 
-/** Where each key takes the cursor from the hour of the week `at`: along its day, to its ends, or to the day before or after. */
-const WEEK_STEPS: ReadonlyMap<string, (at: number) => number> = new Map([
-  ["ArrowRight", (at: number) => (at % DAY_HOURS < DAY_HOURS - 1 ? at + 1 : at)],
-  ["ArrowLeft", (at: number) => (at % DAY_HOURS > 0 ? at - 1 : at)],
-  ["ArrowDown", (at: number) => (at + DAY_HOURS < WEEK_HOURS ? at + DAY_HOURS : at)],
-  ["ArrowUp", (at: number) => (at >= DAY_HOURS ? at - DAY_HOURS : at)],
-  ["Home", (at: number) => at - (at % DAY_HOURS)],
-  ["End", (at: number) => at - (at % DAY_HOURS) + DAY_HOURS - 1],
-]);
+/**
+ * stepsOf gives where each key takes the cursor from the cell `at` of
+ * `count`, `across` to a day: along its day, to its ends, or to the day
+ * before or after.
+ */
+function stepsOf(across: number, count: number): ReadonlyMap<string, (at: number) => number> {
+  return new Map([
+    ["ArrowRight", (at: number) => (at % across < across - 1 ? at + 1 : at)],
+    ["ArrowLeft", (at: number) => (at % across > 0 ? at - 1 : at)],
+    ["ArrowDown", (at: number) => (at + across < count ? at + across : at)],
+    ["ArrowUp", (at: number) => (at >= across ? at - across : at)],
+    ["Home", (at: number) => at - (at % across)],
+    ["End", (at: number) => at - (at % across) + across - 1],
+  ]);
+}
 
 /** The keys a week heatmap's cursor takes past the tooltip's own: to the day after and the day before. */
 const DAY_KEYS = ["ArrowDown", "ArrowUp"] as const;
 
 /**
  * weekTargets gives the cells of `drawn`, as weekGrid drew `tally`: each worth
- * its rows, or its sum and its rows where `summed`, named by its day and hour.
+ * its rows, or its sum and its rows where `summed`, named by its day and hour,
+ * or by its day alone in a grid of days.
  * Right and Left step along a day, Home and End to its ends, and Down and Up
  * to the same hour of the day after and before, from Sunday 00:00 where no
  * cell has the cursor.
  */
 export function weekTargets(tally: WeekTally, summed: boolean, drawn: HTMLElement): Targets {
+  const slots = slotsOf(tally);
   const cells = [...drawn.querySelectorAll<HTMLElement>(".chart-week-cell")];
   const all = cells.map((mark, i) => {
     const said = (): Reading[] => {
-      const { rows, sum } = tally.hours[i]!;
-      const name = el("span", "", weekHourName(i));
+      const { rows, sum } = slots.cells[i]!;
+      const name = el("span", "", slots.nameOf(i));
       const counted = { value: num(rows), label: el("span", "", m.chart_table_rows()) };
       return summed ? [{ value: num(sum), label: name }, counted] : [{ ...counted, label: name }];
     };
@@ -127,7 +170,7 @@ export function weekTargets(tally: WeekTally, summed: boolean, drawn: HTMLElemen
     return { mark, at: mark, front: false, key, said };
   });
   const step = (key: string, at: number | undefined): number | undefined => {
-    const to = WEEK_STEPS.get(key);
+    const to = stepsOf(slots.across, slots.cells.length).get(key);
     if (to === undefined) return undefined;
     return at === undefined ? 0 : to(at);
   };

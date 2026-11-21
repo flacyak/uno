@@ -14,6 +14,9 @@ import type { Check, Input } from "./check.ts";
 /** The workspace smoke.js wrote of two week heatmaps. */
 const WEEKLY = process.env["UNO_SMOKE_WEEKLY"] ?? "";
 
+/** The workspace smoke.js wrote of a week heatmap of plain dates. */
+const DAILY = process.env["UNO_SMOKE_DAILY"] ?? "";
+
 /** The hours of a week, and the places of Sunday 03:00 and 20:00 and Monday 13:00 among them. */
 const WEEK_HOURS = 168;
 const SUNDAY_NIGHT = 3;
@@ -126,6 +129,26 @@ export const CHART_WEEK: Check[] = [
       const want = ["day | hour | rows", "Sunday | 12:00 AM | 0"];
       if (lines.slice(0, 2).join(" / ") !== want.join(" / ")) return "the table starts " + lines.slice(0, 2).join(" / ");
       return lines[1 + ${MONDAY_PEAK}] === "Monday | 1:00 PM | 20" ? "" : "Monday 13:00 reads " + lines[1 + ${MONDAY_PEAK}];
+    `,
+  },
+  {
+    name: "a week heatmap of plain dates draws a cell per day from Sunday, each beside its name, with no hours under them, and says it draws days",
+    send: ["menu:open-path", DAILY],
+    shot: "chart-week-days",
+    script: `
+      const drawn = () => document.querySelectorAll(".chart .chart-week-cell").length === 7;
+      if (!(await arrives(drawn))) return "the window draws no grid of days";
+      const win = document.querySelector(".chart");
+      const rect = (at) => at.getBoundingClientRect();
+      const middle = (r) => r.top + r.height / 2;
+      const cells = [...win.querySelectorAll(".chart-week-cell")];
+      const days = [...win.querySelectorAll(".chart-week-days .chart-tick")];
+      if (days.some((d, i) => Math.abs(middle(rect(d)) - middle(rect(cells[i]))) > ${PX_SLACK} + 0.5)) return "a day's name stands off its cell";
+      if (win.querySelector(".chart-week-hours") !== null) return "the grid of days names hours";
+      if (!win.textContent.includes("drawn per day")) return "the window does not say it draws days";
+      // Weekdays hold 25 orders a day over four weeks, and each weekend day 1 a week.
+      const steps = cells.map((c) => c.dataset.step).join();
+      return steps === "1,4,4,4,4,4,1" ? "" : "the days' classes are " + steps;
     `,
   },
 ];

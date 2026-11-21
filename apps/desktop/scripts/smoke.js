@@ -617,6 +617,34 @@ await writeFile(
   }),
 );
 
+// A workspace of a week heatmap of the same four weeks' orders by their day
+// alone, written with no time, in a new window's size: a grid of days.
+const dailyFile = join(scratch, "sent", "daily.csv");
+const dailyRows = weeklyRows.map((r) => r.slice(0, "2024-03-03".length));
+await writeFile(dailyFile, `${["ordered", ...dailyRows].join("\n")}\n`);
+const daily = join(scratch, "sent", "daily.uno");
+const dailySource = { ...weeklySource, id: "daily", name: "daily.csv", path: dailyFile, cols: 1 };
+await writeFile(
+  daily,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [dailySource],
+    active: dailySource.id,
+    log: [],
+    charts: [
+      {
+        ...weeklyChart,
+        source: dailySource.id,
+        id: "c1",
+        plot: weeklyPlot,
+        place: { ...chartSize, x: 0, y: 1 },
+      },
+    ],
+    extra: new Map(),
+    at: daily,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -979,6 +1007,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_DOTTED: dotted,
       UNO_SMOKE_SLOPED: sloped,
       UNO_SMOKE_WEEKLY: weekly,
+      UNO_SMOKE_DAILY: daily,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,

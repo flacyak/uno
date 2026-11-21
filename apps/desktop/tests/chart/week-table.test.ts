@@ -86,3 +86,24 @@ test("the summary names the week and the hour that holds the most, in the app's 
     "De domingo a sábado, o máximo em segunda-feira, das 13:00 às 14:00: 300.",
   );
 });
+
+test("a week heatmap of plain dates lists a row per day, and its summary names the day with the most", () => {
+  const days: WeekTally = {
+    ...TALLY,
+    timed: 0,
+    hours: TALLY.hours.map((h, i) =>
+      i === DAY_HOURS ? { rows: 2, sum: 300 } : { rows: 0, sum: 0 },
+    ),
+  };
+  const drawing = kindFor(PLOT).drawing(days, ROOM)!;
+  const rows = rowsOf(drawing.table(el("bdi", "", "revenue per day of the week")));
+  expect(rows.slice(0, 3)).toStrictEqual([
+    ["day", "rows", "revenue"],
+    ["Sunday", "0", "0"],
+    ["Monday", "2", "300"],
+  ]);
+  expect(rows).toHaveLength(1 + 7 + 2);
+  expect(drawing.told().span).toBe("From Sunday to Saturday, the most in Monday: 300.");
+  expect(drawing.kept?.()).toBe("drawn per day");
+  expect(kindFor(PLOT).drawing(TALLY, ROOM)!.kept?.()).toBe("");
+});

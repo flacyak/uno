@@ -172,3 +172,20 @@ test("the keys step a week heatmap's cursor along a day, to its ends, and to the
   expect(after("PageDown", 0)).toBeUndefined();
   expect(keys).toEqual(["ArrowDown", "ArrowUp"]);
 });
+
+test("a week heatmap of plain dates draws a cell per day, named by its day, and Down and Up step the days", () => {
+  // Every row dated at midnight: Monday's 3 and Saturday's 1.
+  const days = { ...tallyOf(ROWS, { [DAY_HOURS]: [3, 0], [6 * DAY_HOURS]: [1, 0] }), timed: 0 };
+  const drawn = weekGrid(days, false, ROOM);
+  expect(stepsOf(drawn)).toEqual(["", "3", "", "", "", "", "1"]);
+  expect(drawn.querySelector(".chart-week-hours")).toBeNull();
+  const targets = weekTargets(days, false, drawn);
+  expect(saidOf(targets.all[1]!)).toBe("3 Monday");
+  const after = (key: string, at: number) => targets.step!(key, at);
+  expect([
+    after("ArrowDown", 1),
+    after("ArrowUp", 1),
+    after("ArrowRight", 1),
+    after("End", 1),
+  ]).toEqual([2, 0, 1, 1]);
+});
