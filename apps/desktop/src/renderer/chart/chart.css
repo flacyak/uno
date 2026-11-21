@@ -1140,6 +1140,18 @@
   outline: 2px solid var(--ink);
 }
 
+/* A horizon chart's period under the cursor is ringed the same, however
+ * narrow the row's stretch makes it. */
+.chart-horizon-period {
+  fill: transparent;
+}
+
+.chart-horizon-period.cursor {
+  stroke: var(--ink);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
 .chart-slice.cursor {
   fill: color-mix(in srgb, var(--key) 80%, var(--ink));
 }
@@ -1281,6 +1293,10 @@
   .chart-week-cell.cursor,
   .chart-heat-cell.cursor {
     outline-color: Highlight;
+  }
+
+  .chart-horizon-period.cursor {
+    stroke: Highlight;
   }
 }
 
@@ -1628,6 +1644,7 @@
 
 .chart-horizon-bands {
   display: block;
+  overflow: visible;
   width: 100%;
   height: 100%;
 }

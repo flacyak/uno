@@ -1,7 +1,7 @@
 /** @fileoverview A horizon chart's kind: rows, or a sum, per period, a row of folded bands per series. */
 
 import type { HorizonPlot } from "@document";
-import { horizonRows, seriesOf } from "../horizon.ts";
+import { horizonRows, horizonTargets, seriesOf } from "../horizon.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -17,6 +17,10 @@ export const horizon: ChartKind<HorizonPlot> = (plot) => ({
     const summed = plot.sum !== undefined;
     const horizon = seriesOf(tally, summed, room);
     if (horizon === undefined || horizon.series.length === 0) return { ...undrawn, empty: true };
-    return { ...undrawn, draw: (height) => horizonRows(horizon, summed, room, height) };
+    return {
+      ...undrawn,
+      draw: (height) => horizonRows(horizon, summed, room, height),
+      targets: (drawn) => horizonTargets(horizon, summed, drawn),
+    };
   },
 });

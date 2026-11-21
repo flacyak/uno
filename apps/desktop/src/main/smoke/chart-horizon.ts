@@ -3,7 +3,8 @@
  * with orders, largest first, each three bands of the ramp folded into a
  * row a bar tall, and a chart of one series one row with no name, inside its
  * window, and in both the legend over the bands, its breaks apart, and the
- * months' labels under them, each centred on its month.
+ * months' labels under them, each centred on its month; and a click on a
+ * month rings it and says it.
  *
  * They open the workspace smoke.js wrote of a year of four regions' orders.
  */
@@ -70,6 +71,20 @@ export const CHART_HORIZON: Check[] = [
         if (ticks.length > 2 && !ticks.some((t) => Math.abs(middle(t) - march) <= 1)) return "no label centres on March";
       }
       return "";
+    `,
+  },
+  {
+    name: "a click on North's December rings it and says its region, its month and its twelve rows",
+    click: {
+      selector: ".chart:first-child .chart-bar-row:nth-child(2) .chart-horizon-period:last-child",
+    },
+    shot: "chart-horizon-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      const december = win.querySelector(".chart-horizon-period:last-of-type");
+      if (!(await until(() => december.classList.contains("cursor")))) return "North's December wears no cursor";
+      const said = win.querySelector(".chart-tip-words").textContent.replace(/\\s/gu, " ");
+      return said === "12 North, December 2024" ? "" : "the box says " + said;
     `,
   },
 ];

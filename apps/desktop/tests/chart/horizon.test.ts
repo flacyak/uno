@@ -2,14 +2,19 @@
  * @fileoverview A horizon chart's drawing: three bands of one round scale,
  * each folded into its row over the last, and below zero the same in the
  * pole's steps, under a legend of the bands' breaks, over their periods'
- * labels, and a line that counts the values left out.
+ * labels, and a line that counts the values left out; and its targets.
  *
  * @vitest-environment happy-dom
  */
 
 import { expect, test } from "vite-plus/test";
 
-import { HORIZON_BANDS, HORIZON_ROWS_AT_MOST, horizonRows } from "@renderer/chart/horizon";
+import {
+  HORIZON_BANDS,
+  HORIZON_ROWS_AT_MOST,
+  horizonRows,
+  horizonTargets,
+} from "@renderer/chart/horizon";
 import type { Horizon, Series } from "@renderer/chart/horizon";
 
 /** A plot that holds every row, and the room it draws in. */
@@ -27,7 +32,7 @@ const horizonOf = (series: Series[]): Horizon => ({ periods: YEAR, series, other
 const rowsOf = (series: Series[]): HTMLElement => horizonRows(horizonOf(series), false, ROOM, TALL);
 
 /** one gives a chart of one series of `amounts`. */
-const one = (amounts: number[]): Series[] => [{ value: undefined, rows: 1, amounts }];
+const one = (amounts: number[]): Series[] => [{ value: undefined, rows: 1, counts: [], amounts }];
 
 /** Each row's bands' paths, the accent's first, then the pole's. */
 const bandsOf = (drawn: HTMLElement): string[][] =>
@@ -59,8 +64,8 @@ test("a horizon row folds its amounts into three bands of one scale, darker over
 
 test("a horizon chart draws a row per value with its name, every row on one scale, at most twelve", () => {
   const drawn = rowsOf([
-    { value: "North", rows: 6, amounts: [6] },
-    { value: "South", rows: 3, amounts: [3] },
+    { value: "North", rows: 6, counts: [6], amounts: [6] },
+    { value: "South", rows: 3, counts: [3], amounts: [3] },
   ]);
   const [north, south] = bandsOf(drawn);
   expect(north![0]).toBe("var(--seq-2) M0 1V0H1V1Z");
@@ -73,6 +78,7 @@ test("a horizon chart draws a row per value with its name, every row on one scal
   const many = Array.from({ length: HORIZON_ROWS_AT_MOST + 2 }, (_, i) => ({
     value: `v${i}`,
     rows: i,
+    counts: [i],
     amounts: [i],
   }));
   expect(bandsOf(rowsOf(many))).toHaveLength(HORIZON_ROWS_AT_MOST);
@@ -112,6 +118,7 @@ test("a horizon chart counts the values it leaves out and their rows, sent and n
   const many = Array.from({ length: HORIZON_ROWS_AT_MOST + 2 }, (_, i) => ({
     value: `v${i}`,
     rows: 2,
+    counts: [2],
     amounts: [1],
   }));
   const drawn = horizonRows(
@@ -127,15 +134,48 @@ test("a horizon chart counts the values it leaves out and their rows, sent and n
 test("a horizon chart names its periods under its rows, as many as stand apart, and one of one series spans the plot", () => {
   const ticks = (drawn: HTMLElement) =>
     [...drawn.querySelectorAll(".chart-heat-periods .chart-tick")].map((t) => t.textContent);
-  expect(ticks(rowsOf([{ value: "North", rows: 1, amounts: Array<number>(12).fill(1) }]))).toEqual([
-    "Jan 2024",
-    "Mar",
-    "May",
-    "Jul",
-    "Sep",
-    "Nov",
-  ]);
+  expect(
+    ticks(rowsOf([{ value: "North", rows: 1, counts: [], amounts: Array<number>(12).fill(1) }])),
+  ).toEqual(["Jan 2024", "Mar", "May", "Jul", "Sep", "Nov"]);
   const alone = rowsOf(one(Array<number>(12).fill(1)));
   expect(alone.classList).toContain("alone");
   expect(ticks(alone)).toHaveLength(6);
+});
+
+test("a horizon chart's periods each say their value, their period and what they hold, and the keys step along a value and across values", () => {
+  // Two regions' sums over January to March 2024, and their rows.
+  const horizon: Horizon = {
+    periods: { per: "month", from: 648, span: 3 },
+    series: [
+      { value: "North", rows: 10, counts: [8, 0, 2], amounts: [80, 0, -20] },
+      { value: "South", rows: 5, counts: [1, 4, 0], amounts: [10, 40, 0] },
+    ],
+    others: NONE,
+  };
+  const targets = horizonTargets(horizon, true, horizonRows(horizon, true, ROOM, TALL));
+  const said = (n: number) =>
+    targets.all[n]!.said()
+      .map(({ value, label }) => `${value} ${label.textContent}`)
+      .join(" / ");
+  expect(said(2)).toBe("-20 North, March 2024 / 2 rows");
+  expect(said(4)).toBe("40 South, February 2024 / 4 rows");
+  // 80 reaches the third band of 30, -20 the pole's first, and an empty period wears the rule.
+  expect([0, 1, 2].map((n) => targets.all[n]!.key)).toEqual([
+    "var(--seq-4)",
+    "var(--rule)",
+    "var(--div-2)",
+  ]);
+  const step = (key: string, at: number | undefined) => targets.step!(key, at);
+  expect([
+    step("ArrowRight", undefined),
+    step("ArrowRight", 2),
+    step("ArrowDown", 1),
+    step("End", 3),
+  ]).toEqual([0, 2, 4, 5]);
+  const alone = { ...horizon, series: horizon.series.slice(0, 1) };
+  alone.series[0] = { ...alone.series[0]!, value: undefined };
+  const once = horizonTargets(alone, false, horizonRows(alone, false, ROOM, TALL));
+  expect(once.all[0]!.said().map(({ value, label }) => `${value} ${label.textContent}`)).toEqual([
+    "8 January 2024",
+  ]);
 });

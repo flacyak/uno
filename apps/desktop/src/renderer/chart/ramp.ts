@@ -72,13 +72,13 @@ export function classesOver(
 }
 
 /**
- * classOf gives the class `value` falls in: 1 to CLASSES above zero, each up
- * to and with its break, -1 to -CLASSES below it, and 0 at zero.
+ * classOf gives the class `value` falls in: 1 to its count above zero, each up
+ * to and with its break, -1 down to minus its count below it, and 0 at zero.
  */
 export function classOf(value: number, classes: Classes): number {
   if (value === 0) return 0;
   const reached = Math.ceil(Math.abs(value) / classes.width - ON_BREAK);
-  return Math.sign(value) * Math.min(Math.max(reached, 1), CLASSES);
+  return Math.sign(value) * Math.min(Math.max(reached, 1), classes.breaks.length);
 }
 
 /** The ramp a class wears either side of zero: the accent's above, the pole's below. */
