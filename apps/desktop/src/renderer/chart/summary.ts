@@ -10,13 +10,14 @@
  */
 
 import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
-import type { Group, Groups, Sample, StackTally } from "@engine";
+import type { Group, Groups, Sample, StackTally, WeekTally } from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { list, num, percent, places } from "@renderer/locale";
+import { WEEK_DAYS } from "@tally";
 import type { Box, Level, TimeLevel } from "@tally";
 import { edgeWords } from "./histogram.ts";
-import { fullName } from "./periods.ts";
+import { dayName, fullName, weekHourName } from "./periods.ts";
 import { slices, wholeOf } from "./pie.ts";
 
 /** How many values a summary names before it counts the rest: three, as a sentence reads. */
@@ -123,6 +124,19 @@ export function spannedOver({ sum }: TimePlot, level: TimeLevel): Told {
     most: name(most),
     value,
   });
+  return { span, each: [], more: 0 };
+}
+
+/**
+ * weekOver gives what a week heatmap's summary says of `tally`, past its rows:
+ * its days, and the hour of the most rows, or the largest sum where `summed`.
+ */
+export function weekOver(tally: WeekTally, summed: boolean): Told {
+  const sizes = tally.hours.map(({ rows, sum }) => (summed ? sum : rows));
+  const most = sizes.reduce((at, size, i) => (size > sizes[at]! ? i : at), 0);
+  const [from, to] = [dayName(0, "long"), dayName(WEEK_DAYS - 1, "long")];
+  const value = num(sizes[most]!);
+  const span = m.chart_summary_time({ from, to, most: weekHourName(most), value });
   return { span, each: [], more: 0 };
 }
 

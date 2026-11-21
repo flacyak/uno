@@ -112,4 +112,20 @@ export const CHART_WEEK: Check[] = [
       return /^0 Monday, 11:00 PM to 12:00 AM$/.test(said) ? "" : "the box says " + said;
     `,
   },
+  {
+    name: "a week heatmap's head says what it measures per hour of the week, and its table lists every hour from Sunday 00:00, Monday 13:00's twenty rows among them",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-week-table",
+    script: `
+      const win = document.querySelector(".chart");
+      const title = win.querySelector(".chart-title").textContent;
+      if (title !== "rows per hour of the week of ordered") return "the head says " + title;
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((cell) => cell.textContent.replace(/\\s/gu, " ")).join(" | "));
+      if (lines.length !== 1 + ${WEEK_HOURS}) return "the table has " + lines.length + " lines";
+      const want = ["day | hour | rows", "Sunday | 12:00 AM | 0"];
+      if (lines.slice(0, 2).join(" / ") !== want.join(" / ")) return "the table starts " + lines.slice(0, 2).join(" / ");
+      return lines[1 + ${MONDAY_PEAK}] === "Monday | 1:00 PM | 20" ? "" : "Monday 13:00 reads " + lines[1 + ${MONDAY_PEAK}];
+    `,
+  },
 ];

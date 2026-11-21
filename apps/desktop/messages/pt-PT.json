@@ -481,6 +481,8 @@
   "chart_title_stack_sum": "soma de {sum} por {by} e por {split}",
   "chart_title_time_rows": "linhas por {per} de {at}",
   "chart_title_time_sum": "soma de {sum} por {per} de {at}",
+  "chart_title_week_rows": "linhas por hora da semana de {at}",
+  "chart_title_week_sum": "soma de {sum} por hora da semana de {at}",
   "chart_title_time_rows_over": "linhas ao longo de {at}",
   "chart_title_time_sum_over": "soma de {sum} ao longo de {at}",
   "chart_per_hour": "hora",

@@ -1,14 +1,23 @@
 /** @fileoverview A week heatmap's kind: rows, or the sum of another column, per hour of the week. */
 
 import type { WeekPlot } from "@document";
+import { m } from "@paraglide/messages";
 import type { ChartKind } from "../kind.ts";
+import { weekOver } from "../summary.ts";
+import { tableOf, weekly } from "../table.ts";
 import { weekGrid, weekTargets } from "../week.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
-/** week is what a window does with a week heatmap's plot, titled by its dates. */
+/** title gives the title a week heatmap's plot makes: what it measures per hour of the week of its dates. */
+function title({ at, sum }: WeekPlot): string {
+  if (sum === undefined) return m.chart_title_week_rows({ at: named(at) });
+  return m.chart_title_week_sum({ at: named(at), sum: named(sum) });
+}
+
+/** week is what a window does with a week heatmap's plot. */
 export const week: ChartKind<WeekPlot> = (plot) => ({
-  title: () => named(plot.at),
+  title: () => title(plot),
   numbered: plot.sum === undefined ? [] : [plot.sum],
   dated: { at: plot.at, reading: "order" in plot ? plot.order : plot.unit },
   valued: [plot.at],
@@ -20,6 +29,8 @@ export const week: ChartKind<WeekPlot> = (plot) => ({
       ...undrawn,
       draw: () => weekGrid(tally, summed, room),
       targets: (drawn) => weekTargets(tally, summed, drawn),
+      table: (called) => tableOf(weekly(plot, tally), called),
+      told: () => weekOver(tally, summed),
     };
   },
 });
