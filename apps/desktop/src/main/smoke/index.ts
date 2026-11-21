@@ -24,6 +24,7 @@ import { CHART_MOVE } from "./chart-move.ts";
 import { CHART_BOX } from "./chart-box.ts";
 import { CHART_DOTS } from "./chart-dots.ts";
 import { CHART_SLOPE } from "./chart-slope.ts";
+import { CHART_WEEK } from "./chart-week.ts";
 import { CHART_HISTOGRAM } from "./chart-histogram.ts";
 import { CHART_STACK } from "./chart-stack.ts";
 import { CHART_TIP } from "./chart-tip.ts";
@@ -107,6 +108,7 @@ const CHECKS: Record<string, Check[]> = {
   "chart-box": CHART_BOX,
   "chart-dots": CHART_DOTS,
   "chart-slope": CHART_SLOPE,
+  "chart-week": CHART_WEEK,
   "chart-move": CHART_MOVE,
   "chart-blank": CHART_BLANK,
   "chart-states": CHART_STATES,

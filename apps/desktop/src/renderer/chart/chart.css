@@ -1538,3 +1538,25 @@
   inset: 0;
   visibility: hidden;
 }
+
+/* A week heatmap, from week.ts: a cell per hour of the week, a row per day
+ * from Sunday and a column per hour, the dataviz skill's 2 px of the window's
+ * ground apart. A cell wears its class's step of the ramp, the accent's
+ * above zero and the pole's below, and an hour of no rows, or of a sum of
+ * zero, the gridline's rule. */
+.chart-week {
+  display: grid;
+  height: 100%;
+  padding: var(--inset);
+}
+
+.chart-week-cells {
+  display: grid;
+  grid-template: repeat(var(--days), minmax(0, 1fr)) / repeat(var(--hours), minmax(0, 1fr));
+  gap: 2px;
+}
+
+.chart-week-cell {
+  border-radius: 2px;
+  background: var(--fill, var(--rule));
+}

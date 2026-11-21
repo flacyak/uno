@@ -563,6 +563,60 @@ await writeFile(
   }),
 );
 
+// A workspace of two week heatmaps of an export of four weeks of orders from
+// Sunday 3 March 2024: on weekdays from 09:00 to 17:00, most at 13:00, and one
+// each weekend evening at 20:00, each order worth 100 and a Sunday evening's a
+// return of 300. Rows per hour of the week in a new window's size at the
+// sheet's foot, and the sum of revenue in a window of the least width at its
+// top, its Sunday evenings below zero.
+const weeklyFile = join(scratch, "sent", "weekly.csv");
+const weeklyDays = 28;
+const [weeklyOpens, weeklyPeak, weeklyCloses, weeklyEvening] = [9, 13, 17, 20];
+const weeklyReturn = -300;
+const weeklyRows = Array.from({ length: weeklyDays }, (_, d) => d).flatMap((d) => {
+  const day = new Date(Date.UTC(2024, 2, 3 + d));
+  const weekday = day.getUTCDay();
+  const date = day.toISOString().slice(0, 10);
+  const at = (hour, revenue) => `${date} ${String(hour).padStart(2, "0")}:15,${revenue}`;
+  if (weekday === 0 || weekday === 6)
+    return [at(weeklyEvening, weekday === 0 ? weeklyReturn : 100)];
+  return Array.from({ length: weeklyCloses - weeklyOpens + 1 }, (_, i) => weeklyOpens + i).flatMap(
+    (hour) => Array.from({ length: 5 - Math.abs(hour - weeklyPeak) }, () => at(hour, 100)),
+  );
+});
+await writeFile(weeklyFile, `${["ordered,revenue", ...weeklyRows].join("\n")}\n`);
+const weekly = join(scratch, "sent", "weekly.uno");
+const weeklySource = {
+  ...spreadSource,
+  id: "weekly",
+  name: "weekly.csv",
+  path: weeklyFile,
+  rows: weeklyRows.length,
+  cols: 2,
+};
+const weeklyPlot = { t: "week", at: { col: 0, header: "ordered" }, order: "day" };
+const weeklyChart = { source: weeklySource.id, title: "", refresh: 0 };
+await writeFile(
+  weekly,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [weeklySource],
+    active: weeklySource.id,
+    log: [],
+    charts: [
+      { ...weeklyChart, id: "c1", plot: weeklyPlot, place: { ...chartSize, x: 0, y: 1 } },
+      {
+        ...weeklyChart,
+        id: "c2",
+        plot: { ...weeklyPlot, sum: { col: 1, header: "revenue" } },
+        place: { ...chartSize, width: leastSize.width, x: 1, y: 0 },
+      },
+    ],
+    extra: new Map(),
+    at: weekly,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -924,6 +978,7 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_BOXED: boxed,
       UNO_SMOKE_DOTTED: dotted,
       UNO_SMOKE_SLOPED: sloped,
+      UNO_SMOKE_WEEKLY: weekly,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,
