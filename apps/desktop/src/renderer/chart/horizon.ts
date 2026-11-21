@@ -2,10 +2,13 @@
  * @fileoverview A horizon chart: a row per series, its amounts cut into equal
  * bands of one round scale for every row, each folded into the row over the
  * last, a darker band a larger amount for every eye; below zero in the pole's
- * steps. A legend over the rows keys the bands.
+ * steps. A legend over the rows keys the bands, and a line under them counts
+ * the values left out.
  */
 
 import type { HeatTally, TimeTally } from "@engine";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
@@ -24,22 +27,37 @@ const PITCH_LEAST = 1;
 /** The rows the legend over the bands takes. */
 const LEGEND_ROWS = 1;
 
-/** A series a horizon chart draws: its value, none for a chart of one, and its amount per period. */
+/** A series a horizon chart draws: its value, none for a chart of one, its rows, and its amount per period. */
 export interface Series {
   value: string | undefined;
+  rows: number;
   amounts: readonly number[];
 }
 
+/** What a horizon chart draws: its series, largest first, and the values its tally did not send. */
+export interface Horizon {
+  series: Series[];
+  others: { values: number; rows: number };
+}
+
 /** seriesOf gives `tally`'s series, of rows or sums, at its finest size whose periods get a px of `room`. */
-export function seriesOf(tally: TimeTally | HeatTally, summed: boolean, room: PlotRoom): Series[] {
+export function seriesOf(tally: TimeTally | HeatTally, summed: boolean, room: PlotRoom): Horizon {
   const fits = (span: number) => span * PITCH_LEAST <= room.width - 2 * BARS_INSET;
   if (tally.t === "time") {
     const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
-    return level ? [{ value: undefined, amounts: summed ? level.sum : level.rows }] : [];
+    const rows = level?.rows.reduce((all, each) => all + each, 0) ?? 0;
+    const series = level
+      ? [{ value: undefined, rows, amounts: summed ? level.sum : level.rows }]
+      : [];
+    return { series, others: { values: 0, rows: 0 } };
   }
   const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
   const amounts = level === undefined ? [] : summed ? level.sum : level.rows;
-  return amounts.map((each, i) => ({ value: tally.values[i]!.value, amounts: each }));
+  const series = amounts.map((each, i) => {
+    const { value, rows } = tally.values[i]!;
+    return { value, rows, amounts: each };
+  });
+  return { series, others: tally.others };
 }
 
 /** bandFill gives the colour band `k` wears, 1 to HORIZON_BANDS above zero and -1 down below it. */
@@ -77,12 +95,13 @@ function strip(amounts: readonly number[], band: number): SVGSVGElement {
 }
 
 /**
- * horizonRows draws `series`, of rows or of sums where `summed`, in a plot
+ * horizonRows draws `horizon`, of rows or of sums where `summed`, in a plot
  * `height` px high: the legend of its bands, then a row a series that fits,
- * at most HORIZON_ROWS_AT_MOST, every row on one scale.
+ * at most HORIZON_ROWS_AT_MOST, every row on one scale, and a line counting
+ * the values left out.
  */
 export function horizonRows(
-  series: readonly Series[],
+  { series, others }: Horizon,
   summed: boolean,
   room: PlotRoom,
   height: number,
@@ -90,7 +109,10 @@ export function horizonRows(
   const box = barsBox("chart-horizon");
   box.style.setProperty("--tick-gap", `${TICK_GAP}px`);
   const fits = Math.max(rowsIn(height) - LEGEND_ROWS, 1);
-  const drawn = series.slice(0, Math.min(HORIZON_ROWS_AT_MOST, fits));
+  const left = (shown: number) => series.length - shown + others.values;
+  let shown = Math.min(series.length, HORIZON_ROWS_AT_MOST, fits);
+  if (left(shown) > 0 && shown === fits) shown = Math.max(shown - 1, 1);
+  const drawn = series.slice(0, shown);
   const amounts = drawn.flatMap((s) => s.amounts);
   const bands = classesOver(amounts, !summed, HORIZON_BANDS);
   const names = drawn.flatMap(({ value }) => (value === undefined ? [] : [value]));
@@ -108,6 +130,11 @@ export function horizonRows(
     const bandsRow = el("div", "chart-horizon-row");
     bandsRow.append(strip(amounts, bands.width));
     box.append(value === undefined ? bandsRow : row(value, bandsRow));
+  }
+  if (left(shown) > 0) {
+    const rest = series.slice(shown).reduce((n, s) => n + s.rows, others.rows);
+    const more = m.chart_bars_more({ count: num(left(shown)) });
+    box.append(el("div", "chart-bars-line", `${more} · ${m.rows_count({ count: rest })}`));
   }
   return box;
 }

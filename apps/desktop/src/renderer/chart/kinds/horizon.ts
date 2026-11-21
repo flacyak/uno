@@ -15,8 +15,8 @@ export const horizon: ChartKind<HorizonPlot> = (plot) => ({
   drawing: (tally, room) => {
     if (tally.t !== "time" && tally.t !== "heat") return undefined;
     const summed = plot.sum !== undefined;
-    const series = seriesOf(tally, summed, room);
-    if (series.length === 0) return { ...undrawn, empty: true };
-    return { ...undrawn, draw: (height) => horizonRows(series, summed, room, height) };
+    const horizon = seriesOf(tally, summed, room);
+    if (horizon.series.length === 0) return { ...undrawn, empty: true };
+    return { ...undrawn, draw: (height) => horizonRows(horizon, summed, room, height) };
   },
 });

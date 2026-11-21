@@ -1,7 +1,8 @@
 /**
  * @fileoverview A horizon chart's drawing: three bands of one round scale,
  * each folded into its row over the last, and below zero the same in the
- * pole's steps, under a legend of the bands' breaks.
+ * pole's steps, under a legend of the bands' breaks, and a line that counts
+ * the values left out.
  *
  * @vitest-environment happy-dom
  */
@@ -15,11 +16,15 @@ import type { Series } from "@renderer/chart/horizon";
 const TALL = 1_000;
 const ROOM = { width: 420, ch: 7 };
 
-/** rowsOf draws `series` of rows in a tall plot. */
-const rowsOf = (series: Series[]): HTMLElement => horizonRows(series, false, ROOM, TALL);
+/** No values left out. */
+const NONE = { values: 0, rows: 0 };
+
+/** rowsOf draws `series` of rows, none left out, in a tall plot. */
+const rowsOf = (series: Series[]): HTMLElement =>
+  horizonRows({ series, others: NONE }, false, ROOM, TALL);
 
 /** one gives a chart of one series of `amounts`. */
-const one = (amounts: number[]): Series[] => [{ value: undefined, amounts }];
+const one = (amounts: number[]): Series[] => [{ value: undefined, rows: 1, amounts }];
 
 /** Each row's bands' paths, the accent's first, then the pole's. */
 const bandsOf = (drawn: HTMLElement): string[][] =>
@@ -51,8 +56,8 @@ test("a horizon row folds its amounts into three bands of one scale, darker over
 
 test("a horizon chart draws a row per value with its name, every row on one scale, at most twelve", () => {
   const drawn = rowsOf([
-    { value: "North", amounts: [6] },
-    { value: "South", amounts: [3] },
+    { value: "North", rows: 6, amounts: [6] },
+    { value: "South", rows: 3, amounts: [3] },
   ]);
   const [north, south] = bandsOf(drawn);
   expect(north![0]).toBe("var(--seq-2) M0 1V0H1V1Z");
@@ -64,6 +69,7 @@ test("a horizon chart draws a row per value with its name, every row on one scal
   ]);
   const many = Array.from({ length: HORIZON_ROWS_AT_MOST + 2 }, (_, i) => ({
     value: `v${i}`,
+    rows: i,
     amounts: [i],
   }));
   expect(bandsOf(rowsOf(many))).toHaveLength(HORIZON_ROWS_AT_MOST);
@@ -86,7 +92,7 @@ test("a horizon chart's bands are round, and its legend keys each band's step wi
     ["var(--seq-2)", "var(--seq-3)", "var(--seq-4)"],
     ["0", "2", "4", "6"],
   ]);
-  const signed = legendOf(horizonRows(one([6, -2]), true, ROOM, TALL));
+  const signed = legendOf(horizonRows({ series: one([6, -2]), others: NONE }, true, ROOM, TALL));
   expect(signed[0]).toEqual([
     "var(--div-4)",
     "var(--div-3)",
@@ -97,4 +103,15 @@ test("a horizon chart's bands are round, and its legend keys each band's step wi
   ]);
   // "-6" and its neighbours do not stand apart over 24 px swatches, so the legend writes the ends and zero.
   expect(signed[1]).toEqual(["-6", "0", "6"]);
+});
+
+test("a horizon chart counts the values it leaves out and their rows, sent and not", () => {
+  const many = Array.from({ length: HORIZON_ROWS_AT_MOST + 2 }, (_, i) => ({
+    value: `v${i}`,
+    rows: 2,
+    amounts: [1],
+  }));
+  const drawn = horizonRows({ series: many, others: { values: 1, rows: 4 } }, false, ROOM, TALL);
+  expect(drawn.querySelector(".chart-bars-line")?.textContent).toBe("+3 more · 8 rows");
+  expect(rowsOf(many.slice(0, 2)).querySelector(".chart-bars-line")).toBeNull();
 });
