@@ -1,8 +1,8 @@
 /**
  * @fileoverview Checks of chord charts in real layout: a ring of an arc per
  * airport of the six with the most flights and Other, each in its slot's
- * colour and Other in the caption's ink, inside its window, in a window of a
- * new chart's size and one of the least.
+ * colour and Other in the caption's ink, inside its window, and a ribbon
+ * between each two, in a window of a new chart's size and one of the least.
  *
  * They open the workspace smoke.js wrote of flights between nine airports.
  */
@@ -13,12 +13,15 @@ import type { Check } from "./check.ts";
 /** The workspace smoke.js wrote of two chord charts. */
 const CHORDED = process.env["UNO_SMOKE_CHORDED"] ?? "";
 
+/** The ribbons of the flights: one between each two of the seven arcs, and Other's to itself. */
+const RIBBONS = 22;
+
 /** How far a measure may stand off: half a px of rounding. */
 const PX_SLACK = 0.5;
 
 export const CHART_CHORD: Check[] = [
   {
-    name: "a chord chart draws a ring of an arc per airport of the six busiest and Other, in their slots' colours and Other in the caption's ink, inside its window",
+    name: "a chord chart draws a ring of an arc per airport of the six busiest and Other, in their slots' colours and Other in the caption's ink, inside its window, and a ribbon between each two",
     send: ["menu:open-path", CHORDED],
     shot: "chart-chord",
     script: `
@@ -40,6 +43,8 @@ export const CHART_CHORD: Check[] = [
         if (arcs.length !== keys.length) return "a window draws " + arcs.length + " arcs";
         const worn = arcs.map((arc) => getComputedStyle(arc).fill);
         if (worn.join() !== keys.join()) return "the arcs wear " + worn.join();
+        const ribbons = win.querySelectorAll(".chart-chord-ribbon[d]").length;
+        if (ribbons !== ${RIBBONS}) return "a window draws " + ribbons + " ribbons";
         const box = win.querySelector(".chart-plot").getBoundingClientRect();
         for (const arc of arcs) {
           const at = arc.getBoundingClientRect();

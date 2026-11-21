@@ -3,8 +3,9 @@
  * as a ring of arcs. Each arc runs clockwise from the top in slot order, Other
  * last, as long as its node's share of every flow out and in, and wears the
  * slot's colour, Other the caption's ink. A flow at or below zero has no
- * width to draw. Its sizes are px, so the ring is drawn once it stands in the
- * page and its size is known.
+ * width to draw. Inside the ring, a ribbon joins each two arcs with a flow
+ * between them, and each arc with a flow to itself. Its sizes are px, so the
+ * ring is placed once it stands in the page and its size is known.
  */
 
 import type { ChordPlot } from "@document";
@@ -147,7 +148,17 @@ export function chord(plot: ChordPlot, tally: ChordTally): HTMLElement {
   // It stands as a pie's ring does.
   const ring = mark("svg", "chart-slices chart-chord-ring");
   ring.setAttribute("aria-hidden", "true");
-  for (const { from, to, key } of arcs(plot, tally)) {
+  const drawn = arcs(plot, tally);
+  const spanOf = (place: number) => drawn.find((arc) => arc.place === place)!;
+  // The widest first, so a narrower one stands over it, ringed in the window's ground.
+  for (const { places, ends, key } of ribbons(plot, tally)) {
+    const ribbon = mark("path", "chart-chord-ribbon");
+    ribbon.style.setProperty("--key", key);
+    const arcsOf = places.flatMap((place) => [spanOf(place).from, spanOf(place).to]);
+    Object.assign(ribbon.dataset, { ends: ends.flat().join(" "), arcs: arcsOf.join(" ") });
+    ring.append(ribbon);
+  }
+  for (const { from, to, key } of drawn) {
     const arc = mark("path", "chart-chord-arc");
     arc.style.setProperty("--key", key);
     Object.assign(arc.dataset, { from: `${from}`, to: `${to}` });
@@ -155,6 +166,8 @@ export function chord(plot: ChordPlot, tally: ChordTally): HTMLElement {
   }
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--label-gap", `${LABEL_GAP}px`);
+  // A ribbon's ring is as wide as the gap between two arcs.
+  box.style.setProperty("--ribbon-ring", `${ARC_GAP}px`);
   const disc = el("div", "chart-pie-disc");
   disc.append(ring);
   box.append(disc);
@@ -183,6 +196,13 @@ function band(from: number, to: number, outer: number): string {
   return `M${onRing(from, outer)}${arc(outer, to, 1)}L${onRing(to, inner)}${arc(inner, from, 0)}Z`;
 }
 
+/** ribbon gives the path of a ribbon `r` px out between its two ends, curving through the middle. */
+function ribbon([a, b]: [End, End], r: number): string {
+  const along = ([from, to]: End) =>
+    `A${at(r)} ${at(r)} 0 ${to - from > 1 / 2 ? 1 : 0} 1 ${onRing(to, r)}`;
+  return `M${onRing(a[0], r)}${along(a)}Q0 0 ${onRing(b[0], r)}${along(b)}Q0 0 ${onRing(a[0], r)}Z`;
+}
+
 /** circle gives the path of a whole circle `r` px out, as two halves. */
 function circle(r: number): string {
   const [top, foot] = [at(-r), at(r)];
@@ -192,7 +212,8 @@ function circle(r: number): string {
 /**
  * fitRing places the arcs of `box`, as chord drew it, at the size its ring
  * stands at, each ARC_WIDTH thick at the rim and ARC_GAP from the next,
- * where it is long enough to keep its colour beside the gap.
+ * where it is long enough to keep its colour beside the gap, and its
+ * ribbons ARC_GAP inside the arcs, each end along its arc as it stands.
  */
 export function fitRing(box: HTMLElement): void {
   const ring = box.querySelector(".chart-chord-ring");
@@ -204,9 +225,27 @@ export function fitRing(box: HTMLElement): void {
   ring.setAttribute("viewBox", `${at(-outer)} ${at(-outer)} ${at(across)} ${at(across)}`);
   // Each end gives half a gap, so two arcs stand a whole one apart.
   const trim = ARC_GAP / 2 / rim;
+  const trimmed = (from: number, to: number): End => {
+    const kept = to - from < 1 && (to - from) * rim >= ARC_LEAST;
+    return kept ? [from + trim, to - trim] : [from, to];
+  };
   for (const arc of ring.querySelectorAll<SVGElement>(".chart-chord-arc")) {
     const [from, to] = [Number(arc.dataset["from"]), Number(arc.dataset["to"])];
-    const kept = to - from < 1 && (to - from) * rim >= ARC_LEAST;
-    arc.setAttribute("d", kept ? band(from + trim, to - trim, outer) : band(from, to, outer));
+    arc.setAttribute("d", band(...trimmed(from, to), outer));
+  }
+  // A ribbon's end keeps its place along its arc, as the arc stands trimmed.
+  const along = (turn: number, from: number, to: number) => {
+    const [start, end] = trimmed(from, to);
+    return start + ((turn - from) * (end - start)) / (to - from);
+  };
+  const inside = outer - ARC_WIDTH - ARC_GAP;
+  for (const made of ring.querySelectorAll<SVGElement>(".chart-chord-ribbon")) {
+    const [a0, a1, b0, b1] = made.dataset["ends"]!.split(" ").map(Number);
+    const [from, to, bFrom, bTo] = made.dataset["arcs"]!.split(" ").map(Number);
+    const ends: [End, End] = [
+      [along(a0!, from!, to!), along(a1!, from!, to!)],
+      [along(b0!, bFrom!, bTo!), along(b1!, bFrom!, bTo!)],
+    ];
+    made.setAttribute("d", ribbon(ends, inside));
   }
 }

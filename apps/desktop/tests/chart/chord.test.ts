@@ -258,7 +258,30 @@ test("an arc too short to keep its colour beside its gaps keeps its whole length
   expect(start[0]).toBeCloseTo((ACROSS / 2) * Math.sin(2 * Math.PI * turn), close);
 });
 
-test("a chord not laid out yet places no arc, to place them once it is", () => {
-  const arc = fitted(AIRPORTS, 0).querySelector(".chart-chord-arc")!;
-  expect(arc.getAttribute("d")).toBeNull();
+test("a fitted chord's ribbons stand ARC_GAP inside the arcs, the widest first, each end along its arc as the arc stands trimmed", () => {
+  const box = fitted(AIRPORTS, ACROSS);
+  const drawn = [...box.querySelectorAll<SVGElement>(".chart-chord-ribbon")];
+  expect(drawn.map((r) => r.style.getPropertyValue("--key"))).toStrictEqual([
+    "var(--chart-1)",
+    "var(--chart-1)",
+    "var(--chart-3)",
+  ]);
+  // ORD's ribbon to JFK ends where ORD's arc does, half a gap short of 6 of 14.
+  const [, x, y, endX, endY] = /^M(\S+) (\S+)A\S+ \S+ 0 0 1 (\S+) (\S+)Q0 0 /u
+    .exec(drawn[0]!.getAttribute("d")!)!
+    .map(Number);
+  const inside = ACROSS / 2 - ARC_WIDTH - ARC_GAP;
+  const close = 1;
+  expect(Math.hypot(x!, y!)).toBeCloseTo(inside, close);
+  const end = 6 / 14 - ARC_GAP / 2 / (Math.PI * ACROSS);
+  expect(endX).toBeCloseTo(inside * Math.sin(2 * Math.PI * end), close);
+  expect(endY).toBeCloseTo(-inside * Math.cos(2 * Math.PI * end), close);
+});
+
+test("a chord not laid out yet places no arc or ribbon, to place them once it is", () => {
+  for (const mark of fitted(AIRPORTS, 0).querySelectorAll(
+    ".chart-chord-arc, .chart-chord-ribbon",
+  )) {
+    expect(mark.getAttribute("d")).toBeNull();
+  }
 });

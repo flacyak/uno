@@ -1215,6 +1215,16 @@
   fill-rule: evenodd;
 }
 
+/* A ribbon wears its `--key` over a ring of the window's ground under it, 2 px
+ * past its edge, so one over another stands apart where they cross. */
+.chart-chord-ribbon {
+  fill: var(--key);
+  stroke: var(--surface);
+  stroke-width: calc(2 * var(--ribbon-ring));
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
 /* The mark the cursor is on, from tooltip.ts. A bar moves a fifth of the way
  * from the accent to the ink, over a wash of the accent across its row, as a
  * column does over its period's slot, a slice the same from its own colour,
