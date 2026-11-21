@@ -102,6 +102,34 @@ export type ParallelPlot = { t: 'parallel'; axes: ChartColumn[] };
 export type SwarmPlot = { t: 'swarm'; of: ChartColumn; by?: ChartColumn };
 
 /**
+ * What a lat/lon map is drawn in: Albers USA or Equal Earth. Absent, a map
+ * draws in Albers USA unless its rows lie outside the United States, the
+ * owner's answer 9.
+ */
+export type Projection = 'us' | 'world';
+
+/**
+ * The part of the world a map recounts its rows in, in degrees, once a zoom
+ * passes the cells its whole fold holds: section 10 of the spatial design.
+ */
+export interface MapBox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+/** A lat/lon map: rows, or the sum of `sum`, per place of `lat` and `lon`. */
+export interface MapPlot {
+  t: 'map';
+  lat: ChartColumn;
+  lon: ChartColumn;
+  sum?: ChartColumn;
+  projection?: Projection;
+  box?: MapBox;
+}
+
+/**
  * A stacked bar chart: rows, or the sum of `sum`, per value of `by`, each
  * bar split by the value of `split` in the same row.
  */
