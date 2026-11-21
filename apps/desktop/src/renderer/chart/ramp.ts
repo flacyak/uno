@@ -102,6 +102,20 @@ export function wear(mark: HTMLElement, step: number, fill = fillOf(step)): void
   mark.style.setProperty("--step", `${step}`);
 }
 
+/** The ordered hatch of chart.css's .chart-stepped: its lines' width, widest pitch, step closer and angle, in px and degrees. */
+export const HATCH_LINE = 1;
+const HATCH_WIDEST = 10;
+const HATCH_CLOSER = 2;
+const HATCH_ANGLE = 45;
+
+/** hatchOf gives class `step`'s hatch: how far apart its lines stand, in px, and their angle, in degrees. */
+export function hatchOf(step: number): { pitch: number; angle: number } {
+  return {
+    pitch: HATCH_WIDEST - HATCH_CLOSER * Math.abs(step),
+    angle: 2 * HATCH_ANGLE - HATCH_ANGLE * Math.sign(step),
+  };
+}
+
 /** How wide a swatch of a scale's legend stands at most, in px. */
 export const SWATCH_WIDE = 24;
 

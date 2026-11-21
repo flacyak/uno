@@ -85,3 +85,35 @@ export const CHART_FORCED_RAMP: Check[] = RAMPED.map(({ kind, workspace, marks }
     return new Set(hatches.values()).size === hatches.size ? "" : "two classes wear one hatch";
   `,
 }));
+
+/**
+ * A horizon's bands under forced colours: each band a hatch of its own, whose
+ * pattern undoes its row's stretch, so the hatch's lines stand as far apart on
+ * the screen in a wide row as in a narrow one.
+ */
+export const CHART_FORCED_HORIZON: Check = {
+  name: "a horizon chart's bands wear a hatch of CanvasText under forced colours, at the same screen spacing in every row",
+  send: ["menu:open-path", process.env["UNO_SMOKE_HORIZONS"] ?? ""],
+  forced: true,
+  shot: "forced-horizon",
+  script: `
+    const strips = () => [...document.querySelectorAll(".chart-horizon-bands")];
+    if (!(await arrives(() => strips().length > 0 && strips().every((strip) => strip.querySelector("pattern[patternTransform]") !== null)))) {
+      const fill = getComputedStyle(document.querySelector(".chart-horizon-band")).fill;
+      return "the bands wear " + fill + " and no hatch fitted to their row";
+    }
+    for (const strip of strips()) {
+      const { width, height } = strip.getBoundingClientRect();
+      const across = strip.viewBox.baseVal.width;
+      for (const band of strip.querySelectorAll(".chart-horizon-band")) {
+        if (!getComputedStyle(band).fill.startsWith("url(")) return "a band wears " + getComputedStyle(band).fill;
+      }
+      for (const pattern of strip.querySelectorAll("pattern")) {
+        const { a, b, c, d } = pattern.patternTransform.baseVal.consolidate().matrix;
+        const [x, y] = [Math.hypot(a, c) * (width / across), Math.hypot(b, d) * height];
+        if (Math.abs(x - 1) > 0.01 || Math.abs(y - 1) > 0.01) return "a hatch stretches " + x + " by " + y;
+      }
+    }
+    return "";
+  `,
+};

@@ -12,6 +12,7 @@ import { expect, test } from "vite-plus/test";
 import {
   HORIZON_BANDS,
   HORIZON_ROWS_AT_MOST,
+  fitHatches,
   horizonRows,
   horizonTargets,
 } from "@renderer/chart/horizon";
@@ -37,7 +38,9 @@ const one = (amounts: number[]): Series[] => [{ value: undefined, rows: 1, count
 /** Each row's bands' paths, the accent's first, then the pole's. */
 const bandsOf = (drawn: HTMLElement): string[][] =>
   [...drawn.querySelectorAll(".chart-horizon-bands")].map((bands) =>
-    [...bands.querySelectorAll("path")].map((p) => `${p.style.fill} ${p.getAttribute("d")}`),
+    [...bands.querySelectorAll("path")].map(
+      (p) => `${p.style.getPropertyValue("--fill")} ${p.getAttribute("d")}`,
+    ),
   );
 
 test("a horizon row folds its amounts into three bands of one scale, darker over lighter, and below zero in the pole's", () => {
@@ -177,5 +180,30 @@ test("a horizon chart's periods each say their value, their period and what they
   const once = horizonTargets(alone, false, horizonRows(alone, false, ROOM, TALL));
   expect(once.all[0]!.said().map(({ value, label }) => `${value} ${label.textContent}`)).toEqual([
     "8 January 2024",
+  ]);
+});
+
+test("under forced colours each band wears its ramp step's ordered hatch, which fitHatches keeps in screen px however its row stretches", () => {
+  const drawn = rowsOf(one([6, 3, -2]));
+  const strip = drawn.querySelector<SVGSVGElement>(".chart-horizon-bands")!;
+  const [wide, tall] = [300, 24];
+  Object.defineProperty(strip, "getBoundingClientRect", {
+    value: () => ({ width: wide, height: tall }),
+  });
+  fitHatches(drawn);
+  const worn = [...strip.querySelectorAll<SVGPathElement>(".chart-horizon-band")].map((band) => {
+    const id = /^url\(#(.+)\)$/u.exec(band.style.getPropertyValue("--hatch"))![1]!;
+    const pattern = strip.querySelector(`pattern[id="${id}"]`)!;
+    return `${pattern.getAttribute("width")} ${pattern.getAttribute("patternTransform")}`;
+  });
+  // Three periods across 300 px and one unit up 24: the ramp's steps 2 to 4 above zero at 45 degrees, below at 135.
+  const unstretched = "scale(0.01 0.041666666666666664)";
+  expect(worn).toStrictEqual([
+    `6 ${unstretched} rotate(45)`,
+    `4 ${unstretched} rotate(45)`,
+    `2 ${unstretched} rotate(45)`,
+    `6 ${unstretched} rotate(135)`,
+    `4 ${unstretched} rotate(135)`,
+    `2 ${unstretched} rotate(135)`,
   ]);
 });

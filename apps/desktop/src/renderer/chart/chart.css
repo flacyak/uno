@@ -1430,6 +1430,11 @@
     stroke: none;
   }
 
+  .chart-horizon-bands .chart-horizon-band {
+    fill: var(--hatch);
+    forced-color-adjust: none;
+  }
+
   .chart-chord-arc.hatched,
   .chart-chord-ribbon.hatched {
     fill: var(--hatch);
@@ -1852,6 +1857,19 @@
 
 .chart-horizon.alone {
   column-gap: 0;
+}
+
+/* A band wears its ramp step's colour, and under forced colours its hatch. */
+.chart-horizon-band {
+  fill: var(--fill);
+}
+
+.chart-hatch-ground {
+  fill: Canvas;
+}
+
+.chart-hatch-line {
+  fill: CanvasText;
 }
 
 .chart-horizon-bands {
