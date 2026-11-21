@@ -19,7 +19,7 @@ import type { Entry, FileRef, Listing, SingleRef } from '@store';
 import type { Tried, Unconnected } from '@store/s3';
 import type { Groups, Per, Sample, Split, TimeLevel, Times } from '@tally';
 import type { MeanGroup, Skipped, Slope, Spread, Spreads } from '@tally';
-import type { Week } from '@tally';
+import type { TimeSplitSnapshot, Week } from '@tally';
 
 /**
  * SourceRef says where a source's bytes are: one file, or several read as
@@ -329,6 +329,13 @@ export interface WeekTally extends Week {
   coverage: Coverage;
 }
 
+/** A heatmap over periods' tally: its values largest first, each at every size from its own to years. */
+export interface HeatTally extends TimeSplitSnapshot {
+  t: 'heat';
+  plot: Plot;
+  coverage: Coverage;
+}
+
 /** A stacked bar chart's tally: rows, or a sum, per value and per series. */
 export interface StackTally extends Split {
   t: 'stack';
@@ -364,6 +371,7 @@ export type Tally =
   | SampleTally
   | TimeTally
   | WeekTally
+  | HeatTally
   | StackTally
   | SpreadTally
   | BoxTally

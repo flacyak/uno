@@ -58,6 +58,7 @@ export type {
   StackTally,
   TimeTally,
   WeekTally,
+  HeatTally,
   SignIns,
   Skipped,
   SourceRef,
