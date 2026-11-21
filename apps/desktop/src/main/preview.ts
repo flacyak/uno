@@ -631,7 +631,8 @@ export async function runPreview(win: BrowserWindow, quit: (code: number) => voi
 
   // The camera and the script share this clock.
   const start = Date.now();
-  const at: Clock = (ms) => sleep(start + ms - Date.now());
+  // A beat or a frame that runs late goes on at once: a wait is never below nothing.
+  const at: Clock = (ms) => sleep(Math.max(start + ms - Date.now(), 0));
   // Stories are written for the default key mode.
   win.webContents.send("menu:input", "default");
   let shots: Hashed[];
@@ -764,7 +765,7 @@ async function film(
     shots.push({ file, at, hash: createHash("sha256").update(png).digest("hex") });
     writes.push(writeFile(join(dir, file), png));
 
-    await sleep(FRAME_INTERVAL - (Date.now() - start - at));
+    await sleep(Math.max(FRAME_INTERVAL - (Date.now() - start - at), 0));
   }
 
   await Promise.all(writes);
