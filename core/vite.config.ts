@@ -73,5 +73,10 @@ export default defineConfig({
       'default-case': 'error',
     },
   },
-  fmt: { singleQuote: true, printWidth: 80 },
+  // The generated map data is written by core/scripts/geo, never by hand.
+  fmt: {
+    singleQuote: true,
+    printWidth: 80,
+    ignorePatterns: ['src/place/data/**'],
+  },
 });
