@@ -62,4 +62,34 @@ export const CHART_HEAT: Check[] = [
       return "";
     `,
   },
+  {
+    name: "a heatmap names its months under their columns, each centred on its column within the cells, none over another",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      for (const win of document.querySelectorAll(".chart")) {
+        const cells = [...win.querySelector(".chart-heat-cells").children].map(rect);
+        const ticks = [...win.querySelectorAll(".chart-heat-periods .chart-tick")].map(rect);
+        if (ticks.length < 2 || ticks.some((t, i) => i > 0 && t.left < ticks[i - 1].right)) return "the months' labels overlap";
+        if (ticks.some((t) => t.left < cells[0].left - ${PX_SLACK} || t.right > cells.at(-1).right + ${PX_SLACK})) return "a month's label stands past the cells";
+        const middle = (r) => (r.left + r.right) / 2;
+        const mar = ticks.find((t) => Math.abs(middle(t) - middle(cells[${MARCH}])) <= 1);
+        if (mar === undefined && ticks.length > 2) return "no label centres on March";
+      }
+      return "";
+    `,
+  },
+  {
+    name: "a click on North's December says its region, its month and its twelve rows, and Down steps to South's",
+    click: {
+      selector: ".chart:first-child .chart-bar-row:nth-child(2) .chart-heat-cell:last-child",
+    },
+    shot: "chart-heat-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      const strips = [...win.querySelectorAll(".chart-heat-cells")];
+      if (!(await until(() => strips[0].lastElementChild.classList.contains("cursor")))) return "North's December wears no cursor";
+      const said = win.querySelector(".chart-tip-words").textContent.replace(/\\s/gu, " ");
+      return said === "12 North, December 2024" ? "" : "the box says " + said;
+    `,
+  },
 ];

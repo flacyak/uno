@@ -1136,6 +1136,10 @@
   outline: 2px solid var(--ink);
 }
 
+.chart-heat-cell.cursor {
+  outline: 2px solid var(--ink);
+}
+
 .chart-slice.cursor {
   fill: color-mix(in srgb, var(--key) 80%, var(--ink));
 }
@@ -1274,7 +1278,8 @@
     fill: Highlight;
   }
 
-  .chart-week-cell.cursor {
+  .chart-week-cell.cursor,
+  .chart-heat-cell.cursor {
     outline-color: Highlight;
   }
 }
@@ -1610,6 +1615,18 @@
 
 .chart-heat-legend {
   align-self: end;
+}
+
+/* The periods' labels in the row under the cells, each centred under its
+ * period and kept within the cells, as a box plot's axis keeps its labels. */
+.chart-heat-periods .chart-ticks.x {
+  align-self: start;
+  margin-top: 0;
+}
+
+.chart-heat-periods .chart-ticks.x .chart-tick {
+  left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
 }
 
 /* A scale's legend, from ramp.ts, over the cells it keys: a 10 px swatch per

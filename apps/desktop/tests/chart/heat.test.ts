@@ -11,7 +11,7 @@ import { expect, test } from "vite-plus/test";
 
 import type { HeatPlot } from "@document";
 import type { HeatTally } from "@engine";
-import { HEAT_ROWS_AT_MOST, heatGrid, heatLevel } from "@renderer/chart/heat";
+import { HEAT_ROWS_AT_MOST, heatGrid, heatLevel, heatTargets } from "@renderer/chart/heat";
 import { heat } from "@renderer/chart/kinds/heat";
 import type { SplitLevel } from "@tally";
 
@@ -96,4 +96,33 @@ test("a heatmap draws at most twelve rows, fewer where the plot is short, and co
   const short = heatGrid(tally, tally.levels[1]!, false, ROOM, 160);
   expect(fillsOf(short).length).toBeLessThan(HEAT_ROWS_AT_MOST);
   expect(heat(PLOT).drawing({ ...tally, levels: [] }, ROOM)?.empty).toBe(true);
+});
+
+test("a heatmap's cells each say their value, their period and what they hold, and the keys step along a value and across values", () => {
+  const tally = tallyOf(
+    [
+      [8, 0, 2],
+      [1, 4, 0],
+    ],
+    [
+      [80, 0, -20],
+      [10, 40, 0],
+    ],
+  );
+  const level = tally.levels[1]!;
+  const targets = heatTargets(tally, level, true, heatGrid(tally, level, true, ROOM, TALL));
+  const said = (n: number) =>
+    targets.all[n]!.said()
+      .map(({ value, label }) => `${value} ${label.textContent}`)
+      .join(" / ");
+  expect(said(2)).toBe("-20 r0, May 2024 / 2 rows");
+  expect(said(4)).toBe("40 r1, April 2024 / 4 rows");
+  const step = (key: string, at: number | undefined) => targets.step!(key, at);
+  expect([
+    step("ArrowRight", undefined),
+    step("ArrowRight", 2),
+    step("ArrowDown", 1),
+    step("End", 3),
+  ]).toEqual([0, 2, 4, 5]);
+  expect(targets.keys).toEqual(["ArrowDown", "ArrowUp"]);
 });

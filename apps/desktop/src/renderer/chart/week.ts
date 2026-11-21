@@ -134,7 +134,10 @@ export function weekGrid(tally: WeekTally, summed: boolean, room: PlotRoom): HTM
  * `count`, `across` to a day: along its day, to its ends, or to the day
  * before or after.
  */
-function stepsOf(across: number, count: number): ReadonlyMap<string, (at: number) => number> {
+export function stepsOf(
+  across: number,
+  count: number,
+): ReadonlyMap<string, (at: number) => number> {
   return new Map([
     ["ArrowRight", (at: number) => (at % across < across - 1 ? at + 1 : at)],
     ["ArrowLeft", (at: number) => (at % across > 0 ? at - 1 : at)],

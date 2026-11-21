@@ -1,7 +1,7 @@
 /** @fileoverview A heatmap over periods' kind: rows, or a sum, per value and period. */
 
 import type { HeatPlot } from "@document";
-import { heatGrid, heatLevel } from "../heat.ts";
+import { heatGrid, heatLevel, heatTargets } from "../heat.ts";
 import type { ChartKind } from "../kind.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -17,6 +17,10 @@ export const heat: ChartKind<HeatPlot> = (plot) => ({
     const level = heatLevel(tally, room);
     if (level === undefined) return { ...undrawn, empty: true };
     const summed = plot.sum !== undefined;
-    return { ...undrawn, draw: (height) => heatGrid(tally, level, summed, room, height) };
+    return {
+      ...undrawn,
+      draw: (height) => heatGrid(tally, level, summed, room, height),
+      targets: (drawn) => heatTargets(tally, level, summed, drawn),
+    };
   },
 });

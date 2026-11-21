@@ -12,9 +12,14 @@ import { el } from "@renderer/shell/util";
 import type { SplitLevel } from "@tally";
 import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
+import { fullName } from "./periods.ts";
 import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
 import { BARS_INSET, row, rowsIn } from "./rows.ts";
 import { TICK_GAP } from "./scatter.ts";
+import { ticksOf } from "./timeAxis.ts";
+import { among, named } from "./tooltip.ts";
+import type { Reading, Targets } from "./tooltip.ts";
+import { stepsOf } from "./week.ts";
 
 /** The most values a heatmap draws a row for, before a line counts the rest. */
 export const HEAT_ROWS_AT_MOST = 12;
@@ -83,5 +88,61 @@ export function heatGrid(
     const more = m.chart_bars_more({ count: num(left(shown)) });
     box.append(el("div", "chart-bars-line", `${more} · ${m.rows_count({ count: rest })}`));
   }
+  box.append(periodsUnder(level, cellsWide(tally, room), room.ch));
   return box;
+}
+
+/** periodsUnder gives the row of `level`'s periods' labels under cells `wide` px across, as an over-time chart's. */
+function periodsUnder(level: SplitLevel, wide: number, ch: number): HTMLElement {
+  const { per, from, span } = level;
+  const along = el("div", "chart-ticks x");
+  for (const { at, words } of ticksOf(
+    { per, from, span, offset: 0, rows: [], sum: [] },
+    wide,
+    0,
+    ch,
+  )) {
+    const tick = el("span", "chart-tick", words);
+    tick.style.setProperty("--at", `${(at + 1 / 2) / span}`);
+    tick.style.setProperty("--wide", `${words.length}ch`);
+    along.append(tick);
+  }
+  const under = el("div", "chart-bar-row chart-heat-periods");
+  under.append(el("span"), along);
+  return under;
+}
+
+/**
+ * heatTargets gives the cells of `drawn`, as heatGrid drew `level` of
+ * `tally`: each worth its rows, or its sum and rows where `summed`, named by
+ * its value and its period in full. Right and Left step along a value, Home
+ * and End to its ends, and Down and Up to the same period of the next value
+ * and the one before.
+ */
+export function heatTargets(
+  tally: HeatTally,
+  level: SplitLevel,
+  summed: boolean,
+  drawn: HTMLElement,
+): Targets {
+  const cells = [...drawn.querySelectorAll<HTMLElement>(".chart-heat-cell")];
+  const all = cells.map((mark, n) => {
+    const [i, p] = [Math.floor(n / level.span), n % level.span];
+    const said = (): Reading[] => {
+      const name = el("span");
+      name.append(named(tally.values[i]!.value), `, ${fullName(level.per, level.from + p)}`);
+      const rows = { value: num(level.rows[i]![p]!), label: el("span", "", m.chart_table_rows()) };
+      return summed
+        ? [{ value: num(level.sum[i]![p]!), label: name }, rows]
+        : [{ ...rows, label: name }];
+    };
+    const key = mark.style.getPropertyValue("--fill") || "var(--rule)";
+    return { mark, at: mark, front: false, key, said };
+  });
+  const step = (key: string, at: number | undefined): number | undefined => {
+    const to = stepsOf(level.span, cells.length).get(key);
+    if (to === undefined) return undefined;
+    return at === undefined ? 0 : to(at);
+  };
+  return { all, under: among(all, ".chart-heat-cell"), step, keys: ["ArrowDown", "ArrowUp"] };
 }
