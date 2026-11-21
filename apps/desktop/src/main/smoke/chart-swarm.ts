@@ -1,7 +1,8 @@
 /**
  * @fileoverview Checks of beeswarms in real layout: a strip per region, two
  * rows tall or more, its dots 8 px in the accent, none over another and all inside
- * their strip; and one strip of every amount, named for it, in a narrow window.
+ * their strip, and a caption of how many of its rows it drew; and one strip of
+ * every amount, named for it, in a narrow window.
  *
  * They open the workspace smoke.js wrote of four regions' amounts.
  */
@@ -15,6 +16,8 @@ const SWARMED = process.env["UNO_SMOKE_SWARMED"] ?? "";
 
 /** The regions of the box plots' amounts, which hold as many rows each. */
 const REGIONS = 4;
+/** Their rows: 200 a region, and East's two far amounts. */
+const ROWS = "802";
 
 /** How far two dots may close in from their packing's width to the track's measured one: half a px. */
 const PX_SLACK = 0.5;
@@ -33,6 +36,8 @@ export const CHART_SWARM: Check[] = [
       if (tracks.length !== ${REGIONS}) return "the beeswarm draws " + tracks.length + " strips";
       const labels = [...alone.querySelectorAll(".chart-bar-label")].map((label) => label.textContent);
       if (labels.join() !== "amount") return "the narrow window's strips read " + labels.join();
+      const caption = byRegion.querySelector(".chart-caption").textContent;
+      if (!caption.includes(" of ${ROWS} rows, a sample")) return "the caption reads " + caption;
       const probe = document.createElement("div");
       probe.style.color = "var(--accent)";
       document.body.append(probe);

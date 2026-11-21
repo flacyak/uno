@@ -103,3 +103,12 @@ test("a beeswarm draws a strip of its dots per value, a line for the strips left
   expect(swarm({ t: "swarm", of: OF }).title()).toBe("amount");
   expect(swarm(PLOT).title()).toBe("amount per region");
 });
+
+test("a beeswarm's caption counts the dots it drew of every row, as a sample, and nothing when it drew every row", () => {
+  const drawing = swarm(PLOT).drawing(tallyOf([stripOf("North", [10, 20, 30])]), ROOM)!;
+  drawing.draw(TALL);
+  expect(drawing.notes()).toStrictEqual(["3 of 1,000 rows, a sample"]);
+  const whole = swarm(PLOT).drawing(tallyOf([stripOf("North", [10, 20, 30])], 3), ROOM)!;
+  whole.draw(TALL);
+  expect(whole.notes()).toStrictEqual([]);
+});
