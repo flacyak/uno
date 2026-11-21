@@ -130,6 +130,7 @@ import {
   drive,
   electronEnv,
   requireDisplay,
+  requireElectron,
   rewrite,
   verdict,
 } from "./launch.js";
@@ -547,6 +548,7 @@ const staged = {
 }[story];
 const opened = sidebar !== undefined ? [] : [(await staged?.()) ?? remote?.uno ?? fixture];
 
+requireElectron("preview");
 const electron = (await import("electron")).default;
 
 requireDisplay("preview");

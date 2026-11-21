@@ -6,7 +6,8 @@
  * the verdict read from what it printed.
  */
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { constants } from "node:os";
 
 /**
@@ -63,6 +64,41 @@ export function requireDisplay(who) {
   if (!displayMissing(process.env, process.platform)) return;
   console.error(`${who}: no DISPLAY. Run under Xvfb, or on a desktop session.`);
   process.exit(2);
+}
+
+/** Electron's own installer, which fetches its runtime into the package's dist/. */
+const ELECTRON_INSTALLER = createRequire(import.meta.url).resolve("electron/install.js");
+
+/**
+ * Runs Electron's installer, which fetches the runtime when the package has
+ * none yet and exits at once when it has, and returns its exit status.
+ *
+ * The package has no install script: it fetches the runtime the first time it
+ * is asked for its path, unless ELECTRON_OVERRIDE_DIST_PATH is set. uno-bounded
+ * sets it to its headless starter, so a fresh checkout's bounded smoke found
+ * no binary. The installer reads the override too, so it runs without it.
+ *
+ * @param {NodeJS.ProcessEnv} env  usually process.env
+ * @param {string} [installer]     the installer to run
+ * @returns {number|null} its exit status, null when a signal stopped it
+ */
+export function fetchElectron(env, installer = ELECTRON_INSTALLER) {
+  const installEnv = { ...env };
+  delete installEnv["ELECTRON_OVERRIDE_DIST_PATH"];
+  return spawnSync(process.execPath, [installer], { stdio: "inherit", env: installEnv }).status;
+}
+
+/**
+ * Exits with 1, saying so, when Electron's runtime could not be fetched.
+ * `who` names the run for the message: "smoke", "preview".
+ *
+ * @param {string} who
+ */
+export function requireElectron(who) {
+  const status = fetchElectron(process.env);
+  if (status === 0) return;
+  console.error(`${who}: could not fetch Electron's runtime (installer exit ${status}).`);
+  process.exit(1);
 }
 
 /**

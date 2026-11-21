@@ -34,6 +34,7 @@ import {
   drive,
   electronEnv,
   requireDisplay,
+  requireElectron,
   rewrite,
   verdict,
 } from "./launch.js";
@@ -1083,6 +1084,7 @@ await writeFile(
   }),
 );
 
+requireElectron("smoke");
 const electron = (await import("electron")).default;
 
 requireDisplay("smoke");

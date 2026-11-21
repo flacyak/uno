@@ -952,7 +952,7 @@ const GOLDEN = {
   spreads: '4d692394f8b2ad5f577c4016013a381dc2662741743816ab00b57a35dc29e6d1',
   mean: '46fe0e11379d829a37ab6ee93bbfb3c25da30cff2630076375e3aca28605c4f9',
   week: '34cedec1c28038164d7bec62b8722839122943259e473f3da14a8b2ecebcc5f1',
-  timesplit: '9694dab4f6df0f1d416a30218e8e9bf2b37eb9731d3fbea11e5b3c53036e8b4d',
+  timesplit: 'b9c33792e532174a66fd6d6c4da76ab4660357618dcb803a2b748b93085bd914',
   sampled: 'f3605671c11cde835fd86490d87ecacf5d3fc5d2228126629b2c1dc577b0fd99',
   swarm: 'd9d9a3ae10d466537ca13c062093e4724c7c7db3704e699758706281d9a177cf',
 };
@@ -1072,7 +1072,7 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     new TimeSplitFold(order, 'point'),
     new TimeSplitFold(order, 'comma'),
   ]);
-  for (const fold of splits) {
+  for (const fold of timeSplits) {
     dates.forEach((v, r) =>
       fold.add(regions[r % regions.length]!, v, cells[r]),
     );

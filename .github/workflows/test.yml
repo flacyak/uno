@@ -16,8 +16,9 @@ jobs:
   # over the real engine. None of it needs a display, Xvfb, root, or
   # Electron's 283 MB runtime binary: the desktop build marks electron
   # external (scripts/bundle.js), nothing under tests/ imports it at runtime,
-  # and typecheck only needs the npm package's .d.ts files, which install
-  # regardless of whether the binary download ran. That makes this job a
+  # and typecheck only needs the npm package's .d.ts files. Electron's package
+  # fetches the runtime only when something first asks it for its path, so an
+  # install here never fetches it. That makes this job a
   # candidate for a smaller, cheaper runner than ubuntu-latest -- not decided
   # here, so it stays on ubuntu-latest for now.
   test:
@@ -28,23 +29,9 @@ jobs:
       # The repo root is the pnpm workspace root, and the vp version is read from
       # the catalog every package points at.
       #
-      # ELECTRON_SKIP_BINARY_DOWNLOAD skips the ~283 MB fetch in electron's
-      # postinstall. Nothing this job runs spawns the binary, so there is
-      # nothing to fetch it for; the package itself -- including the .d.ts
-      # files `vp run check` needs -- still installs normally, since only the
-      # binary fetch is gated by this variable.
-      #
-      # cache-save is off here on purpose. Electron's binary is a build side
-      # effect that lives inside the pnpm store path, so with the download
-      # skipped, a cache saved from this job would poison the entry the smoke
-      # job restores: it would find an electron package with no dist/ and
-      # fail trying to spawn a binary that was never downloaded, which would
-      # look like a broken app rather than a broken cache. Restoring stays on,
-      # so this job still benefits from whatever the smoke job saved; it just
-      # never writes back, so it can never be the one that poisons it.
+      # cache-save is off here, so the smoke job is the cache entry's one
+      # writer. Restoring stays on, so this job still uses what it saved.
       - uses: voidzero-dev/setup-vp@v1.19.0
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         with:
           version-file: pnpm-workspace.yaml
           cache: true
@@ -77,9 +64,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # A normal install with the binary download and cache saving both left
-      # on: this is the job that actually needs Electron working, so it is
-      # the one that should own writing the shared cache entry.
+      # A normal install with cache saving left on: this job writes the shared
+      # cache entry. The smoke fetches Electron's runtime before it starts the
+      # app (scripts/launch.js).
       - uses: voidzero-dev/setup-vp@v1.19.0
         with:
           version-file: pnpm-workspace.yaml

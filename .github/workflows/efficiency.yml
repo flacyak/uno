@@ -42,8 +42,6 @@ jobs:
       # The same install the test job does: nothing here starts Electron, so
       # its binary is not fetched, and the cache is read and never written.
       - uses: voidzero-dev/setup-vp@v1.19.0
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         with:
           version-file: pnpm-workspace.yaml
           cache: true
@@ -64,7 +62,6 @@ jobs:
       - name: Measure the base
         if: always() && github.event_name == 'pull_request'
         env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git fetch --depth=1 origin "$BASE_SHA"

@@ -76,6 +76,18 @@ export const OPEN: Check[] = [
     },
   },
   {
+    // A face the page's CSP refused, or a file the build left out, rejects
+    // its load, and the text would fall back to the machine's own mono.
+    name: "the mono text draws in the bundled JetBrains Mono, each face loaded from the app",
+    script: `
+      const faces = [...document.fonts].filter((f) => f.family.replaceAll('"', "") === "JetBrains Mono");
+      const failed = (await Promise.allSettled(faces.map((f) => f.load()))).filter((r) => r.status === "rejected");
+      if (faces.length === 0 || failed.length > 0) return failed.length + " of " + faces.length + " faces failed to load";
+      const cell = getComputedStyle(document.querySelector("tbody td:not(.gutter)")).fontFamily;
+      return cell.startsWith('"JetBrains Mono"') ? "" : "a cell's font is " + cell;
+    `,
+  },
+  {
     name: "the first row shows what the file holds",
     run: async (page) => {
       const [row] = await page.rows();
