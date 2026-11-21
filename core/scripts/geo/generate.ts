@@ -13,12 +13,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { countries } from './places.ts';
+import { regions } from './regions.ts';
 import { LAYERS, NE_COMMIT, features, sha256 } from './source.ts';
 
 const cache = process.argv[2] ?? join(tmpdir(), 'uno-geo');
 const out = join(import.meta.dirname, '../../src/place/data');
 const admin0 = await features('ne_10m_admin_0_countries_usa', cache);
-const files = { 'places.json': { countries: countries(admin0) } };
+const admin1 = await features('ne_10m_admin_1_states_provinces', cache);
+const table = { countries: countries(admin0), regions: regions(admin1) };
+const files = { 'places.json': table };
 
 mkdirSync(out, { recursive: true });
 const hashes: Record<string, string> = {};

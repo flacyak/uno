@@ -10,10 +10,15 @@ import { join } from 'node:path';
 /** The commit of github.com/nvkelso/natural-earth-vector read. */
 export const NE_COMMIT = 'ca96624a56bd078437bca8184e78163e5039ad19';
 
-/** Each layer read and its SHA-256: admin 0 as the United States draws it. */
+/**
+ * Each layer read and its SHA-256: admin 0 as the United States draws it,
+ * and the first-level regions.
+ */
 export const LAYERS = {
   ne_10m_admin_0_countries_usa:
     'd3166691d3d86f113c0d8db52506f4b72936513691d1593f47010fed01fc0b93',
+  ne_10m_admin_1_states_provinces:
+    '22d0e3ad85eb3e27f17cabf8ba2d50e554fbc27a87796ff891d958185da62fb5',
 } as const;
 
 /** A feature's properties, as Natural Earth writes them. */

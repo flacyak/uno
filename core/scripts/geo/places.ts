@@ -40,9 +40,15 @@ const ISO_NAMES: Record<string, string> = {
 };
 
 /** text is `p[field]` when it holds a value. */
-function text(p: Properties, field: string): string | undefined {
+export function text(p: Properties, field: string): string | undefined {
   const v = p[field];
   return typeof v === 'string' && v !== NONE && v.trim() !== '' ? v : undefined;
+}
+
+/** distinct is `names` with each written once, ignoring case. */
+export function distinct(names: ReadonlyArray<string | undefined>): string[] {
+  const written = names.filter((n) => n !== undefined);
+  return [...new Map(written.map((n) => [n.toLowerCase(), n])).values()];
 }
 
 /**
@@ -69,10 +75,8 @@ export function countries(features: readonly Properties[]): Country[] {
       ...parts.flatMap((p) => NAME_FIELDS.map((f) => text(p, f))),
       ...named.map((n) => n.of(code)),
       ISO_NAMES[code],
-    ].filter((n) => n !== undefined);
-    const names = [
-      ...new Map(written.map((n) => [n.toLowerCase(), n])).values(),
     ];
+    const names = distinct(written);
     const a3 = text(parts[0]!, 'ISO_A3_EH');
     return a3 === undefined ? { code, names } : { code, a3, names };
   });
