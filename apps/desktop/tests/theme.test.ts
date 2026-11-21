@@ -13,6 +13,7 @@ import { beforeEach, expect, test } from "vite-plus/test";
 import {
   APPEARANCE_KEY,
   DEFAULT_THEME,
+  RAMP_SHARES,
   THEMES,
   THEME_KEY,
   Theming,
@@ -25,9 +26,12 @@ import {
   TRITANOPIA,
   apart,
   apartTo,
+  apartToAny,
   contrast,
+  hueOf,
   linear,
   luminance,
+  mixed,
   oklab,
   pieBesides,
   scatterBesides,
@@ -123,6 +127,10 @@ test("the tokens a palette does not give are mixed from the ones it does", () =>
   // The flag colour is T3 Code's standard, the same under every theme.
   expect(t["--flag"]).toBe("#ffb900");
   expect(tokensOf(THEMES[3].light, "light")["--flag"]).toBe("#973e00");
+  // The ramp's steps are the accent and the pole mixed into the grid's ground.
+  expect(t["--chart-against"]).toBe(THEMES[3].dark.against);
+  expect(t["--seq-1"]).toBe("color-mix(in oklab, #ca9ee6 40%, #414559)");
+  expect(t["--div-4"]).toBe(`color-mix(in oklab, ${THEMES[3].dark.against} 100%, #414559)`);
 });
 
 // ------------------------------------------------------------ every palette
@@ -265,5 +273,61 @@ test.each(palettes)("%s, %s: no two of its chart colours look alike", (_, _mode,
     for (const b of p.chart.slice(i + 1)) {
       expect(apart(a, b), `${a} by ${b}`).toBeGreaterThanOrEqual(LEGEND_FLOOR);
     }
+  }
+});
+
+// -------------------------------------------------------------------- ramps
+
+// A heatmap or a horizon wears magnitude in a ramp of the accent mixed into
+// the grid's ground, and a value below zero in the same steps of the pole.
+// The dataviz skill's validator checks a ramp by its lightness, since a
+// ramp fails the categorical floors by design.
+
+/** The validator's least step in OKLCH L between a ramp's neighbours. */
+const RAMP_STEP = 0.06;
+
+/**
+ * The least the two arms' same steps stand apart, and each arm's first step
+ * from an empty cell in the rule, to every eye: the validator's floor for a
+ * colour-blind eye, which the scale legend's breaks and the table back up.
+ */
+const ARMS_FLOOR = 6;
+
+/** The least hue between the accent and the pole, so the arms read as opposites. */
+const POLE_HUE_APART = 90;
+
+/** The degrees of a turn. */
+const TURN = 360;
+
+/** Which way a ramp's lightness moves from its first step to its last, per mode. */
+const DARKENS: Record<Mode, 1 | -1> = { light: -1, dark: 1 };
+
+/** The steps of a ramp of `pole` over the grid's ground, lightest first. */
+const rampOf = (pole: string, p: Palette): string[] =>
+  RAMP_SHARES.map((share) => mixed(pole, p.surface, share / 100));
+
+test.each(palettes)("%s, %s: each arm of its ramp moves in lightness by a step", (_, mode, p) => {
+  for (const pole of [p.accent, p.against]) {
+    const ramp = rampOf(pole, p).map((c) => oklab(linear(c))[0]!);
+    for (const [i, l] of ramp.slice(1).entries()) {
+      expect((l - ramp[i]!) * DARKENS[mode], `${pole} step ${i + 2}`).toBeGreaterThanOrEqual(
+        RAMP_STEP,
+      );
+    }
+    expect(contrast(pole, p.surface), `${pole} on the grid`).toBeGreaterThanOrEqual(MARK);
+  }
+});
+
+test.each(palettes)("%s, %s: its two arms tell apart step by step", (_, _mode, p) => {
+  const turned = Math.abs(hueOf(p.accent) - hueOf(p.against)) % TURN;
+  expect(Math.min(turned, TURN - turned), "hue apart").toBeGreaterThanOrEqual(POLE_HUE_APART);
+  const [up, down] = [rampOf(p.accent, p), rampOf(p.against, p)];
+  for (const [i, c] of up.entries()) {
+    expect(apartToAny(c, down[i]!), `step ${i + 1}`).toBeGreaterThanOrEqual(ARMS_FLOOR);
+  }
+  for (const first of [up[0]!, down[0]!]) {
+    expect(apartToAny(first, p.rule), `${first} by an empty cell`).toBeGreaterThanOrEqual(
+      ARMS_FLOOR,
+    );
   }
 });

@@ -17,6 +17,11 @@
  * pass the skill's palette validator on the theme's grid, which theme.test.ts
  * checks.
  *
+ * Each palette also names a pole, the hue a heatmap or a horizon wears below
+ * zero opposite the accent above it. It is the chart colour whose ramp stands
+ * furthest from the accent's to every eye, stepped in lightness where none
+ * passes, which theme.test.ts checks too.
+ *
  * The chosen theme and appearance are kept in local storage.
  */
 
@@ -38,6 +43,8 @@ export interface Palette {
   accent: string;
   /** Worn as --chart-1 to --chart-6. */
   chart: ChartColours;
+  /** The pole below zero, worn as --chart-against and mixed into --div-1 to --div-4. */
+  against: string;
 }
 
 export interface Theme {
@@ -63,6 +70,7 @@ export const THEMES = [
       rule: "#e7ddd0",
       accent: "#c2571f",
       chart: ["#e0723e", "#c8477e", "#2a78d6", "#12a572", "#6250d6", "#067605"],
+      against: "#6250d6",
     },
     dark: {
       sunken: "#1c1917",
@@ -73,6 +81,7 @@ export const THEMES = [
       rule: "#33302c",
       accent: "#ea884b",
       chart: ["#b45607", "#d85383", "#3987e5", "#199e70", "#9085e9", "#3ea939"],
+      against: "#9085e9",
     },
   },
   {
@@ -88,6 +97,7 @@ export const THEMES = [
       rule: "#c1c2c7",
       accent: "#2959aa",
       chart: ["#4172c6", "#dd5b25", "#0d9768", "#b37907", "#cc5f8a", "#008300"],
+      against: "#008300",
     },
     dark: {
       sunken: "#16161e",
@@ -98,6 +108,7 @@ export const THEMES = [
       rule: "#292e42",
       accent: "#7aa2f7",
       chart: ["#5d86de", "#d95926", "#199e70", "#c98500", "#d55181", "#008300"],
+      against: "#c98500",
     },
   },
   {
@@ -113,6 +124,7 @@ export const THEMES = [
       rule: "#ecd7de",
       accent: "#b83d72",
       chart: ["#db5d90", "#0a9163", "#2a78d6", "#c28409", "#6250d6", "#008300"],
+      against: "#2a78d6",
     },
     dark: {
       sunken: "#1f141c",
@@ -123,6 +135,7 @@ export const THEMES = [
       rule: "#3c2a36",
       accent: "#e88fb4",
       chart: ["#bd447e", "#37a67a", "#3987e5", "#c98500", "#9085e9", "#0a8708"],
+      against: "#2e9c2a",
     },
   },
   {
@@ -138,6 +151,7 @@ export const THEMES = [
       rule: "#bcc0cc",
       accent: "#8839ef",
       chart: ["#8839ef", "#e4612c", "#0f9e6d", "#ba7e08", "#e05d93", "#008300"],
+      against: "#ba7e08",
     },
     dark: {
       sunken: "#232634",
@@ -148,6 +162,7 @@ export const THEMES = [
       rule: "#51576d",
       accent: "#ca9ee6",
       chart: ["#bc61ee", "#e4612e", "#199e70", "#c98500", "#e25d8c", "#33a02e"],
+      against: "#da9525",
     },
   },
 ] as const satisfies readonly Theme[];
@@ -180,13 +195,31 @@ const WARNING_WASH: Record<Mode, string> = { light: "8%", dark: "16%" };
 /** How much accent is mixed into the surface for a selected line, per mode. */
 const ACCENT_WASH: Record<Mode, string> = { light: "14%", dark: "22%" };
 
+/**
+ * The accent's share, in percent, of each step of the ramp that wears an
+ * amount, mixed into the surface, least first; the pole's arm takes the same.
+ * The first step starts at 40% so it stands apart from an empty cell in the
+ * rule, and from the other arm's first step, to every eye.
+ */
+export const RAMP_SHARES = [40, 60, 80, 100] as const;
+
+/** A ramp's steps of `pole` over the surface, named `--<name>-1` up. */
+function rampOf(name: string, pole: string, p: Palette): Record<string, string> {
+  const steps = RAMP_SHARES.map((share, i) => [
+    `--${name}-${i + 1}`,
+    `color-mix(in oklab, ${pole} ${share}%, ${p.surface})`,
+  ]);
+  return Object.fromEntries(steps);
+}
+
 /** The overlay drawn over the workspace behind the sources panel, per mode. */
 const SCRIM: Record<Mode, string> = { light: "rgb(0 0 0 / 30%)", dark: "rgb(0 0 0 / 50%)" };
 
 /**
  * Returns the CSS custom properties for a palette: the colours it defines and
  * the ones mixed from them. The names match those declared in base.css, save
- * --chart-1 to --chart-6, which only a themed chart reads.
+ * --chart-1 to --chart-6, the pole and its ramps, which only a themed chart
+ * reads.
  */
 export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
   return {
@@ -211,6 +244,9 @@ export function tokensOf(p: Palette, mode: Mode): Record<string, string> {
     "--chart-4": p.chart[3],
     "--chart-5": p.chart[4],
     "--chart-6": p.chart[5],
+    "--chart-against": p.against,
+    ...rampOf("seq", p.accent, p),
+    ...rampOf("div", p.against, p),
   };
 }
 
