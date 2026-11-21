@@ -24,6 +24,7 @@ import {
   SpreadFold,
   SpreadsFold,
   SplitFold,
+  SwarmFold,
   TALLY_VERSION,
   TimeFold,
   TimeSplitFold,
@@ -481,6 +482,33 @@ test('a sample fold of three columns read back from its save folds on as the fol
   for (const v of unsaved) expect(SampleFold.restored(v)).toBeUndefined();
 });
 
+test('a swarm fold read back from its save folds on as the fold it was', () => {
+  const regions = ['North', 'South', 'East'];
+  const fold = (rows: number[], into = new SwarmFold('point')) => {
+    for (const row of rows) {
+      const [x] = paged(row);
+      into.add(Math.floor(row / BLOCK_ROWS), row, regions[row % 3]!, x);
+    }
+    return into;
+  };
+  const half = (PAGE_BLOCKS + 1) * BLOCK_ROWS;
+  const saved = fold(range(0, half)).saved();
+  const back = SwarmFold.restored(throughJson(saved));
+  const after = fold(range(half, PAGED_ROWS), back);
+  expect(after.snapshot()).toStrictEqual(fold(range(0, PAGED_ROWS)).snapshot());
+  // A value twice or empty, a sample of two columns or past its rows, or a kept row of two numbers is no save of it.
+  const [first] = saved.values;
+  const unsaved = [
+    { ...saved, values: [first, first] },
+    { ...saved, values: [['North', { ...first![1], rows: 0, plotted: 0 }]] },
+    { ...saved, all: { ...saved.all, marks: ['point', 'point'] } },
+    { ...saved, rest: { ...saved.rest, plotted: saved.rest.rows + 1 } },
+    { ...saved, rest: { ...saved.rest, kept: [[1, 2, 3]] } },
+  ];
+  for (const v of unsaved)
+    expect(SwarmFold.restored(throughJson(v))).toBeUndefined();
+});
+
 /** Dates in every layout, blank, not dates, and dates only one order reads. */
 const DATES = [
   '',
@@ -909,7 +937,8 @@ test('a save that holds no spreads fold reads back as none', () => {
  * units spread with each mark, exact and coarsened, with SPREAD_CELLS, and
  * its revenue spread by region and by rep with each mark, and its revenue
  * and units' mean by channel with each mark, with CELLS added, and a sample
- * of its units, revenue and units again with each mark. It
+ * of its units, revenue and units again with each mark, and a swarm of its
+ * revenue by region with each mark. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -925,6 +954,7 @@ const GOLDEN = {
   week: '34cedec1c28038164d7bec62b8722839122943259e473f3da14a8b2ecebcc5f1',
   timesplit: '9694dab4f6df0f1d416a30218e8e9bf2b37eb9731d3fbea11e5b3c53036e8b4d',
   sampled: 'f3605671c11cde835fd86490d87ecacf5d3fc5d2228126629b2c1dc577b0fd99',
+  swarm: 'd9d9a3ae10d466537ca13c062093e4724c7c7db3704e699758706281d9a177cf',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -1062,4 +1092,15 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(sampled))),
     'a sample fold of three columns, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.sampled);
+  const swarms = (['point', 'comma'] as const).map((mark) => {
+    const fold = new SwarmFold(mark);
+    revenue.forEach((cell, r) =>
+      fold.add(Math.floor(r / BLOCK_ROWS), r, regions[r]!, cell),
+    );
+    return fold.saved();
+  });
+  expect(
+    hashOf(encoder.encode(JSON.stringify(swarms))),
+    'a swarm fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.swarm);
 });

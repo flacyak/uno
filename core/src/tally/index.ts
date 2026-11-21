@@ -82,5 +82,5 @@ export type {
   ValuePeriods,
 } from './timesplit.ts';
 export { SWARM_ROWS_AT_MOST, SwarmFold } from './swarm.ts';
-export type { Strip, Swarm } from './swarm.ts';
+export type { SavedKept, SavedSwarm, Strip, Swarm } from './swarm.ts';
 export type { Skipped } from './skipped.ts';

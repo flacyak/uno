@@ -6,7 +6,8 @@ import { parse } from '@num';
 
 import { Ranked } from './rank.ts';
 import { SampleFold } from './sample.ts';
-import type { Sampled } from './sample.ts';
+import type { Sampled, SavedSampled } from './sample.ts';
+import { isCount, isRecord } from './saved.ts';
 
 /** The rows a beeswarm samples of a value: the owner's 128. */
 export const SWARM_ROWS_AT_MOST = 128;
@@ -29,6 +30,21 @@ export interface Swarm extends Omit<Sampled, 'values' | 'least' | 'most'> {
   most: number;
 }
 
+/** SavedKept is a value's rows as a save keeps them: its counts, each kept row as [row, number] or [row], and the row ranked last at the last cut. */
+export interface SavedKept {
+  rows: number;
+  plotted: number;
+  kept: number[][];
+  last?: number;
+}
+
+/** SavedSwarm is every bit of a SwarmFold: its fold of every row, each value's rows in the order they began, and Other's. */
+export interface SavedSwarm {
+  all: SavedSampled;
+  values: Array<[string, SavedKept]>;
+  rest: SavedKept;
+}
+
 /** A value's rows: how many, how many with a number, and a sample of them. */
 class Kept {
   rows = 0;
@@ -41,6 +57,36 @@ class Kept {
     if (n !== undefined) this.plotted += sign;
     if (sign > 0) this.ranked.keep(row, n);
     else this.ranked.delete(row);
+  }
+
+  /** saved is what it holds, which `restored` reads back as it was. */
+  saved(): SavedKept {
+    const kept = this.ranked
+      .kept()
+      .map(([r, n]) => (n === undefined ? [r] : [r, n]));
+    return {
+      rows: this.rows,
+      plotted: this.plotted,
+      kept,
+      last: this.ranked.last,
+    };
+  }
+
+  /** restored is the rows `saved` holds, or undefined where it holds none. */
+  static restored(saved: unknown): Kept | undefined {
+    if (!isRecord(saved) || !Array.isArray(saved['kept'])) return undefined;
+    const { rows, plotted, last } = saved;
+    const kept: unknown[] = saved['kept'];
+    if (!isCount(rows) || !isCount(plotted) || plotted > rows) return undefined;
+    if (!(last === undefined || isCount(last))) return undefined;
+    if (kept.length > 2 * SWARM_ROWS_AT_MOST || !kept.every(isKept))
+      return undefined;
+    const back = new Kept();
+    for (const [row, n] of kept) back.ranked.keep(row, n);
+    back.rows = rows;
+    back.plotted = plotted;
+    back.ranked.last = last;
+    return back;
   }
 
   /** strip is the strip of `value`, with these rows. */
@@ -62,11 +108,11 @@ export class SwarmFold {
   readonly mark: Mark;
   private readonly all: SampleFold;
   private readonly values = new Map<string, Kept>();
-  private readonly rest = new Kept();
+  private rest = new Kept();
 
-  constructor(mark: Mark) {
+  constructor(mark: Mark, all = new SampleFold([mark], SWARM_ROWS_AT_MOST)) {
     this.mark = mark;
-    this.all = new SampleFold([mark], SWARM_ROWS_AT_MOST);
+    this.all = all;
   }
 
   /** add folds `row` of `block`, whose value is `value` and number cell `cell`. */
@@ -103,6 +149,40 @@ export class SwarmFold {
     return this.all.stale();
   }
 
+  /** saved is what the fold holds, which `restored` reads back as it was. */
+  saved(): SavedSwarm {
+    const values = [...this.values].map(([v, kept]): [string, SavedKept] => [
+      v,
+      kept.saved(),
+    ]);
+    return { all: this.all.saved(), values, rest: this.rest.saved() };
+  }
+
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none: a
+   * value twice or empty, or more than SWARM_VALUES_AT_MOST values.
+   */
+  static restored(saved: unknown): SwarmFold | undefined {
+    if (!isRecord(saved) || !Array.isArray(saved['values'])) return undefined;
+    const all = SampleFold.restored(saved['all'], SWARM_ROWS_AT_MOST);
+    const [mark] = all?.marks ?? [];
+    const rest = Kept.restored(saved['rest']);
+    const values: unknown[] = saved['values'];
+    if (all?.marks.length !== 1 || mark === undefined || rest === undefined)
+      return undefined;
+    if (values.length > SWARM_VALUES_AT_MOST) return undefined;
+    const fold = new SwarmFold(mark, all);
+    for (const v of values) {
+      const [value, kept]: unknown[] = Array.isArray(v) ? v : [];
+      const back = Kept.restored(kept);
+      if (typeof value !== 'string' || fold.values.has(value)) return undefined;
+      if (back === undefined || back.rows === 0) return undefined;
+      fold.values.set(value, back);
+    }
+    fold.rest = rest;
+    return fold;
+  }
+
   /** snapshot reads the fold as plain numbers. */
   snapshot(): Swarm {
     const sampled = this.all.snapshot();
@@ -122,4 +202,10 @@ export class SwarmFold {
     (kept ?? this.rest).count(row, parse(cell, this.mark), -1);
     if (kept?.rows === 0) this.values.delete(value);
   }
+}
+
+/** isKept says whether `v` is a kept row as a save writes it: [row, number] or [row]. */
+function isKept(v: unknown): v is [number, number?] {
+  if (!Array.isArray(v) || !isCount(v[0])) return false;
+  return v.length === 1 || (v.length === 2 && Number.isFinite(v[1]));
 }
