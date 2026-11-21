@@ -16,6 +16,7 @@ import {
   pack,
   packed,
   swarm as drawSwarm,
+  swarmTargets,
   tallOf,
 } from "@renderer/chart/swarm";
 import { swarm } from "@renderer/chart/kinds/swarm";
@@ -111,4 +112,25 @@ test("a beeswarm's caption counts the dots it drew of every row, as a sample, an
   const whole = swarm(PLOT).drawing(tallyOf([stripOf("North", [10, 20, 30])], 3), ROOM)!;
   whole.draw(TALL);
   expect(whole.notes()).toStrictEqual([]);
+});
+
+test("a beeswarm's dots step in value order with Right and Left, to the next strip's nearest with Down and Up, and say their number and row", () => {
+  const tally = tallyOf([stripOf("North", [30, 10, 20]), stripOf("South", [90, 25])]);
+  const strips = packed(tally, undefined, ROOM, TALL);
+  const targets = swarmTargets(strips, drawSwarm(strips, tally));
+  const read = (i: number) =>
+    targets.all[i]!.said().map((r) => `${r.label.textContent} ${r.value}`);
+  // North's 10, 20 and 30, at its rows 2, 3 and 1, then South's 25 and 90.
+  expect(targets.all.map((_, i) => read(i)[0])).toStrictEqual([
+    "North, row 2 10",
+    "North, row 3 20",
+    "North, row 1 30",
+    "South, row 2 25",
+    "South, row 1 90",
+  ]);
+  expect(targets.step?.("ArrowDown", 2)).toBe(3);
+  expect(targets.step?.("ArrowUp", 4)).toBe(2);
+  expect(targets.step?.("ArrowDown", undefined)).toBe(0);
+  expect(targets.step?.("ArrowUp", undefined)).toBe(3);
+  expect(targets.step?.("ArrowRight", 0)).toBeUndefined();
 });

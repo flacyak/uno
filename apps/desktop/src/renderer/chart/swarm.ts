@@ -14,6 +14,8 @@ import type { Axis } from "./axes.ts";
 import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
 import { BAR_GAP, BAR_THICK, row, rowsIn, trackWide } from "./rows.ts";
+import { ACCENT, HIT_RADIUS, named } from "./tooltip.ts";
+import type { Reading, Targets } from "./tooltip.ts";
 
 /** A dot's width, the dataviz skill's marker, in px; two dots' middles stand at least this far apart. */
 export const DOT = 8;
@@ -126,4 +128,57 @@ export function swarm(strips: readonly Packed[], tally: SwarmTally): HTMLElement
   under.append(el("span"), ticks);
   box.append(under);
   return box;
+}
+
+/** The keys a beeswarm's targets step past the tooltip's: to the next strip and the one before. */
+const STRIP_STEP = ["ArrowDown", "ArrowUp"] as const;
+
+/**
+ * swarmTargets gives the dots of `drawn`, as swarm drew `strips`: strip by
+ * strip, each in order of its number, so Right and Left step them in value
+ * order, and Down and Up step to the dot of the next strip nearest in value.
+ * Each says its number, by its strip's name and its row; a pointer's target
+ * is the nearest dot within HIT_RADIUS of it.
+ */
+export function swarmTargets(strips: readonly Packed[], drawn: HTMLElement): Targets {
+  const tracks = [...drawn.querySelectorAll(".chart-swarm-track")];
+  const dots = strips.flatMap(({ label, strip, dots: placed }, s) => {
+    const marks = [...(tracks[s]?.querySelectorAll(".chart-swarm-dot") ?? [])];
+    const each = placed.map((_, d) => ({
+      mark: marks[d]!,
+      s,
+      n: strip.at[d]!,
+      row: strip.rows[d]!,
+    }));
+    return each.sort((a, b) => a.n - b.n).map((dot) => ({ ...dot, label }));
+  });
+  const all = dots.map(({ mark, n, row: r, label }) => ({
+    mark,
+    at: mark,
+    front: true,
+    key: ACCENT,
+    said: (): Reading[] => {
+      const name = el("span");
+      name.append(named(label), `, ${m.chart_swarm_row({ row: num(r + 1) })}`);
+      return [{ value: num(n), label: name }];
+    },
+  }));
+  const under = (_hit: EventTarget | null, x: number, y: number): number | undefined => {
+    const apart = dots.map(({ mark }) => {
+      const at = mark.getBoundingClientRect();
+      return Math.hypot(at.left + at.width / 2 - x, at.top + at.height / 2 - y);
+    });
+    const near = apart.indexOf(Math.min(...apart));
+    return near >= 0 && apart[near]! <= HIT_RADIUS ? near : undefined;
+  };
+  const step = (key: string, at: number | undefined): number | undefined => {
+    const by = key === STRIP_STEP[0] ? 1 : key === STRIP_STEP[1] ? -1 : undefined;
+    if (by === undefined || dots.length === 0) return undefined;
+    if (at === undefined) return by > 0 ? 0 : dots.findIndex((d) => d.s === dots.at(-1)!.s);
+    const from = dots[at]!;
+    const to = Math.min(Math.max(from.s + by, 0), strips.length - 1);
+    const apart = dots.map((d) => (d.s === to ? Math.abs(d.n - from.n) : Infinity));
+    return apart.indexOf(Math.min(...apart));
+  };
+  return { all, under, step, keys: STRIP_STEP };
 }

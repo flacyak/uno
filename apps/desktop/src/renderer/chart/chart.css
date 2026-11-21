@@ -612,6 +612,12 @@
   box-shadow: 0 0 0 2px var(--surface);
 }
 
+/* The dot with the cursor darkens and comes in front, as a scatter's point. */
+.chart-swarm-dot.cursor {
+  z-index: 1;
+  background: color-mix(in srgb, var(--accent) 80%, var(--ink));
+}
+
 /* The axis's labels stand under the rows' tracks, each centred on its tick,
  * kept inside the tracks at either end. The clamp centres a label itself, so
  * it takes no x axis's half-label shift as well. A dot plot's centre on their
@@ -1320,6 +1326,10 @@
 
   .chart-horizon-period.cursor {
     stroke: Highlight;
+  }
+
+  .chart-swarm-dot.cursor {
+    background: Highlight;
   }
 }
 

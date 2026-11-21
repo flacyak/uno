@@ -612,6 +612,7 @@
   ],
   "chart_points_sampled": "{shown} de {points}",
   "chart_rows_sampled": "{shown} de {rows}, uma amostra",
+  "chart_swarm_row": "linha {row}",
   "chart_pie_other": "Outros",
   "chart_pie_past_net": "mais de {count} valores · os demais entram em Outros pela soma líquida",
   "chart_pie_past_left_out": "mais de {count} valores · os demais ficam de fora",

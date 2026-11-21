@@ -4,7 +4,7 @@ import type { SwarmPlot } from "@document";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import type { ChartKind } from "../kind.ts";
-import { packed, swarm as drawSwarm } from "../swarm.ts";
+import { packed, swarm as drawSwarm, swarmTargets } from "../swarm.ts";
 import type { Packed } from "../swarm.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
@@ -29,6 +29,7 @@ export const swarm: ChartKind<SwarmPlot> = (plot) => ({
         drawn = packed(tally, whole, room, height);
         return drawSwarm(drawn, tally);
       },
+      targets: (box) => swarmTargets(drawn, box),
       notes: () => {
         const shown = drawn.reduce((sum, { dots }) => sum + dots.length, 0);
         if (shown >= tally.plotted) return [];

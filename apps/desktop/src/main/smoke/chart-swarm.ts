@@ -61,4 +61,15 @@ export const CHART_SWARM: Check[] = [
       return "";
     `,
   },
+  {
+    name: "a click on a beeswarm's dot gives it the cursor, and the box says its number by its region and its row",
+    click: { selector: ".chart:first-child .chart-swarm-track .chart-swarm-dot" },
+    shot: "chart-swarm-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-swarm-dot.cursor") !== null))) return "no dot wears the cursor, the tip says " + win.querySelector(".chart-tip-words")?.textContent;
+      const said = win.querySelector(".chart-tip-words").textContent.replace(/\\s/gu, " ");
+      return /^[\\d,.]+ East, row [\\d,]+$/u.test(said) ? "" : "the box says " + said;
+    `,
+  },
 ];
