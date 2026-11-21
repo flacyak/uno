@@ -618,15 +618,40 @@
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
-/* Parallel coordinates, from parallel.ts: an axis per column, --axes of
- * them evenly spaced and --pitch-least apart at least, past which the plot
- * scrolls sideways. */
+/* Parallel coordinates, from parallel.ts: labels and an axis per column,
+ * --axes of them evenly spaced and --pitch-least apart at least, past which
+ * the plot scrolls sideways. A label is centred on its axis, two pitches wide
+ * at most, and ends in an ellipsis. */
 .chart-parallel {
   --edge: 4ch;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 4px;
   height: 100%;
   min-width: calc((var(--axes) - 1) * var(--pitch-least) + 2 * var(--edge));
   padding: 10px var(--edge);
   font-size: 11px;
+}
+
+.chart-parallel-labels {
+  position: relative;
+  height: calc(var(--lines) * 1lh);
+  color: var(--ink-2);
+}
+
+.chart-parallel-label {
+  position: absolute;
+  top: calc(var(--line) * 1lh);
+  left: calc(var(--axis) / (var(--axes) - 1) * 100%);
+  max-width: calc(2 * 100% / (var(--axes) - 1));
+  overflow: hidden;
+  translate: -50% 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-parallel-heads {
+  color: var(--ink);
 }
 
 .chart-parallel-plot {

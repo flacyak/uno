@@ -16,7 +16,7 @@ export const parallel: ChartKind<ParallelPlot> = (plot) => ({
     if (tally.plotted === 0) return { ...undrawn, empty: true };
     return {
       ...undrawn,
-      draw: () => parallelLines(plot),
+      draw: () => parallelLines(plot, tally),
     };
   },
 });
