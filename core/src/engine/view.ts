@@ -14,7 +14,7 @@ import { headerOf, labelOf, openFormat } from '@ingest';
 import type { Format } from '@ingest';
 import { isNumber, parse } from '@num';
 import { MIN_EXAMPLES, Survey, gather } from '@pattern';
-import { inferPlace } from '@place';
+import { inferCoord, inferPlace } from '@place';
 import type { Example } from '@pattern';
 import { described as describedProgram, text as programText } from '@program';
 import {
@@ -27,7 +27,7 @@ import {
   isDate,
   valueAt,
 } from '@sheet';
-import type { Edit, Written } from '@sheet';
+import type { Edit, Inferred, Written } from '@sheet';
 import { multiOf } from '@store';
 import type {
   ByteSource,
@@ -532,12 +532,11 @@ export class View {
     return schema.headers.map((header, col) => {
       const inferred = inferKind(shown.length, (row) => shown[row]![col] ?? '');
       const sample = shown.map((row) => row[col] ?? '');
-      const place =
-        inferred.kind === 'text' ? inferPlace(sample, header) : undefined;
-      const info: ColumnInfo =
-        place === undefined
-          ? { header, ...inferred }
-          : { header, ...inferred, place };
+      const info: ColumnInfo = {
+        header,
+        ...inferred,
+        ...placed(inferred, header, sample),
+      };
       const binding = schema.binding(col);
       return binding === undefined ? info : { ...info, binding };
     });
@@ -1575,4 +1574,23 @@ function linkTo(
 async function turn(): Promise<number> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   return Date.now();
+}
+
+/**
+ * placed is what a column's sample says of it as a place: how a text
+ * column's cells read as places, or which coordinate a number column holds.
+ */
+function placed(
+  inferred: Inferred,
+  header: string,
+  sample: readonly string[],
+): Pick<ColumnInfo, 'place' | 'coord'> {
+  if (inferred.kind === 'text') {
+    const place = inferPlace(sample, header);
+    return place === undefined ? {} : { place };
+  }
+  if (inferred.kind !== 'num') return {};
+  const numbers = sample.flatMap((v) => parse(v, inferred.mark) ?? []);
+  const coord = inferCoord(header, numbers);
+  return coord === undefined ? {} : { coord };
 }

@@ -134,6 +134,24 @@ test('the engine names how a column of places reads, from its sample', async () 
   }
 });
 
+test('the engine names which number columns hold coordinates, from their headers and samples', async () => {
+  const { engine, done } = connect(TINY);
+  try {
+    const csv =
+      'id,pickup_lat,pickup_lon,price,lat_far\n1,40.71,-74.01,45.3,200\n2,40.75,-73.98,12.5,190\n';
+    const src = await openOne(engine, { name: 'c.csv', blob: new Blob([csv]) });
+    expect(src.opened.columns.map((c) => c.coord)).toEqual([
+      undefined,
+      'lat',
+      'lon',
+      undefined,
+      undefined,
+    ]);
+  } finally {
+    done();
+  }
+});
+
 test('a band holds the rows around the viewport, and only those', async () => {
   const { engine, done } = connect(TINY);
   try {
