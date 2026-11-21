@@ -1614,17 +1614,16 @@
   grid-template-rows: auto;
 }
 
-/* A horizon chart's rows of folded bands, from horizon.ts, a bar tall: over
- * the track beside a value, or the whole row for a chart of one series, as
- * its legend over them. */
+/* A horizon chart's rows of folded bands, from horizon.ts, a bar tall, over
+ * the track beside a value; a chart of one series names none, so its track
+ * takes the whole plot. */
 .chart-horizon-row {
   grid-column: 2;
   height: var(--bar-thick);
 }
 
-.chart-horizon > .chart-horizon-row,
-.chart-horizon .chart-scale:only-child {
-  grid-column: 1 / -1;
+.chart-horizon.alone {
+  column-gap: 0;
 }
 
 .chart-horizon-bands {

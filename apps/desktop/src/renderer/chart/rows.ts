@@ -29,9 +29,10 @@ export const BARS_INSET = 10;
 const NAMES_MOST = 0.4;
 const NAMES_GAP = 8;
 
-/** trackWide gives how wide the track beside rows of `values` stands in `room`, after their names. */
+/** trackWide gives how wide the track beside rows of `values` stands in `room`, after their names, if any. */
 export function trackWide(values: readonly string[], room: PlotRoom): number {
   const inside = room.width - 2 * BARS_INSET;
+  if (values.length === 0) return inside;
   const longest = Math.max(0, ...values.map((value) => value.length));
   return inside - Math.min(longest * room.ch, NAMES_MOST * inside) - NAMES_GAP;
 }

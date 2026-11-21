@@ -89,9 +89,11 @@ export function heatGrid(
   return box;
 }
 
-/** periodsUnder gives the row of `level`'s periods' labels under cells `wide` px across, as an over-time chart's. */
-function periodsUnder(level: SplitLevel, wide: number, ch: number): HTMLElement {
-  const { per, from, span } = level;
+/** The periods a heatmap or a horizon chart draws: their size, the first one's key, and how many. */
+export type Periods = Pick<SplitLevel, "per" | "from" | "span">;
+
+/** periodsUnder gives the row of `periods`' labels under a track `wide` px across, as an over-time chart's. */
+export function periodsUnder({ per, from, span }: Periods, wide: number, ch: number): HTMLElement {
   const along = el("div", "chart-ticks x");
   for (const { at, words } of ticksOf(
     { per, from, span, offset: 0, rows: [], sum: [] },

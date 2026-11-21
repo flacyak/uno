@@ -2,7 +2,8 @@
  * @fileoverview Checks of horizon charts in real layout: a row per region
  * with orders, largest first, each three bands of the ramp folded into a
  * row a bar tall, and a chart of one series one row with no name, inside its
- * window, and in both the legend over the bands, its breaks apart.
+ * window, and in both the legend over the bands, its breaks apart, and the
+ * months' labels under them, each centred on its month.
  *
  * They open the workspace smoke.js wrote of a year of four regions' orders.
  */
@@ -16,6 +17,11 @@ const HORIZONS = process.env["UNO_SMOKE_HORIZONS"] ?? "";
 const ROW = 24;
 const BANDS = 3;
 const ARMS = 2;
+
+/** How far a box may stand past where it should, in px, and the place of March among the months. */
+const PX_SLACK = 0.5;
+const MARCH = 2;
+const MONTHS = 12;
 
 export const CHART_HORIZON: Check[] = [
   {
@@ -46,6 +52,22 @@ export const CHART_HORIZON: Check[] = [
         if (breaks.length < 2 || breaks.some((b, i) => i > 0 && b.left < breaks[i - 1].right)) return "the legend's breaks overlap";
         if (breaks.some((b) => b.top < keys[0].bottom || b.bottom > first.top)) return "a break stands over the swatches or the bands";
         if ([...breaks, ...keys].some((b) => b.left < first.left || b.right > first.right)) return "the legend stands past the bands";
+      }
+      return "";
+    `,
+  },
+  {
+    name: "a horizon chart names its months under its rows, each centred on its month within the bands, none over another",
+    script: `
+      const rect = (at) => at.getBoundingClientRect();
+      for (const win of document.querySelectorAll(".chart")) {
+        const bands = rect(win.querySelector(".chart-horizon-bands"));
+        const ticks = [...win.querySelectorAll(".chart-heat-periods .chart-tick")].map(rect);
+        if (ticks.length < 2 || ticks.some((t, i) => i > 0 && t.left < ticks[i - 1].right)) return "the months' labels overlap";
+        if (ticks.some((t) => t.left < bands.left - ${PX_SLACK} || t.right > bands.right + ${PX_SLACK})) return "a month's label stands past the bands";
+        const middle = (r) => (r.left + r.right) / 2;
+        const march = bands.left + ((${MARCH} + 1 / 2) / ${MONTHS}) * bands.width;
+        if (ticks.length > 2 && !ticks.some((t) => Math.abs(middle(t) - march) <= 1)) return "no label centres on March";
       }
       return "";
     `,

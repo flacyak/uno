@@ -2,8 +2,8 @@
  * @fileoverview A horizon chart: a row per series, its amounts cut into equal
  * bands of one round scale for every row, each folded into the row over the
  * last, a darker band a larger amount for every eye; below zero in the pole's
- * steps. A legend over the rows keys the bands, and a line under them counts
- * the values left out.
+ * steps. A legend over the rows keys the bands, and under them a line counts
+ * the values left out, over their periods' labels.
  */
 
 import type { HeatTally, TimeTally } from "@engine";
@@ -11,6 +11,8 @@ import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import { barsBox } from "./bars.ts";
+import { periodsUnder } from "./heat.ts";
+import type { Periods } from "./heat.ts";
 import type { PlotRoom } from "./kind.ts";
 import { classesOver, fillOf, scaleOf } from "./ramp.ts";
 import { BARS_INSET, row, rowsIn, trackWide } from "./rows.ts";
@@ -24,8 +26,8 @@ const BAND_STEPS = [2, 3, 4] as const;
 export const HORIZON_ROWS_AT_MOST = 12;
 const PITCH_LEAST = 1;
 
-/** The rows the legend over the bands takes. */
-const LEGEND_ROWS = 1;
+/** The rows the legend over the bands and the periods' labels under them take. */
+const ROWS_BESIDE = 2;
 
 /** A series a horizon chart draws: its value, none for a chart of one, its rows, and its amount per period. */
 export interface Series {
@@ -34,30 +36,35 @@ export interface Series {
   amounts: readonly number[];
 }
 
-/** What a horizon chart draws: its series, largest first, and the values its tally did not send. */
+/** What a horizon chart draws: its periods, its series, largest first, and the values its tally did not send. */
 export interface Horizon {
+  periods: Periods;
   series: Series[];
   others: { values: number; rows: number };
 }
 
-/** seriesOf gives `tally`'s series, of rows or sums, at its finest size whose periods get a px of `room`. */
-export function seriesOf(tally: TimeTally | HeatTally, summed: boolean, room: PlotRoom): Horizon {
+/** seriesOf gives `tally`'s series, of rows or sums, at its finest size whose periods get a px of `room`, none of no periods. */
+export function seriesOf(
+  tally: TimeTally | HeatTally,
+  summed: boolean,
+  room: PlotRoom,
+): Horizon | undefined {
   const fits = (span: number) => span * PITCH_LEAST <= room.width - 2 * BARS_INSET;
   if (tally.t === "time") {
     const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
     const rows = level?.rows.reduce((all, each) => all + each, 0) ?? 0;
-    const series = level
-      ? [{ value: undefined, rows, amounts: summed ? level.sum : level.rows }]
-      : [];
-    return { series, others: { values: 0, rows: 0 } };
+    if (level === undefined) return undefined;
+    const series = [{ value: undefined, rows, amounts: summed ? level.sum : level.rows }];
+    const periods = { per: level.per, from: level.from + level.offset, span: level.rows.length };
+    return { periods, series, others: { values: 0, rows: 0 } };
   }
   const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
-  const amounts = level === undefined ? [] : summed ? level.sum : level.rows;
-  const series = amounts.map((each, i) => {
+  if (level === undefined) return undefined;
+  const series = (summed ? level.sum : level.rows).map((each, i) => {
     const { value, rows } = tally.values[i]!;
     return { value, rows, amounts: each };
   });
-  return { series, others: tally.others };
+  return { periods: level, series, others: tally.others };
 }
 
 /** bandFill gives the colour band `k` wears, 1 to HORIZON_BANDS above zero and -1 down below it. */
@@ -101,14 +108,15 @@ function strip(amounts: readonly number[], band: number): SVGSVGElement {
  * the values left out.
  */
 export function horizonRows(
-  { series, others }: Horizon,
+  { periods, series, others }: Horizon,
   summed: boolean,
   room: PlotRoom,
   height: number,
 ): HTMLElement {
-  const box = barsBox("chart-horizon");
+  const alone = series[0]?.value === undefined;
+  const box = barsBox("chart-horizon", ...(alone ? ["alone"] : []));
   box.style.setProperty("--tick-gap", `${TICK_GAP}px`);
-  const fits = Math.max(rowsIn(height) - LEGEND_ROWS, 1);
+  const fits = Math.max(rowsIn(height) - ROWS_BESIDE, 1);
   const left = (shown: number) => series.length - shown + others.values;
   let shown = Math.min(series.length, HORIZON_ROWS_AT_MOST, fits);
   if (left(shown) > 0 && shown === fits) shown = Math.max(shown - 1, 1);
@@ -116,15 +124,16 @@ export function horizonRows(
   const amounts = drawn.flatMap((s) => s.amounts);
   const bands = classesOver(amounts, !summed, HORIZON_BANDS);
   const names = drawn.flatMap(({ value }) => (value === undefined ? [] : [value]));
+  const wide = trackWide(names, room);
   const scale = scaleOf(
     bands,
     amounts.some((a) => a < 0),
-    trackWide(names, room),
+    wide,
     room.ch,
     bandFill,
   );
   const legend = el("div", "chart-bar-row chart-heat-legend");
-  legend.append(...(names.length > 0 ? [el("span")] : []), scale);
+  legend.append(el("span"), scale);
   box.append(legend);
   for (const { value, amounts } of drawn) {
     const bandsRow = el("div", "chart-horizon-row");
@@ -136,5 +145,6 @@ export function horizonRows(
     const more = m.chart_bars_more({ count: num(left(shown)) });
     box.append(el("div", "chart-bars-line", `${more} · ${m.rows_count({ count: rest })}`));
   }
+  box.append(periodsUnder(periods, wide, room.ch));
   return box;
 }
