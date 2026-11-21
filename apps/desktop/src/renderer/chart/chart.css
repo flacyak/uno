@@ -1376,7 +1376,8 @@
 }
 
 /* A forced palette would take the marks' colour away, so they wear the text's,
- * and a pie's slices, its thinnest too, stand apart by the page's. */
+ * and a pie's slices, its thinnest too, stand apart by the page's. chart-forced
+ * smoke checks each kind of the catalogue. */
 @media (forced-colors: active) {
   .chart-bar,
   .chart-column,
@@ -1388,6 +1389,29 @@
   .chart-point,
   .chart-slice {
     fill: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  /* A box plot's boxes and whiskers, and a dot plot's and a beeswarm's dots,
+   * ringed in the page's ground where a box's median and a far value stand. */
+  .chart-box,
+  .chart-dot,
+  .chart-swarm-dot {
+    background: CanvasText;
+    box-shadow: 0 0 0 2px Canvas;
+    forced-color-adjust: none;
+  }
+
+  .chart-whisker {
+    border-color: CanvasText;
+    background: linear-gradient(CanvasText 0 0) center / 100% 2px no-repeat;
+    forced-color-adjust: none;
+  }
+
+  .chart-median,
+  .chart-past {
+    border-color: CanvasText;
+    background: Canvas;
     forced-color-adjust: none;
   }
 

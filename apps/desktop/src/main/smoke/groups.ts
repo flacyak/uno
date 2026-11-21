@@ -68,6 +68,7 @@ export const GROUPS: readonly Group[] = [
   { name: "chart-swarm", starts: true },
   { name: "chart-parallel", starts: true },
   { name: "chart-chord", starts: true },
+  { name: "chart-forced", starts: true },
   { name: "chart-move", starts: true },
   { name: "chart-blank", starts: true },
   { name: "chart-states", starts: true },
