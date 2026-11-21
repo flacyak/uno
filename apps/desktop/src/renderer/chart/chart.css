@@ -519,15 +519,205 @@
   background: var(--surface);
 }
 
-/* The axis's labels stand under the rows' tracks, each centred on its tick,
- * kept inside the tracks at either end. */
-.chart-box-axis .chart-ticks {
+/* A dot plot's track, from dots.ts: a mark stands --at of its span, which
+ * leaves --room at its end for the values past the dots, and for half the
+ * last label. A gridline is
+ * 1 px of the rule at a tick, reaching half the gap into each next row so the
+ * lines run unbroken; a hairline of the rule runs from the axis's low end to
+ * the dot; and the dot is the dataviz skill's 8 px marker in the accent,
+ * ringed 2 px in the window's ground. */
+.chart-dots {
+  --room: max(var(--label-room), calc(4px + var(--tips-room)));
+}
+
+.chart-dot-track {
+  --span: calc(100% - var(--room));
   position: relative;
   align-self: stretch;
 }
 
-.chart-box-axis .chart-tick {
+.chart-dot-line {
+  position: absolute;
+  inset-block: calc(var(--bar-gap) / -2);
+  left: round(down, calc(var(--at) * var(--span)), 1px);
+  width: 1px;
+  background: var(--rule);
+}
+
+.chart-dot-guide {
+  position: absolute;
+  top: calc(50% - 1px);
+  left: 0;
+  width: calc(var(--at) * var(--span));
+  height: 1px;
+  background: var(--rule);
+}
+
+.chart-dot {
+  position: absolute;
+  top: calc(50% - 4px);
+  left: calc(var(--at) * var(--span) - 4px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* A value wears ink, never its dot's colour, a gap past the dot, as a bar's
+ * past its tip. */
+.chart-dot-tip {
+  position: absolute;
+  inset-block: 0;
+  left: calc(var(--at) * var(--span) + 4px + var(--tip-gap));
+  display: flex;
+  align-items: center;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Words in place of a dot, in the caption's ink, over the gridlines. */
+.chart-dots-none {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  padding-inline-end: var(--tip-gap);
+  background: var(--surface);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* The axis's labels stand under the rows' tracks, each centred on its tick,
+ * kept inside the tracks at either end. The clamp centres a label itself, so
+ * it takes no x axis's half-label shift as well. A dot plot's centre on their
+ * gridlines at the ends too. */
+.chart-box-axis .chart-ticks,
+.chart-dots-axis .chart-ticks {
+  position: relative;
+  align-self: stretch;
+}
+
+.chart-box-axis .chart-ticks.x .chart-tick {
   left: clamp(0px, calc(var(--at) * 100% - var(--wide) / 2), calc(100% - var(--wide)));
+  translate: none;
+}
+
+.chart-dots-axis .chart-ticks {
+  margin-right: var(--room);
+}
+
+.chart-dots-axis .chart-tick {
+  left: calc(var(--at) * 100%);
+}
+
+/* A slope chart's plot, from slope.ts: its axes stand a dot and its ring in
+ * from every edge. A line is the dataviz skill's 2 px in the accent, and an
+ * end its 8 px marker, ringed 2 px in the window's ground painted under it. */
+.chart-slope {
+  display: grid;
+  grid-template:
+    auto minmax(0, 1fr) auto / min(var(--from-wide), 25%) minmax(0, 1fr)
+    min(var(--to-wide), 40%);
+  gap: var(--tip-gap);
+  height: 100%;
+  padding: var(--inset);
+  font-size: 11px;
+}
+
+/* The states stand over their ends, From's ending at the left axis and To's
+ * starting at the right, in the caption's ink; a line of the values left out
+ * runs under the plot. */
+.chart-slope-states {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  color: var(--ink-2);
+}
+
+.chart-slope-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-slope-state:first-child {
+  text-align: end;
+}
+
+.chart-slope-state:last-child {
+  grid-column: 3;
+}
+
+.chart-slope > .chart-bars-line {
+  grid-column: 1 / -1;
+}
+
+/* An end's label centres on its end, a From's against the left axis and a
+ * To's from the right, its name cut at --name-most, in the window's ink and
+ * its number in the caption's. They stand inside the axes' reach of the edge. */
+.chart-slope-ends {
+  position: relative;
+  margin-block: var(--dot-reach);
+}
+
+.chart-slope-ends > * {
+  position: absolute;
+  max-width: 100%;
+  translate: 0 -50%;
+  white-space: nowrap;
+}
+
+.chart-slope-ends.from > * {
+  right: 0;
+}
+
+.chart-slope-end {
+  display: flex;
+  gap: 0.5ch;
+}
+
+.chart-slope-name {
+  overflow: hidden;
+  max-width: var(--name-most);
+  text-overflow: ellipsis;
+}
+
+.chart-slope-value {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-slope-plot {
+  width: calc(100% - 2 * var(--dot-reach));
+  height: calc(100% - 2 * var(--dot-reach));
+  margin: var(--dot-reach);
+  overflow: visible;
+}
+
+.chart-slope-line,
+.chart-slope-own {
+  stroke: var(--accent);
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.chart-slope-dot {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: calc(2 * var(--ring));
+  paint-order: stroke;
+}
+
+/* The value under the cursor stands over the rest, its own line over theirs, which fade. */
+.chart-slope-value:not(.cursor) > .chart-slope-own {
+  display: none;
+}
+
+.chart-slope-plot:has(.cursor) > .chart-slope-line,
+.chart-slope-plot:has(.cursor) > .chart-slope-value:not(.cursor) {
+  opacity: var(--faded);
 }
 
 /* A stack's segment, from stack.ts, wears its slot's `--key`. Above zero it

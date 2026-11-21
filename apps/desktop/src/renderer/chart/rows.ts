@@ -10,6 +10,7 @@ import type { Group, Groups } from "@engine";
 import { m } from "@paraglide/messages";
 import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
+import type { Targets } from "./tooltip.ts";
 
 /** A row's thickness, in px: the dataviz skill's most for a bar. */
 export const BAR_THICK = 24;
@@ -22,6 +23,9 @@ export const BAR_GAP = 2;
  * caption's words stand from the window's edge.
  */
 export const BARS_INSET = 10;
+
+/** A row of a value, which a label heads, past an axis's row of labels. */
+export const VALUE_ROWS = ".chart-bar-row:has(> .chart-bar-label)";
 
 /** The values that get a row, the largest first, and the lines under them. */
 export interface Ranked {
@@ -81,4 +85,20 @@ export function row(value: string, beside: HTMLElement): HTMLElement {
   const made = el("div", "chart-bar-row");
   made.append(named(value), beside);
   return made;
+}
+
+/** The keys ranked rows' targets step past the tooltip's: to the next row and the one before. */
+const ROWS_STEP = ["ArrowDown", "ArrowUp"] as const;
+
+/**
+ * rowSteps gives how Down and Up step the cursor through `count` rows, from
+ * the first or the last where none has it, for a kind's targets.
+ */
+export function rowSteps(count: number): Required<Pick<Targets, "step" | "keys">> {
+  const step = (key: string, at: number | undefined): number | undefined => {
+    const to =
+      key === ROWS_STEP[0] ? (at ?? -1) + 1 : key === ROWS_STEP[1] ? (at ?? count) - 1 : undefined;
+    return to === undefined ? undefined : Math.min(Math.max(to, 0), count - 1);
+  };
+  return { step, keys: ROWS_STEP };
 }

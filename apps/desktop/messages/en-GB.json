@@ -459,6 +459,8 @@
   "chart_title_per": "{of} per {by}",
   "chart_title_rows": "rows per {by}",
   "chart_title_sum": "sum of {sum} per {by}",
+  "chart_title_mean": "mean of {of} per {by}",
+  "chart_title_slope": "{title}, {from} to {to}",
   "chart_title_stack_rows": "rows per {by} by {split}",
   "chart_title_stack_sum": "sum of {sum} per {by} by {split}",
   "chart_title_time_rows": "rows per {per} of {at}",
@@ -493,6 +495,8 @@
   "chart_kind_histogram": "Histogram",
   "chart_form_of": "of",
   "chart_kind_box": "Box plot",
+  "chart_kind_dots": "Dot plot",
+  "chart_kind_slope": "Slope",
   "chart_form_box_none": "none, one box",
   "chart_kind_bars": "Bars",
   "chart_kind_pie": "Pie",
@@ -501,6 +505,12 @@
   "chart_form_by": "by",
   "chart_form_sum": "sum of",
   "chart_form_sum_none": "none, count rows",
+  "chart_form_measure": "measure",
+  "chart_form_between": "between",
+  "chart_form_from": "from",
+  "chart_form_to": "to",
+  "chart_form_mean": "mean",
+  "chart_form_sum_word": "sum",
   "chart_form_split": "split by",
   "chart_form_split_none": "none, a bar per value",
   "chart_form_at": "dates",
@@ -536,6 +546,30 @@
   "chart_form_hint_change": "Enter applies · Esc closes",
   "chart_inserted": "inserted {title}",
   "chart_bars_more": "+{count} more",
+  "chart_dots_none": "no numbers",
+  "chart_slope_in": "in {state}",
+  "chart_slope_none": "none",
+  "chart_slope_from_to": "{from} to {to}",
+  "chart_dots_rows": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "row",
+        "plural=other": "rows"
+      }
+    }
+  ],
+  "chart_dots_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "number",
+        "plural=other": "numbers"
+      }
+    }
+  ],
   "chart_bars_past": "more than {count} values · later ones are counted in the rest",
   "chart_points": [
     {
@@ -603,6 +637,8 @@
   "chart_summary_more": "and {count} more.",
   "chart_summary_points": "{points}, {x} from {xLeast} to {xMost} and {y} from {yLeast} to {yMost}.",
   "chart_table_rows": "rows",
+  "chart_table_numbers": "numbers",
+  "chart_table_change": "change",
   "chart_stack_total": "total",
   "chart_bar_moved": "{value} moved to {place} of {count}",
   "chart_summary_stack": "Split by {split} into {count} series.",

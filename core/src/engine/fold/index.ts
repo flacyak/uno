@@ -3,7 +3,7 @@
  */
 
 import type { Folders } from './folder.ts';
-import { groupsFolder } from './groups.ts';
+import { dotsFolder, groupsFolder } from './groups.ts';
 import { sampleFolder } from './sample.ts';
 import { splitFolder } from './split.ts';
 import { spreadFolder } from './spread.ts';
@@ -22,4 +22,6 @@ export const FOLDERS: Folders = {
   stack: splitFolder,
   histogram: spreadFolder,
   box: boxFolder,
+  dots: dotsFolder,
+  slope: splitFolder,
 };

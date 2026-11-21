@@ -65,7 +65,10 @@ export type {
   Chart,
   ChartColumn,
   ChartPlace,
+  DotMeasure,
+  DotsPlot,
   Plot,
+  SlopePlot,
   StackPlot,
   TimePlot,
 } from './chart.ts';

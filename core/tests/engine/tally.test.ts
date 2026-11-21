@@ -11,7 +11,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { expect, test } from 'vite-plus/test';
 
 import { newManifest, writeDocument } from '@document';
-import type { Chart, Plot } from '@document';
+import type { Chart, Plot, SlopePlot } from '@document';
 import { TALLY_MS } from '@engine';
 import type {
   Coverage,
@@ -183,6 +183,25 @@ const REVENUE_BOXES: Chart = {
   plot: { t: 'box', of: column(REVENUE), by: column(REGION), span: 'most' },
 };
 
+/** The fixture's mean units per channel, as dots. */
+const CHANNEL_MEANS: Chart = {
+  ...REGION_ROWS,
+  id: 'c11',
+  plot: { t: 'dots', by: column(CHANNEL), of: column(UNITS), measure: 'mean' },
+};
+
+/** The fixture's revenue per region, from the web channel to the direct one. */
+const WEB_TO_DIRECT: SlopePlot = {
+  t: 'slope',
+  by: column(REGION),
+  between: column(CHANNEL),
+  from: 'web',
+  to: 'direct',
+  of: column(REVENUE),
+  measure: 'sum',
+};
+const CHANNEL_SLOPE: Chart = { ...REGION_ROWS, id: 'c12', plot: WEB_TO_DIRECT };
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -244,13 +263,33 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     }
     return { t: 'time', plot, coverage, ...fold.snapshot(plot.per) };
   }
-  const { by, sum } = plot;
+  if (plot.t === 'slope') {
+    const fold = new SplitFold(plot.of === undefined ? undefined : 'point');
+    for (let r = 0; r < rows; r++) {
+      const sum = plot.of === undefined ? '' : cell(r, plot.of);
+      fold.add(cell(r, plot.by), cell(r, plot.between), sum);
+    }
+    const ends = [plot.from, plot.to] as const;
+    return {
+      t: 'slope',
+      plot,
+      coverage,
+      ...fold.slope(ends, plot.measure === 'mean'),
+    };
+  }
+  if (plot.t === 'dots' && plot.measure === 'mean') {
+    const fold = new GroupsFold('mean', 'point');
+    for (let r = 0; r < rows; r++) fold.add(cell(r, plot.by), cell(r, plot.of));
+    return { t: 'mean', plot, coverage, ...fold.means(plot.order) };
+  }
+  const by = plot.by;
+  const sum = plot.t === 'dots' ? plot.of : plot.sum;
   const fold =
     sum === undefined ? new GroupsFold() : new GroupsFold('sum', 'point');
   for (let r = 0; r < rows; r++) {
     fold.add(cell(r, by), sum === undefined ? '' : cell(r, sum));
   }
-  const moved = plot.t === 'bars' ? plot.order : [];
+  const moved = plot.t === 'pie' ? [] : plot.order;
   return { t: 'groups', plot, coverage, ...fold.snapshot(moved) };
 }
 
@@ -258,9 +297,14 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
 function folded(charts: Chart[], rows = ROWS, folders = FOLDERS): Tallies {
   const tallies = new Tallies(folders);
   for (const chart of charts) tallies.attach(chart, HEADERS);
+  return fed(tallies, 0, rows);
+}
+
+/** fed folds the rows of the sheet from `first` to `last` into `tallies`, a TINY block at a time. */
+function fed(tallies: Tallies, first = 0, last = ROWS): Tallies {
   const shown = (col: number) => (row: number) => sales.display(row, col);
-  for (let from = 0; from < rows; from += TINY.blockRows) {
-    const end = Math.min(from + TINY.blockRows, rows);
+  for (let from = first; from < last; from += TINY.blockRows) {
+    const end = Math.min(from + TINY.blockRows, last);
     tallies.fold(from / TINY.blockRows, from, end, shown);
   }
   return tallies;
@@ -727,6 +771,179 @@ test('an edit moves a box plot by a column by its one row, and a save keeps the 
   reopened.attach(REVENUE_BOXES, HEADERS);
   expect(reopened.from()).toBe(ROWS);
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test("dots of a mean folded a block at a time read as the pure mean fold of their column, which a sum's does not share", () => {
+  const tallies = folded([CHANNEL_MEANS]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_MEANS.id, pure(CHANNEL_MEANS.plot)],
+  ]);
+  const [by, of] = [column(CHANNEL), column(UNITS)];
+  tallies.attach(
+    { ...CHANNEL_MEANS, plot: { t: 'dots', by, of, measure: 'sum' } },
+    HEADERS,
+  );
+  expect(tallies.from()).toBe(0);
+});
+
+test('an edit moves dots of a mean by its one row, and a save keeps the fold, which reads back with no pass', async () => {
+  const tallies = folded([CHANNEL_MEANS]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, UNITS, 'n/a');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[CHANNEL_MEANS.id, pure(CHANNEL_MEANS.plot, sheet)]];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const saved = tallies.saved();
+  expect(saved[CHANNEL_MEANS.id]?.key).toBe(`mean ${CHANNEL} ${UNITS}`);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(saved)), ROWS);
+  reopened.attach(CHANNEL_MEANS, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test("a slope draws first from a fold of its two states alone, then fills a fold of every state behind every chart's complete tally, after which another From or To, or a mean, reads no block", () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  const { id } = CHANNEL_SLOPE;
+  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(WEB_TO_DIRECT)]]);
+  const states = JSON.stringify(['web', 'direct']);
+  expect(tallies.saved()[id]?.key).toBe(
+    `pair ${REGION} ${CHANNEL} ${REVENUE} ${states}`,
+  );
+  // A chart that folds goes first, and the fold behind waits for it.
+  tallies.attach(REGION_ROWS, HEADERS);
+  expect(tallies.from()).toBe(0);
+  fed(tallies);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [REGION_ROWS.id, pure(REGION_ROWS.plot)],
+  ]);
+  // The fold behind reads every block again from the first, and tells nothing new.
+  expect(tallies.from()).toBe(0);
+  fed(tallies);
+  expect(tallies.read(ROWS, true)).toStrictEqual([]);
+  expect(tallies.from()).toBeUndefined();
+  expect(tallies.saved()[id]?.key).toBe(
+    `split ${REGION} ${CHANNEL} ${REVENUE}`,
+  );
+  const plot: SlopePlot = {
+    ...WEB_TO_DIRECT,
+    from: 'partner',
+    measure: 'mean',
+  };
+  tallies.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(plot)]]);
+});
+
+test('a From or To changed before the fold behind is whole folds its two new states first, and the fold behind goes on from where it stood', () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  const half = TINY.blockRows * Math.floor(ROWS / TINY.blockRows / 2);
+  fed(tallies, 0, half);
+  const plot: SlopePlot = { ...WEB_TO_DIRECT, from: 'partner' };
+  tallies.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
+  expect(tallies.from()).toBe(0);
+  fed(tallies);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_SLOPE.id, pure(plot)],
+  ]);
+  expect(tallies.from()).toBe(half);
+  fed(tallies, half);
+  tallies.read(ROWS, true);
+  tallies.attach({ ...CHANNEL_SLOPE, plot: { ...plot, to: 'mail' } }, HEADERS);
+  expect(tallies.from()).toBe(ROWS);
+});
+
+test('a fold behind that cannot hold every row in its cell stops, so it never stands in for the exact fold of two states', () => {
+  const crowded: Folders = {
+    ...FOLDERS,
+    slope: (plot, headers, marks) => {
+      const folder = FOLDERS.slope(plot, headers, marks);
+      if (typeof folder === 'string' || folder.behind === undefined)
+        return folder;
+      return { ...folder, behind: { ...folder.behind, whole: () => false } };
+    },
+  };
+  const tallies = folded([CHANNEL_SLOPE], ROWS, crowded);
+  tallies.read(ROWS, true);
+  expect(tallies.from()).toBe(0);
+  fed(tallies, 0, TINY.blockRows);
+  expect(tallies.from()).toBeUndefined();
+  expect(tallies.saved()[CHANNEL_SLOPE.id]?.key).toMatch(/^pair /);
+});
+
+test('a source that cannot be read stops the fold behind a chart, so no pass reads it again and again', () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  expect(tallies.from()).toBe(0);
+  expect(tallies.unread({ t: 'text', text: 'gone' })).toStrictEqual([]);
+  expect(tallies.from()).toBeUndefined();
+});
+
+test("an edit while the fold behind fills moves it too, and a save of it once full reads back in the chart's place with no pass", async () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  const half = TINY.blockRows * Math.floor(ROWS / TINY.blockRows / 2);
+  fed(tallies, 0, half);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, CHANNEL, 'partner');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  tallies.read(ROWS, true);
+  fed(tallies, half);
+  tallies.read(ROWS, true);
+  const plot: SlopePlot = { ...WEB_TO_DIRECT, from: 'partner' };
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual([
+    [CHANNEL_SLOPE.id, pure(plot, sheet)],
+  ]);
+});
+
+test('an edit to a slope moves its fold by the row where it is or was in either state, and by none in another', async () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  for (const channel of ['partner', 'web', 'mail']) {
+    const before = shownRow(sheet, EDITED);
+    sheet.set(EDITED, CHANNEL, channel);
+    const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+    await tallies.mend(moved, blocks(sheet));
+    expect(tallies.read(ROWS, true)).toStrictEqual([
+      [CHANNEL_SLOPE.id, pure(WEB_TO_DIRECT, sheet)],
+    ]);
+  }
+});
+
+test("dots of rows or a sum share a bar chart's fold, and read as its pure fold", () => {
+  const [by, of] = [column(CHANNEL), column(UNITS)];
+  const pairs: Array<[Plot, Plot]> = [
+    [
+      { t: 'bars', by },
+      { t: 'dots', by },
+    ],
+    [
+      { t: 'bars', by, sum: of },
+      { t: 'dots', by, of, measure: 'sum', order: ['web'] },
+    ],
+  ];
+  for (const [bars, plot] of pairs) {
+    const tallies = folded([{ ...REGION_ROWS, plot: bars }]);
+    tallies.attach({ ...REGION_ROWS, plot }, HEADERS);
+    expect(tallies.from()).toBe(ROWS);
+    expect(tallies.read(ROWS, true)).toStrictEqual([
+      [REGION_ROWS.id, pure(plot)],
+    ]);
+  }
 });
 
 test('an edit to a number moves a histogram by its one row, and a save keeps the fold, which reads back with no pass', async () => {

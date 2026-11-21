@@ -37,6 +37,12 @@ function summed(rows: Array<[string, string]>): GroupsFold {
   return fold;
 }
 
+function meaned(rows: Array<[string, string]>): GroupsFold {
+  const fold = new GroupsFold('mean', 'point');
+  for (const [value, cell] of rows) fold.add(value, cell);
+  return fold;
+}
+
 test('a groups fold tallies the sales sheet by channel and region', () => {
   const sheet = read('sales-q3.csv', bytes);
   const column = (col: number) =>
@@ -185,4 +191,74 @@ test('a snapshot sends the values a person moved first, in their order, and the 
   expect(others.values).toBe(values + 1 - GROUPS_SENT);
   // With none moved, the snapshot is as it was.
   expect(fold.snapshot([])).toStrictEqual(fold.snapshot());
+});
+
+test("a mean fold counts each value's cells that read as numbers, and ranks the values by their mean", () => {
+  const fold = meaned([
+    ['East', '3'],
+    ['East', 'n/a'],
+    ['East', '4'],
+    ['West', '10'],
+    ['West', ''],
+    ['North', 'n/a'],
+    ['', '3'],
+  ]);
+  // A value with no number has no mean, and stands after every value with one.
+  expect(fold.means()).toEqual({
+    groups: [
+      { value: 'West', rows: 2, sum: 10, numbers: 1 },
+      { value: 'East', rows: 3, sum: 7, numbers: 2 },
+      { value: '', rows: 1, sum: 3, numbers: 1 },
+      { value: 'North', rows: 1, sum: 0, numbers: 0 },
+    ],
+    others: { values: 0, rows: 0, sum: 0 },
+    below: { values: 0, rows: 0, sum: 0 },
+    rest: { rows: 0, sum: 0 },
+    skipped: { blank: 1, unparsed: 2 },
+  });
+  // Means that tie go to value order.
+  expect(
+    meaned([
+      ['b', '7'],
+      ['a', '3.5'],
+    ])
+      .means()
+      .groups.map((g) => g.value),
+  ).toEqual(['b', 'a']);
+  expect(
+    meaned([
+      ['b', '3.5'],
+      ['a', '3'],
+      ['a', '4'],
+    ])
+      .means()
+      .groups.map((g) => g.value),
+  ).toEqual(['a', 'b']);
+});
+
+test('a mean fold moved by edits reads as one that counts again, each count of numbers that of its cells', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const amount = () => Math.round((random() * 2 - 1) * MOST_CENTS) / CENTS;
+    const row = (): [string, string] => [
+      pick(VALUES),
+      pick(['', 'n/a', `${amount()}`, `${amount()}`]),
+    ];
+    const rows = Array.from({ length: ROWS }, row);
+    const fold = meaned(rows);
+    for (let edit = 0; edit < ROWS; edit++) {
+      const r = Math.floor(random() * ROWS);
+      fold.remove(...rows[r]!);
+      rows[r] = row();
+      fold.add(...rows[r]);
+    }
+    const means = fold.means();
+    expect(means, `seed ${seed}`).toEqual(meaned(rows).means());
+    for (const { value, numbers } of means.groups) {
+      const cells = rows.filter(([v]) => v === value).map(([, c]) => c);
+      const read = cells.filter((c) => c !== '' && c !== 'n/a');
+      expect(numbers, `seed ${seed}`).toBe(read.length);
+    }
+  }
 });

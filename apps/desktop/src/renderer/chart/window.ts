@@ -66,6 +66,8 @@ import type { Corner, Rect, Room } from "./place.ts";
 import { summaryOf } from "./summary.ts";
 import type { Summary } from "./summary.ts";
 import { NONE, Tooltip } from "./tooltip.ts";
+import { VALUE_ROWS } from "./rows.ts";
+import { arranged } from "./moving.ts";
 
 /** The × on the window's own close button, drawn in currentColor. */
 const CROSS =
@@ -100,9 +102,9 @@ const GRIP =
 /** A pointer's `button` for the left button, a finger or a pen's tip. */
 const PRIMARY_BUTTON = 0;
 
-/** valuesOf gives the values `tally`'s bars stand for, top to bottom, or none for another kind. */
+/** valuesOf gives the values `tally`'s bars or dots stand for, top to bottom, or none for another kind. */
 function valuesOf(tally: Drawn | undefined): string[] {
-  if (tally?.t === "groups") return tally.groups.map((g) => g.value);
+  if (tally?.t === "groups" || tally?.t === "mean") return tally.groups.map((g) => g.value);
   return tally?.t === "stack" ? tally.values.map((v) => v.value) : [];
 }
 
@@ -577,8 +579,7 @@ export class ChartWindow {
     const drawn = this.place(drawing.draw(this.plot.clientHeight), named);
     drawing.fit(drawn);
     this.tip.show(drawing.targets(drawn));
-    const { t } = this.chart.plot;
-    this.plot.classList.toggle(MOVABLE, t === "bars" || t === "stack");
+    this.plot.classList.toggle(MOVABLE, arranged(this.chart.plot));
     const moved = this.moving;
     if (moved !== undefined && this.shown[moved.to] === moved.value) {
       this.moving = undefined;
@@ -589,8 +590,8 @@ export class ChartWindow {
   /** moveBar moves the bar under the cursor where `press` says, and says where it stands. */
   private moveBar(press: Press, at: EventTarget | null): boolean {
     const { plot } = this.chart;
-    if (at !== this.plot || (plot.t !== "bars" && plot.t !== "stack")) return false;
-    const rows = [...this.plot.querySelectorAll(".chart-bar-row")];
+    if (at !== this.plot || !arranged(plot)) return false;
+    const rows = [...this.plot.querySelectorAll(VALUE_ROWS)];
     const from = rows.findIndex((row) => row.matches(".cursor, :has(.cursor)"));
     // A stack's cursor keeps its series, the segment of the same slot.
     const slot = this.plot.querySelector<HTMLElement>(".chart-segment.cursor")?.dataset["slot"];
@@ -607,8 +608,8 @@ export class ChartWindow {
    */
   private moveTo(from: number, to: number, slot?: string): void {
     const { id, plot } = this.chart;
-    if (to === from || (plot.t !== "bars" && plot.t !== "stack")) return;
-    const count = this.plot.querySelectorAll(".chart-bar-row").length;
+    if (to === from || !arranged(plot)) return;
+    const count = this.plot.querySelectorAll(VALUE_ROWS).length;
     const drawn = this.shown.slice(0, count);
     const value = drawn[from]!;
     const like = slot === undefined ? undefined : `.chart-segment[data-slot="${slot}"]`;

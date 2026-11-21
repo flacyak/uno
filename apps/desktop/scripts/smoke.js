@@ -463,6 +463,106 @@ await writeFile(
   }),
 );
 
+// A workspace of two dot plots of an export of five carriers' delivery days,
+// their means a few tenths apart and Eagle's no number at all: the mean per
+// carrier in a new window's size at the sheet's foot, and the same in a
+// window of the least width at its top.
+const dottedFile = join(scratch, "sent", "dotted.csv");
+const dottedDays = {
+  Acme: [3.3, 3.5],
+  Bolt: [3, 3.2],
+  Crane: [3.2, 3.3],
+  Dart: [2.8, 3],
+  Eagle: ["n/a"],
+};
+const dottedRows = Object.entries(dottedDays).flatMap(([carrier, days]) =>
+  days.map((d) => `${carrier},${d}`),
+);
+await writeFile(dottedFile, `${["carrier,days", ...dottedRows].join("\n")}\n`);
+const dotted = join(scratch, "sent", "dotted.uno");
+const dottedSource = {
+  ...spreadSource,
+  id: "dotted",
+  name: "dotted.csv",
+  path: dottedFile,
+  rows: dottedRows.length,
+  cols: 2,
+};
+const dottedPlot = {
+  t: "dots",
+  by: { col: 0, header: "carrier" },
+  of: { col: 1, header: "days" },
+  measure: "mean",
+};
+const dottedChart = { source: dottedSource.id, title: "", refresh: 0, plot: dottedPlot };
+await writeFile(
+  dotted,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [dottedSource],
+    active: dottedSource.id,
+    log: [],
+    charts: [
+      { ...dottedChart, id: "c1", place: { ...chartSize, x: 0, y: 1 } },
+      { ...dottedChart, id: "c2", place: { ...chartSize, width: leastSize.width, x: 1, y: 0 } },
+    ],
+    extra: new Map(),
+    at: dotted,
+  }),
+);
+
+// A workspace of two slope charts of an export of four regions' revenue over
+// three years: North and East rise from 2024 to 2025, South falls, and West
+// has no row in 2025; 2023's rows stand in neither state. The sum of revenue
+// per region from 2024 to 2025 in a new window's size at the sheet's foot,
+// and the same in a window of the least width at its top.
+const slopedFile = join(scratch, "sent", "sloped.csv");
+const slopedRevenue = {
+  North: [90, 100, 140],
+  South: [210, 200, 150],
+  East: [70, 80, 90],
+  West: [160, 150],
+};
+const slopedYears = ["2023", "2024", "2025"];
+const slopedRows = Object.entries(slopedRevenue).flatMap(([region, revenue]) =>
+  revenue.map((r, i) => `${region},${slopedYears[i]},${r}`),
+);
+await writeFile(slopedFile, `${["region,year,revenue", ...slopedRows].join("\n")}\n`);
+const sloped = join(scratch, "sent", "sloped.uno");
+const slopedSource = {
+  ...spreadSource,
+  id: "sloped",
+  name: "sloped.csv",
+  path: slopedFile,
+  rows: slopedRows.length,
+  cols: 3,
+};
+const slopedPlot = {
+  t: "slope",
+  by: { col: 0, header: "region" },
+  between: { col: 1, header: "year" },
+  from: "2024",
+  to: "2025",
+  of: { col: 2, header: "revenue" },
+  measure: "sum",
+};
+const slopedChart = { source: slopedSource.id, title: "", refresh: 0, plot: slopedPlot };
+await writeFile(
+  sloped,
+  writeDocument({
+    manifest: newManifest(),
+    sources: [slopedSource],
+    active: slopedSource.id,
+    log: [],
+    charts: [
+      { ...slopedChart, id: "c1", place: { ...chartSize, x: 0, y: 1 } },
+      { ...slopedChart, id: "c2", place: { ...chartSize, width: leastSize.width, x: 1, y: 0 } },
+    ],
+    extra: new Map(),
+    at: sloped,
+  }),
+);
+
 // A workspace of two stacked charts of a small export of four regions' sales
 // in eight channels, each channel's rows fewer than the one before it and
 // each region's more than the one before it: rows per region by channel in a
@@ -822,6 +922,8 @@ async function run(only, folder, deadlineMs) {
       UNO_SMOKE_STACKED: stacked,
       UNO_SMOKE_SPREAD: spread,
       UNO_SMOKE_BOXED: boxed,
+      UNO_SMOKE_DOTTED: dotted,
+      UNO_SMOKE_SLOPED: sloped,
       UNO_SMOKE_MOVABLE: movable,
       UNO_SMOKE_PLACED: placed,
       UNO_SMOKE_MISREAD: misread,

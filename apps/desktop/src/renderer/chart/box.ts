@@ -15,7 +15,7 @@ import { el } from "@renderer/shell/util";
 import { axis, tickLabels } from "./axes.ts";
 import type { Axis } from "./axes.ts";
 import { barsBox } from "./bars.ts";
-import { row, rowsIn } from "./rows.ts";
+import { row, rowSteps, rowsIn } from "./rows.ts";
 
 /** A spread as a box plot's tally sends it. */
 type Spreading = NonNullable<BoxTally["rest"]>;
@@ -147,9 +147,6 @@ export function fitBoxes(along: HTMLElement): void {
   along.scrollLeft = Number(plot.style.getPropertyValue("--span-at")) * room;
 }
 
-/** The keys a box plot's targets step past the tooltip's: to the next row and the one before. */
-const ROWS_STEP = ["ArrowDown", "ArrowUp"] as const;
-
 /**
  * boxTargets gives the rows of `drawn`, as boxes drew `rows`: each worth its
  * median, named by its value, its middle half, its whiskers, the rows past
@@ -187,16 +184,7 @@ export function boxTargets(rows: readonly Boxed[], drawn: HTMLElement): Targets 
       reveal: () => revealed(at),
     };
   });
-  const step = (key: string, at: number | undefined): number | undefined => {
-    const to =
-      key === ROWS_STEP[0]
-        ? (at ?? -1) + 1
-        : key === ROWS_STEP[1]
-          ? (at ?? all.length) - 1
-          : undefined;
-    return to === undefined ? undefined : Math.min(Math.max(to, 0), all.length - 1);
-  };
-  return { all, under: among(all, ".chart-bar-row"), step, keys: ROWS_STEP };
+  return { all, under: among(all, ".chart-bar-row"), ...rowSteps(all.length) };
 }
 
 /** boxedOver gives what a box plot's summary says past its rows: its highest and lowest medians. */

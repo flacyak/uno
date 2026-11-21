@@ -10,9 +10,17 @@
  * file's text, set as text alone, and a number is in the app's language.
  */
 
-import type { ChartColumn, Plot, StackPlot, TimePlot } from "@document";
+import type { ChartColumn, DotsPlot, Plot, SlopePlot, StackPlot, TimePlot } from "@document";
 import { DISTINCT_AT_MOST } from "@engine";
-import type { BoxTally, Groups, Sample, SpreadTally, StackTally, TimeTally } from "@engine";
+import type {
+  BoxTally,
+  Groups,
+  Sample,
+  SlopeTally,
+  SpreadTally,
+  StackTally,
+  TimeTally,
+} from "@engine";
 import { m } from "@paraglide/messages";
 import { columnLabel } from "@renderer/grid/rows";
 import { num, percent } from "@renderer/locale";
@@ -20,6 +28,9 @@ import { el } from "@renderer/shell/util";
 import type { Level, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
 import { middle } from "./box.ts";
+import { measuresOf } from "./dots.ts";
+import { endsOf } from "./slope.ts";
+import type { DotsTally } from "./dots.ts";
 import type { Boxed } from "./box.ts";
 import { edgeWords } from "./histogram.ts";
 import { PER_WORDS, label } from "./periods.ts";
@@ -197,12 +208,93 @@ export function timed(
 }
 
 /** leftOut gives a line across `span` columns of the cells `tally` left out, or none. */
-function leftOut(tally: TimeTally | SpreadTally | BoxTally, span: number): HTMLElement[] {
+function leftOut(
+  tally: TimeTally | SpreadTally | BoxTally | DotsTally | SlopeTally,
+  span: number,
+): HTMLElement[] {
   const left = [blank(tally), notNumbers(tally)].filter((part) => part !== "").join(SEP);
   if (left === "") return [];
   const line = el("td", "chart-table-line", left);
   line.colSpan = span;
   return [row(line)];
+}
+
+/**
+ * dotted gives a dot plot's heads and rows: each value under its column `by`,
+ * what its dot stands at, its numbers of a mean, and its rows of a mean or a
+ * sum; then the values the tally sent none of, and the cells left out.
+ */
+export function dotted(plot: DotsPlot, tally: DotsTally): [HTMLElement[], HTMLElement[]] {
+  const { by, of } = plot;
+  const meant = tally.t === "mean";
+  const word = (text: string) => header(text, false, true);
+  const measure =
+    of === undefined
+      ? []
+      : meant
+        ? [word(m.chart_box_mean()), word(m.chart_table_numbers())]
+        : [header(columnLabel(of.header, of.col), true, true)];
+  const heads = [
+    header(columnLabel(by.header, by.col), true),
+    ...measure,
+    word(m.chart_table_rows()),
+  ];
+  const sizes = measuresOf(plot, tally);
+  const lines = tally.groups.map((g, i) => {
+    const size = sizes[i];
+    const at = size === undefined ? el("td", "num chart-blank", m.chart_dots_none()) : digits(size);
+    const counts = [...(tally.t === "mean" ? [tally.groups[i]!.numbers] : []), g.rows];
+    return row(rowHead(g.value), ...(of === undefined ? [at] : [at, ...counts.map(digits)]));
+  });
+  const { others, below, rest } = tally;
+  const left = others.values + below.values;
+  if (left > 0) {
+    const more = el("th", "", m.chart_bars_more({ count: num(left) }));
+    more.scope = "row";
+    const sum = digits(others.sum + below.sum);
+    const between = of === undefined ? [] : meant ? [el("td", "num"), el("td", "num")] : [sum];
+    lines.push(row(more, ...between, digits(others.rows + below.rows)));
+  }
+  if (rest.rows > 0) {
+    const line = el("td", "chart-table-line", m.chart_bars_past({ count: num(DISTINCT_AT_MOST) }));
+    line.colSpan = heads.length;
+    lines.push(row(line));
+  }
+  return [heads, [...lines, ...leftOut(tally, heads.length)]];
+}
+
+/**
+ * sloping gives a slope chart's heads and rows: each value under its column
+ * `by`, its two ends under their states, and its change and change as a
+ * share where both ends have a number; then the values the tally sent none
+ * of, and the cells left out.
+ */
+export function sloping(plot: SlopePlot, tally: SlopeTally): [HTMLElement[], HTMLElement[]] {
+  const heads = [
+    header(columnLabel(plot.by.header, plot.by.col), true),
+    ...[plot.from, plot.to].map((state) => header(state, true, true)),
+    ...[m.chart_table_change(), m.chart_table_share()].map((w) => header(w, false, true)),
+  ];
+  const at = (end?: number) =>
+    end === undefined ? el("td", "num chart-blank", m.chart_slope_none()) : digits(end);
+  const lines = endsOf(plot, tally).map(({ label, ends: [from, to] }) => {
+    const change = from === undefined || to === undefined ? undefined : to - from;
+    // A change is a share of a From end other than 0.
+    const share =
+      change === undefined || from === 0 || from === undefined
+        ? ""
+        : percent(change / Math.abs(from));
+    const changed = change === undefined ? el("td", "num") : digits(change);
+    return row(rowHead(label), at(from), at(to), changed, el("td", "num", share));
+  });
+  if (tally.others.values > 0) {
+    const more = el("th", "", m.chart_bars_more({ count: num(tally.others.values) }));
+    more.scope = "row";
+    const rows = el("td", "", m.rows_count({ count: tally.others.rows }));
+    rows.colSpan = heads.length - 1;
+    lines.push(row(more, rows));
+  }
+  return [heads, [...lines, ...leftOut(tally, heads.length)]];
 }
 
 /** The heads of a box plot's numbers, after its rows'. */

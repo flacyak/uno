@@ -24,6 +24,7 @@ import { s3Location } from "@store/s3";
 import { m } from "@paraglide/messages";
 import type { ChartForm, ChartSource, Opening } from "@renderer/chart/form";
 import type { ChartLayer } from "@renderer/chart/layer";
+import { arranged } from "@renderer/chart/moving";
 import type { Charts } from "@renderer/charts";
 import { columnLabel } from "@renderer/grid/rows";
 import type { ShellAction } from "@renderer/grid/rows";
@@ -678,7 +679,7 @@ export class Shell {
   private async arrange(id: string, order: string[]): Promise<void> {
     const w = this.workspace;
     const plot = w?.charts.all.find((c) => c.id === id)?.plot;
-    if (w === undefined || (plot?.t !== "bars" && plot?.t !== "stack")) return;
+    if (w === undefined || plot === undefined || !arranged(plot)) return;
     try {
       await this.drawn(w.charts.change(id, { plot: { ...plot, order } }));
     } catch (err) {

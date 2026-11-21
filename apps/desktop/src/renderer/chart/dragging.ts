@@ -6,7 +6,7 @@
  */
 
 import { el } from "@renderer/shell/util";
-import { BAR_GAP } from "./rows.ts";
+import { BAR_GAP, VALUE_ROWS } from "./rows.ts";
 
 /** The button a person drags with. */
 const PRIMARY_BUTTON = 0;
@@ -51,7 +51,7 @@ export class BarDrag {
     const label = e.target instanceof Element ? e.target.closest(".chart-bar-label") : null;
     if (e.button !== PRIMARY_BUTTON || e.pointerType === TOUCH || label === null || !this.movable())
       return;
-    const from = [...this.plot.querySelectorAll(".chart-bar-row")].findIndex((row) =>
+    const from = [...this.plot.querySelectorAll(VALUE_ROWS)].findIndex((row) =>
       row.contains(label),
     );
     if (from === -1) return;
@@ -64,7 +64,7 @@ export class BarDrag {
     const carry = this.carry;
     if (carry?.pointer !== e.pointerId) return;
     if (carry.to === undefined && Math.abs(e.clientY - carry.y) < CARRY_AFTER) return;
-    const rows = [...this.plot.querySelectorAll(".chart-bar-row")].map((row) =>
+    const rows = [...this.plot.querySelectorAll(VALUE_ROWS)].map((row) =>
       row.getBoundingClientRect(),
     );
     carry.to = landing(rows, carry.from, e.clientY);

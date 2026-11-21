@@ -6,8 +6,13 @@
 import { describe, expect, test } from 'vite-plus/test';
 
 import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
-import type { Chart, Plot, StackPlot, TimePlot } from '@document';
-import { parseOverTime, parsePlot, parseStacked } from '@document/codec';
+import type { Chart, Plot, SlopePlot, StackPlot, TimePlot } from '@document';
+import {
+  parseOverTime,
+  parsePlot,
+  parseSlope,
+  parseStacked,
+} from '@document/codec';
 import { GROUPS_SENT } from '@tally';
 
 const WHERE = 'books.uno: view/charts.json: chart 1 of 1';
@@ -46,6 +51,9 @@ describe('parsePlot', () => {
     { t: 'histogram', of: UNITS, span: 'all' },
     { t: 'box', of: REVENUE, span: 'most' },
     { t: 'box', of: REVENUE, by: REGION, span: 'all' },
+    { t: 'dots', by: REGION },
+    { t: 'dots', by: REGION, of: REVENUE, measure: 'mean' },
+    { t: 'dots', by: REGION, of: UNITS, measure: 'sum', order: ['East'] },
   ])('reads %j', (plot) => {
     expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
   });
@@ -71,6 +79,19 @@ describe('parsePlot', () => {
     ],
     [{ t: 'time', at: DATE, per: 'day' }, ONE_READING],
     [{ t: 'histogram', of: REVENUE }, 'span is not most or all'],
+    [{ t: 'dots', by: REGION, of: REVENUE }, 'measure is not sum or mean'],
+    [
+      { t: 'dots', by: REGION, measure: 'mean' },
+      'measure names no column of numbers',
+    ],
+    [
+      { t: 'dots', by: REGION, of: REVENUE, measure: 'median' },
+      'measure is not sum or mean',
+    ],
+    [
+      { t: 'dots', by: REGION, of: REGION, measure: 'sum' },
+      'of and by name one column',
+    ],
     [
       { t: 'box', of: REVENUE, by: REVENUE, span: 'most' },
       'by names the column of names',
@@ -215,6 +236,78 @@ describe('parseChart', () => {
   ])('refuses %s %o, naming the chart and the key', (key, value, said) => {
     expect(() => parseChart(WHERE, { ...BARS, [key]: value })).toThrow(
       new Error(`${WHERE} (c1): ${said}`),
+    );
+  });
+});
+
+describe('parseSlope', () => {
+  const YEAR = { col: 0, header: 'year' };
+  test.each<SlopePlot>([
+    { t: 'slope', by: REGION, between: YEAR, from: '2024', to: '' },
+    {
+      t: 'slope',
+      by: REGION,
+      between: YEAR,
+      from: '2024',
+      to: '2025',
+      of: REVENUE,
+      measure: 'mean',
+    },
+  ])('reads %j', (plot) => {
+    expect(parseSlope(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[Record<string, unknown>, string]>([
+    [
+      { t: 'slope', by: REGION, between: YEAR, from: '2024', to: '2024' },
+      'from and to name one value',
+    ],
+    [
+      { t: 'slope', by: REGION, between: REGION, from: 'a', to: 'b' },
+      'between and by name one column',
+    ],
+    [
+      { t: 'slope', by: REGION, between: YEAR, from: 1, to: 'b' },
+      'from is not text',
+    ],
+    [
+      {
+        t: 'slope',
+        by: REGION,
+        between: YEAR,
+        from: 'a',
+        to: 'b',
+        of: YEAR,
+        measure: 'sum',
+      },
+      'of and between name one column',
+    ],
+    [
+      {
+        t: 'slope',
+        by: REGION,
+        between: YEAR,
+        from: 'a',
+        to: 'b',
+        of: REVENUE,
+      },
+      'measure is not sum or mean',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseSlope(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
+  });
+
+  test('a slope is one parsePlot reads, and refuses a key it does not know', () => {
+    const plot: SlopePlot = {
+      t: 'slope',
+      by: REGION,
+      between: YEAR,
+      from: 'a',
+      to: 'b',
+    };
+    expect(parsePlot(PLOT, plot)).toStrictEqual(plot);
+    expect(() => parsePlot(PLOT, { ...plot, order: [] })).toThrow(
+      new Error(`${PLOT}: this build does not read "order"`),
     );
   });
 });

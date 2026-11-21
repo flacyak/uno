@@ -39,12 +39,16 @@ interface Folding {
   done: boolean;
 }
 
+/** How far a fold has got, and its folder. */
+type Fold = Pick<Folding, 'rows' | 'ahead'> & { folder: Folder };
+
 /**
  * One chart's fold, through the folder of its kind, over the plot's columns
- * where the view's headers put them.
+ * where the view's headers put them, and the fold its folder fills behind it.
  */
 interface Tallying extends Folding {
   folder: Folder;
+  behind?: Fold;
 }
 
 /**
@@ -91,14 +95,23 @@ export class Tallies {
       this.charts.delete(id);
       return folder;
     }
-    const t = { ...unfolded(), plot, folder };
+    const behind = behindOf(folder);
+    const t: Tallying = { ...unfolded(), plot, folder, behind };
     const was = this.charts.get(id) ?? this.restored(id, t);
-    if (was?.folder.key === folder.key && was.folder.readsWith(this.marks)) {
+    // A fold kept reads the same columns the same way, as `key` names them.
+    const keeps = (f: Folder | undefined, key: string | undefined) =>
+      key !== undefined && f?.key === key && f.readsWith(this.marks);
+    // A chart keeps its fold, or the fold that took its place from behind it.
+    const kept =
+      keeps(was?.folder, folder.key) || keeps(was?.folder, folder.behind?.key);
+    if (was !== undefined && kept) {
       was.plot = plot;
       was.done = false;
       this.charts.set(id, was);
       return undefined;
     }
+    // A fold behind of the same columns goes on from where it stood.
+    if (keeps(was?.behind?.folder, folder.behind?.key)) t.behind = was?.behind;
     this.charts.set(id, t);
     return undefined;
   }
@@ -126,7 +139,11 @@ export class Tallies {
    */
   private restored(id: string, t: Tallying): Tallying | undefined {
     const saved = this.kept[id];
-    if (!isRecord(saved) || saved['key'] !== t.folder.key) return undefined;
+    if (!isRecord(saved)) return undefined;
+    // A fold behind the chart's own, saved in its place, takes it again.
+    const key = saved['key'];
+    const into = [t.folder, t.behind?.folder].find((f) => f?.key === key);
+    if (into === undefined) return undefined;
     const { rows, ahead, fold } = saved;
     const run: unknown[] = Array.isArray(ahead) ? ahead : [rows, rows];
     const [from, end] = run;
@@ -140,8 +157,9 @@ export class Tallies {
       rows,
       ahead: ran ? [from, end] : undefined,
     };
-    const folder = t.folder.restored(fold);
-    return folder && this.givenBack({ ...t, ...on, folder });
+    const folder = into.restored(fold);
+    const behind = into === t.folder ? t.behind : undefined;
+    return folder && this.givenBack({ ...t, ...on, folder, behind });
   }
 
   /** givenBack is `t` without the rows of the block restore said is gone. */
@@ -198,24 +216,31 @@ export class Tallies {
     return this.charts.size;
   }
 
-  /** from is the first row a pending chart lacks, or undefined when none is. */
+  /**
+   * feeding is the folds a pass feeds: each pending chart's own, or once every
+   * chart has heard its complete tally, the folds behind them.
+   */
+  private feeding(): Fold[] {
+    const own = [...this.charts.values()].filter((t) => !t.done);
+    if (own.length > 0) return own;
+    return [...this.charts.values()].flatMap((t) => t.behind ?? []);
+  }
+
+  /** from is the first row a fold the pass feeds lacks, or undefined when none does. */
   from(): number | undefined {
     let from: number | undefined;
-    for (const t of this.charts.values()) {
-      if (!t.done && (from === undefined || t.rows < from)) from = t.rows;
+    for (const t of this.feeding()) {
+      if (from === undefined || t.rows < from) from = t.rows;
     }
     return from;
   }
 
   /**
-   * wants says whether a pending chart's fold ends at `from`, so the block
+   * wants says whether a fold the pass feeds ends at `from`, so the block
    * there must be read for it.
    */
   wants(from: number): boolean {
-    for (const t of this.charts.values()) {
-      if (!t.done && t.rows === from) return true;
-    }
-    return false;
+    return this.feeding().some((t) => t.rows === from);
   }
 
   /**
@@ -225,8 +250,8 @@ export class Tallies {
    */
   lacks(from: number): number {
     let end = from;
-    for (const t of this.charts.values()) {
-      if (t.done || t.rows !== from) continue;
+    for (const t of this.feeding()) {
+      if (t.rows !== from) continue;
       end = Math.max(end, t.ahead?.[0] ?? Number.POSITIVE_INFINITY);
     }
     return end;
@@ -243,10 +268,17 @@ export class Tallies {
     end: number,
     shown: (col: number) => (row: number) => string,
   ): void {
-    for (const t of this.charts.values()) {
-      if (t.done || !takes(t, from)) continue;
+    const feeding = this.feeding();
+    for (const t of feeding) {
+      if (!takes(t, from)) continue;
       t.folder.fold(block, { from, end, shown });
       took(t, from, end);
+    }
+    // A fold behind that cannot hold every row in place can take no fold's place, so it stops.
+    for (const t of this.charts.values()) {
+      const { behind } = t;
+      const fed = behind !== undefined && feeding.includes(behind);
+      if (fed && behind.folder.whole?.() === false) t.behind = undefined;
     }
   }
 
@@ -265,9 +297,11 @@ export class Tallies {
     const shows = (col: number) => (before[col] ?? '') !== (after[col] ?? '');
     const moved: string[] = [];
     for (const [id, t] of this.charts) {
-      if (!holds(t, row) || !t.folder.cols.some(shows)) continue;
-      t.folder.move(block, row, before, after);
-      moved.push(id);
+      if (!t.folder.cols.some(shows)) continue;
+      const both = t.behind === undefined ? [t] : [t, t.behind];
+      const folds = both.filter((f) => holds(f, row));
+      for (const f of folds) f.folder.move(block, row, before, after);
+      if (folds.length > 0) moved.push(id);
     }
     return moved;
   }
@@ -344,7 +378,9 @@ export class Tallies {
    */
   read(total: number, indexed: boolean): Array<[string, Tally]> {
     const read: Array<[string, Tally]> = [];
-    for (const [id, t] of this.charts) {
+    for (const [id, was] of this.charts) {
+      const t = filled(was, total, indexed);
+      this.charts.set(id, t);
       if (t.done) continue;
       const ahead = t.ahead === undefined ? 0 : t.ahead[1] - t.ahead[0];
       const complete = indexed && t.rows === total;
@@ -357,12 +393,14 @@ export class Tallies {
 
   /**
    * unread returns, for each pending chart, or for each pending one of
-   * `ids`, that its source could not be read.
+   * `ids`, that its source could not be read, and stops every fold behind.
    */
   unread(said: Said, ids?: readonly string[]): Array<[string, Tally]> {
     const unread: Array<[string, Tally]> = [];
     for (const id of ids ?? this.charts.keys()) {
       const t = this.charts.get(id);
+      // A source that cannot be read leaves nothing to fill behind a fold.
+      if (t !== undefined) t.behind = undefined;
       if (t === undefined || t.done) continue;
       unread.push([id, { t: 'unread', plot: t.plot, said }]);
       t.done = true;
@@ -376,16 +414,38 @@ function unfolded(): Omit<Folding, 'plot'> {
   return { rows: 0, ahead: undefined, done: false };
 }
 
+/**
+ * filled is a chart's fold, `t`, or the fold behind it in its place once that
+ * has folded every one of `total` rows, so its tally is the one heard.
+ */
+function filled(t: Tallying, total: number, indexed: boolean): Tallying {
+  const { behind } = t;
+  const done =
+    indexed &&
+    behind?.rows === total &&
+    behind.ahead === undefined &&
+    behind.folder.whole?.() !== false;
+  return behind === undefined || !done
+    ? t
+    : { ...t, ...behind, behind: undefined };
+}
+
+/** behindOf is the fold `folder` fills behind it, with nothing folded, if any. */
+function behindOf(folder: Folder): Fold | undefined {
+  return folder.behind && { rows: 0, ahead: undefined, folder: folder.behind };
+}
+
 /** fresh is `t` with nothing folded, pending again, read with `marks`. */
 function fresh(t: Tallying, marks: readonly Mark[]): Tallying {
-  return { ...t, ...unfolded(), folder: t.folder.again(marks) };
+  const folder = t.folder.again(marks);
+  return { ...t, ...unfolded(), folder, behind: behindOf(folder) };
 }
 
 /**
  * takes says whether the block from `from` is one `t` can fold: its next,
  * the next of the run it folded ahead, or the first of that run.
  */
-function takes(t: Tallying, from: number): boolean {
+function takes(t: Fold, from: number): boolean {
   if (t.rows === from) return true;
   return t.ahead === undefined ? from > t.rows : t.ahead[1] === from;
 }
@@ -394,7 +454,7 @@ function takes(t: Tallying, from: number): boolean {
  * took records that `t` folded the rows from `from` to `end`, and joins the
  * run it folded ahead once its rows reach it.
  */
-function took(t: Tallying, from: number, end: number): void {
+function took(t: Fold, from: number, end: number): void {
   if (t.rows !== from) {
     t.ahead = t.ahead === undefined ? [from, end] : [t.ahead[0], end];
     return;
@@ -410,7 +470,7 @@ function took(t: Tallying, from: number, end: number): void {
  * holds says whether `t` has folded `row`: before its rows, or in the run
  * it folded ahead of them.
  */
-function holds(t: Tallying, row: number): boolean {
+function holds(t: Fold, row: number): boolean {
   if (row < t.rows) return true;
   return t.ahead !== undefined && t.ahead[0] <= row && row < t.ahead[1];
 }
@@ -421,6 +481,12 @@ function holds(t: Tallying, row: number): boolean {
  * follow, so the fold holds the rows before it alone.
  */
 function giveBack(t: Tallying, block: number, last: Block): void {
+  if (t.behind !== undefined) givenBackBy(t.behind, block, last);
+  givenBackBy(t, block, last);
+}
+
+/** givenBackBy takes the rows of `block`, `last`, out of fold `t` where it holds them. */
+function givenBackBy(t: Fold, block: number, last: Block): void {
   const kept = last.from;
   // A fold takes blocks whole, so one that holds the block's first row
   // holds the block.

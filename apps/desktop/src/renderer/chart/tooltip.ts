@@ -47,7 +47,7 @@ export const TIP_OFFSET = 16;
 export const TIP_EDGE = EDGE;
 
 /** What the bars and the points wear, as the box's key. */
-const ACCENT = "var(--accent)";
+export const ACCENT = "var(--accent)";
 
 /** What a mark wears while the cursor is on it. */
 const CURSOR = "cursor";
@@ -133,7 +133,7 @@ export const NONE: Targets = { all: [], under: () => undefined };
  * named gives a value as the box says it: the file's text, marked as the
  * file's, or the app's word for the rows whose cell is blank.
  */
-function named(value: string): HTMLElement {
+export function named(value: string): HTMLElement {
   if (value === "") return el("span", "chart-blank", m.chart_blank_value());
   return el("bdi", "from-file", value);
 }

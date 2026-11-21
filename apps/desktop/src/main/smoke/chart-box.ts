@@ -50,7 +50,7 @@ export const CHART_BOX: Check[] = [
     `,
   },
   {
-    name: "East's two numbers past its whisker are rings on its row, and the axis is labelled under the rows, a gap apart",
+    name: "East's two numbers past its whisker are rings on its row, and the axis is labelled under the rows, a gap apart, each label centred on its tick",
     script: `
       const rect = (at) => at.getBoundingClientRect();
       const win = document.querySelector(".chart");
@@ -62,7 +62,16 @@ export const CHART_BOX: Check[] = [
       const ticks = [...win.querySelectorAll(".chart-box-axis .chart-tick")].map(rect);
       if (ticks.length < 2) return "the axis labels " + ticks.length + " ticks";
       const near = ticks.findIndex((at, i) => i > 0 && at.left - ticks[i - 1].right < ${TICK_GAP} - ${RECT_SLACK});
-      return near === -1 ? "" : "two labels stand " + (ticks[near].left - ticks[near - 1].right) + " px apart";
+      if (near !== -1) return "two labels stand " + (ticks[near].left - ticks[near - 1].right) + " px apart";
+      // A label between the ends centres on its tick, --at of the axis.
+      const along = rect(win.querySelector(".chart-box-axis .chart-ticks"));
+      const labels = [...win.querySelectorAll(".chart-box-axis .chart-tick")].slice(1, -1);
+      for (const label of labels) {
+        const tick = along.left + Number(label.style.getPropertyValue("--at")) * along.width;
+        const middle = rect(label).left + rect(label).width / 2;
+        if (Math.abs(middle - tick) > ${PX_SLACK}) return "the label " + label.textContent + " centres at " + middle + ", its tick at " + tick;
+      }
+      return "";
     `,
   },
   {

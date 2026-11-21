@@ -302,3 +302,117 @@ test('a split snapshot sends the values a person moved first, and the rest large
   expect(values.length).toBe(GROUPS_SENT);
   expect(others.values).toBe(1);
 });
+
+test("a summing split fold moved by edits counts each cell's numbers and blanks as its rows do", () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const cell = () => pick(['', 'n/a', '1.5', '-2']);
+    const row = (): Row => [pick(VALUES), pick(SERIES), cell()];
+    const rows = Array.from({ length: ROWS }, row);
+    const fold = summed(rows);
+    for (let edit = 0; edit < ROWS; edit++) {
+      const r = Math.floor(random() * ROWS);
+      fold.remove(...rows[r]!);
+      rows[r] = row();
+      fold.add(...rows[r]);
+    }
+    for (const { value, cells } of fold.saved().groups) {
+      for (const [series, , , numbers, blank] of cells) {
+        const own = rows.filter(([v, s]) => v === value && s === series);
+        const read = own.filter(
+          ([, , c = '']) => parse(c, 'point') !== undefined,
+        );
+        expect([numbers, blank], `seed ${seed}`).toStrictEqual([
+          read.length,
+          own.filter(([, , c]) => c === '').length,
+        ]);
+      }
+    }
+  }
+});
+
+test("a slope reads two series of a split fold, each value's cell in each as its rows, sum and numbers, the larger end first", () => {
+  const fold = summed([
+    ['East', '2024', '10'],
+    ['East', '2025', '30'],
+    ['East', '2025', 'n/a'],
+    ['West', '2024', '50'],
+    ['North', '2026', '99'],
+    ['North', '2026', ''],
+    ['South', '2025', '20'],
+  ]);
+  const { values, others, skipped } = fold.slope(['2024', '2025'], false);
+  // East's n/a is left out of the two states, and North's blank of neither.
+  expect(skipped).toStrictEqual({ blank: 0, unparsed: 1 });
+  // North has no row in either, and stands in no slope.
+  expect(values.map((v) => [v.value, v.ends])).toStrictEqual([
+    [
+      'West',
+      [
+        { rows: 1, sum: 50, numbers: 1 },
+        { rows: 0, sum: 0, numbers: 0 },
+      ],
+    ],
+    [
+      'East',
+      [
+        { rows: 1, sum: 10, numbers: 1 },
+        { rows: 2, sum: 30, numbers: 1 },
+      ],
+    ],
+    [
+      'South',
+      [
+        { rows: 0, sum: 0, numbers: 0 },
+        { rows: 1, sum: 20, numbers: 1 },
+      ],
+    ],
+  ]);
+  expect(others).toStrictEqual({ values: 0, rows: 0 });
+  // By mean, East's 30 over one number passes South's 20.
+  const means = fold.slope(['2024', '2025'], true).values.map((v) => v.value);
+  expect(means).toStrictEqual(['West', 'East', 'South']);
+  // A count ranks by rows: East's two.
+  const rows = folded([
+    ['a', 'x'],
+    ['b', 'y'],
+    ['b', 'y'],
+  ]).slope(['x', 'y'], false);
+  expect(rows.values.map((v) => v.value)).toStrictEqual(['b', 'a']);
+});
+
+test('a slope says which values a fold kept apart from their series past PAIRS_AT_MOST, and counts the values it sends none of', () => {
+  // Two series of every value fill the pairs, so v0's row in y has no cell.
+  const fold = new SplitFold();
+  const values = PAIRS_AT_MOST / 2;
+  for (let i = 0; i < values; i++) {
+    fold.add(`v${i}`, 'x');
+    fold.add(`v${i}`, 'z');
+  }
+  fold.add('v0', 'y');
+  const slope = fold.slope(['x', 'y'], false);
+  expect(slope.values.find((v) => v.value === 'v0')?.unsplit).toBe(true);
+  expect(slope.values.filter((v) => v.unsplit)).toHaveLength(1);
+  expect(slope.values).toHaveLength(GROUPS_SENT);
+  expect(slope.others).toStrictEqual({
+    values: values - GROUPS_SENT,
+    rows: values - GROUPS_SENT,
+  });
+});
+
+test('a split fold is whole while every row is in its cell, none apart past PAIRS_AT_MOST or DISTINCT_AT_MOST', () => {
+  const fold = new SplitFold();
+  const values = PAIRS_AT_MOST / 2;
+  for (let i = 0; i < values; i++) {
+    fold.add(`v${i}`, 'x');
+    fold.add(`v${i}`, 'z');
+  }
+  expect(fold.whole()).toBe(true);
+  fold.add('v0', 'y');
+  expect(fold.whole()).toBe(false);
+  fold.remove('v0', 'y');
+  expect(fold.whole()).toBe(true);
+  for (let i = values; i <= DISTINCT_AT_MOST; i++) fold.add(`v${i}`, 'x');
+  expect(fold.whole()).toBe(false);
+});

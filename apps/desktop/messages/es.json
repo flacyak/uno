@@ -475,6 +475,8 @@
   "chart_title_per": "{of} por {by}",
   "chart_title_rows": "filas por {by}",
   "chart_title_sum": "suma de {sum} por {by}",
+  "chart_title_mean": "media de {of} por {by}",
+  "chart_title_slope": "{title}, de {from} a {to}",
   "chart_title_stack_rows": "filas por {by} y por {split}",
   "chart_title_stack_sum": "suma de {sum} por {by} y por {split}",
   "chart_title_time_rows": "filas por {per} de {at}",
@@ -509,6 +511,8 @@
   "chart_kind_histogram": "Histograma",
   "chart_form_of": "de",
   "chart_kind_box": "Diagrama de caja",
+  "chart_kind_dots": "Gráfico de puntos",
+  "chart_kind_slope": "Pendiente",
   "chart_form_box_none": "ninguna, una caja",
   "chart_kind_bars": "Barras",
   "chart_kind_pie": "Circular",
@@ -517,6 +521,12 @@
   "chart_form_by": "por",
   "chart_form_sum": "suma de",
   "chart_form_sum_none": "ninguna, contar filas",
+  "chart_form_measure": "medida",
+  "chart_form_between": "entre",
+  "chart_form_from": "de",
+  "chart_form_to": "a",
+  "chart_form_mean": "media",
+  "chart_form_sum_word": "suma",
   "chart_form_split": "dividir por",
   "chart_form_split_none": "ninguna, una barra por valor",
   "chart_form_at": "fechas",
@@ -552,6 +562,32 @@
   "chart_form_hint_change": "Intro aplica · Esc cierra",
   "chart_inserted": "insertado: {title}",
   "chart_bars_more": "+{count} más",
+  "chart_dots_none": "sin números",
+  "chart_slope_in": "en {state}",
+  "chart_slope_none": "ninguno",
+  "chart_slope_from_to": "{from} a {to}",
+  "chart_dots_rows": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "fila",
+        "plural=many": "filas",
+        "plural=other": "filas"
+      }
+    }
+  ],
+  "chart_dots_numbers": [
+    {
+      "declarations": ["input count", "local plural = count: plural"],
+      "selectors": ["plural"],
+      "match": {
+        "plural=one": "número",
+        "plural=many": "números",
+        "plural=other": "números"
+      }
+    }
+  ],
   "chart_bars_past": "más de {count} valores · los demás se cuentan en el resto",
   "chart_points": [
     {
@@ -623,6 +659,8 @@
   "chart_summary_more": "y {count} más.",
   "chart_summary_points": "{points}, {x} de {xLeast} a {xMost} y {y} de {yLeast} a {yMost}.",
   "chart_table_rows": "filas",
+  "chart_table_numbers": "números",
+  "chart_table_change": "cambio",
   "chart_stack_total": "total",
   "chart_bar_moved": "{value} pasa al puesto {place} de {count}",
   "chart_summary_stack": "Dividido por {split} en {count} series.",

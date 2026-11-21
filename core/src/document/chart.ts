@@ -65,6 +65,34 @@ export interface StackPlot {
   order?: string[];
 }
 
+/** What a dot plot's dots stand at: the sum of a column's numbers, or their mean. */
+export type DotMeasure = 'sum' | 'mean';
+
+/**
+ * A dot plot: a dot per value of `by` at its rows, or at the sum or mean of
+ * `of`, on an axis that need not start at zero. `order` holds the values a person
+ * moved, as for bars.
+ */
+export type DotsPlot = { t: 'dots'; by: ChartColumn; order?: string[] } & (
+  | { of?: undefined; measure?: undefined }
+  | { of: ChartColumn; measure: DotMeasure }
+);
+
+/**
+ * A slope chart: each value of `by` at two states, the values `from` and `to`
+ * of `between`, as its rows, or the sum or mean of `of`, on one scale.
+ */
+export type SlopePlot = {
+  t: 'slope';
+  by: ChartColumn;
+  between: ChartColumn;
+  from: string;
+  to: string;
+} & (
+  | { of?: undefined; measure?: undefined }
+  | { of: ChartColumn; measure: DotMeasure }
+);
+
 /** What a chart draws. This is all the engine needs to tally it. */
 export type Plot =
   /**
@@ -81,7 +109,9 @@ export type Plot =
   /** Rows per bin of the numbers of `of`, over the 1st to 99th percentile or every number. */
   | { t: 'histogram'; of: ChartColumn; span: Span }
   /** A box of the numbers of `of`, or one per value of `by`, as R's boxplot draws them. */
-  | { t: 'box'; of: ChartColumn; by?: ChartColumn; span: Span };
+  | { t: 'box'; of: ChartColumn; by?: ChartColumn; span: Span }
+  | DotsPlot
+  | SlopePlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

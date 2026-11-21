@@ -10,7 +10,13 @@ export {
   GroupsFold,
   LABEL_AT_MOST,
 } from './groups.ts';
-export type { Group, Groups, Measure, SavedGroups } from './groups.ts';
+export type {
+  Group,
+  Groups,
+  MeanGroup,
+  Measure,
+  SavedGroups,
+} from './groups.ts';
 export { SCATTER_POINTS_AT_MOST, SampleFold } from './sample.ts';
 export type { Marks, SavedSample } from './sample.ts';
 export type { Point, Sample } from './sample.ts';
@@ -27,10 +33,13 @@ export { edgeOf } from './levels.ts';
 export type { Level } from './levels.ts';
 export { PAIRS_AT_MOST, SERIES_AT_MOST, SplitFold } from './split.ts';
 export type {
+  Ended,
   Measured,
   SavedCell,
   SavedSplit,
   SavedTally,
+  Slope,
+  SlopeValue,
   Split,
   SplitValue,
 } from './split.ts';

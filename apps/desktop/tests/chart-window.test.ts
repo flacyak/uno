@@ -752,6 +752,33 @@ test("Alt with Up, Down, Home and End moves the bar under the cursor, asks the s
   expect(arrange).not.toHaveBeenCalled();
 });
 
+test("Alt with Up and End moves a dot plot's row under the cursor among its values, past none of its axis's row, as a bar moves", async () => {
+  const dots: Chart = { ...BARS, plot: { t: "dots", by: { col: 1, header: "region" } } };
+  const read = { ...tallyOf(["West", "East", "South"], true), plot: dots.plot };
+  let heard = heardOf(read, read);
+  const arrange = vi.fn();
+  const say = vi.fn();
+  const made = hearing(() => heard, dots, { arrange, say });
+  const plot = made.box.querySelector<HTMLElement>(".chart-plot")!;
+  // The values' rows, and the axis's under them.
+  Object.defineProperty(plot, "clientHeight", { value: holding(SHORT_ROWS + 2) });
+  await frame();
+  expect(plot.classList.contains("movable")).toBe(true);
+  plot.focus();
+  press(plot, "ArrowDown");
+  press(plot, "ArrowDown");
+  press(plot, "ArrowUp", { altKey: true });
+  expect(arrange).toHaveBeenLastCalledWith(dots.id, ["East"]);
+  expect(say).toHaveBeenLastCalledWith("East moved to 1 of 3", "done");
+  const after = { ...tallyOf(["East", "West", "South"], true), plot: dots.plot };
+  heard = heardOf(after, after);
+  made.redraw();
+  await frame();
+  press(plot, "End", { altKey: true });
+  expect(arrange).toHaveBeenLastCalledWith(dots.id, ["West", "South", "East"]);
+  expect(say).toHaveBeenLastCalledWith("East moved to 3 of 3", "done");
+});
+
 /** Rows laid out a bar's pitch apart, each as wide as ROW_WIDTH px. */
 const BAR_PITCH = BAR_THICK + BAR_GAP;
 const ROW_WIDTH = 200;

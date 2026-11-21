@@ -4,8 +4,17 @@
  * rest, which stand largest first.
  */
 
+import type { Plot } from "@document";
 import { GROUPS_SENT } from "@engine";
 import type { Press } from "@renderer/keys";
+
+/** A plot whose rows a person moves, which keeps their `order`: bars, stacked or not, and dots. */
+export type Arranged = Extract<Plot, { t: "bars" | "stack" | "dots" }>;
+
+/** arranged says whether a person moves `plot`'s rows. */
+export function arranged(plot: Plot): plot is Arranged {
+  return plot.t === "bars" || plot.t === "stack" || plot.t === "dots";
+}
 
 /**
  * Where Alt with each key moves the bar under the cursor, from `at` among

@@ -16,6 +16,8 @@ import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
+import { dots } from "@renderer/chart/kinds/dots";
+import { slope } from "@renderer/chart/kinds/slope";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
 import { pie } from "@renderer/chart/kinds/pie";
@@ -178,7 +180,32 @@ test("a scatter's kind makes what a scatter made, and says what its sample leave
 });
 
 test("each plot kind has its module", () => {
-  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box });
+  expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots, slope });
+});
+
+test("a slope chart's kind titles what it measures per value and its two states", () => {
+  const between = { col: 0, header: "year" };
+  const plot = { t: "slope", by: REGION, between, from: "2024", to: "2025" } as const;
+  expect(slope(plot).title()).toBe("rows per region, 2024 to 2025");
+  expect(slope({ ...plot, of: REVENUE, measure: "sum" }).title()).toBe(
+    "sum of revenue per region, 2024 to 2025",
+  );
+});
+
+test("a slope chart's kind reads its values, its states and its numbers from its columns", () => {
+  const between = { col: 0, header: "year" };
+  const plot = { t: "slope", by: REGION, between, from: "2024", to: "2025" } as const;
+  const means = slope({ ...plot, of: REVENUE, measure: "mean" });
+  expect([means.valued, means.numbered]).toStrictEqual([[REGION, between], [REVENUE]]);
+});
+
+test("a dot plot's kind titles its rows, its sum or its mean per value, and reads its numbers from its column", () => {
+  const means = dots({ t: "dots", by: REGION, of: REVENUE, measure: "mean" });
+  expect([means.title(), means.numbered]).toStrictEqual(["mean of revenue per region", [REVENUE]]);
+  const sums = dots({ t: "dots", by: REGION, of: REVENUE, measure: "sum" });
+  expect([sums.title(), sums.numbered]).toStrictEqual(["sum of revenue per region", [REVENUE]]);
+  const rows = dots({ t: "dots", by: REGION });
+  expect([rows.title(), rows.numbered]).toStrictEqual(["rows per region", []]);
 });
 
 /** Rows per region by channel, two regions in two channels and Other. */
