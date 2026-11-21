@@ -4,25 +4,37 @@
  * darker band a larger amount for every eye; below zero in the pole's steps.
  */
 
-import type { TimeTally } from "@engine";
+import type { HeatTally, TimeTally } from "@engine";
 import { el } from "@renderer/shell/util";
 import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
-import { BARS_INSET } from "./rows.ts";
+import { BARS_INSET, row, rowsIn } from "./rows.ts";
 import { mark } from "./scatter.ts";
 
 /** The bands a row folds its amounts into, and the ramp's steps they wear, lightest first: adjacent steps, which theme.test.ts holds apart. */
 export const HORIZON_BANDS = 3;
 const BAND_STEPS = [2, 3, 4] as const;
 
-/** The least room a period takes across, in px. */
+/** The most series a horizon chart draws a row for, and the least room a period takes across, in px. */
+export const HORIZON_ROWS_AT_MOST = 12;
 const PITCH_LEAST = 1;
 
-/** amountsOf gives `tally`'s rows, or sums, at its finest size whose periods get a px of `room`. */
-export function amountsOf(tally: TimeTally, summed: boolean, room: PlotRoom): number[] | undefined {
+/** A series a horizon chart draws: its value, none for a chart of one, and its amount per period. */
+export interface Series {
+  value: string | undefined;
+  amounts: readonly number[];
+}
+
+/** seriesOf gives `tally`'s series, of rows or sums, at its finest size whose periods get a px of `room`. */
+export function seriesOf(tally: TimeTally | HeatTally, summed: boolean, room: PlotRoom): Series[] {
   const fits = (span: number) => span * PITCH_LEAST <= room.width - 2 * BARS_INSET;
+  if (tally.t === "time") {
+    const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
+    return level ? [{ value: undefined, amounts: summed ? level.sum : level.rows }] : [];
+  }
   const level = tally.levels.find((l) => fits(l.span)) ?? tally.levels.at(-1);
-  return level === undefined ? undefined : summed ? level.sum : level.rows;
+  const amounts = level === undefined ? [] : summed ? level.sum : level.rows;
+  return amounts.map((each, i) => ({ value: tally.values[i]!.value, amounts: each }));
 }
 
 /** bandOf gives the path of band `k` of `amounts` folded into a row 1 high, each amount `band` a band, from zero up. */
@@ -57,12 +69,16 @@ function strip(amounts: readonly number[], band: number): SVGSVGElement {
   return drawn;
 }
 
-/** horizonRow draws `amounts` as a row of folded bands on a scale of the most of them. */
-export function horizonRow(amounts: readonly number[]): HTMLElement {
+/** horizonRows draws `series` in a plot `height` px high: a row each that fits, at most HORIZON_ROWS_AT_MOST, on one scale. */
+export function horizonRows(series: readonly Series[], height: number): HTMLElement {
   const box = barsBox("chart-horizon");
-  const most = Math.max(0, ...amounts.map(Math.abs));
-  const bands = el("div", "chart-horizon-row");
-  bands.append(strip(amounts, most === 0 ? 1 : most / HORIZON_BANDS));
-  box.append(bands);
+  const shown = series.slice(0, Math.min(HORIZON_ROWS_AT_MOST, Math.max(rowsIn(height), 1)));
+  const most = Math.max(0, ...shown.flatMap((s) => s.amounts.map(Math.abs)));
+  const band = most === 0 ? 1 : most / HORIZON_BANDS;
+  for (const { value, amounts } of shown) {
+    const bands = el("div", "chart-horizon-row");
+    bands.append(strip(amounts, band));
+    box.append(value === undefined ? bands : row(value, bands));
+  }
   return box;
 }
