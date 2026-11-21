@@ -14,6 +14,7 @@ import { headerOf, labelOf, openFormat } from '@ingest';
 import type { Format } from '@ingest';
 import { isNumber, parse } from '@num';
 import { MIN_EXAMPLES, Survey, gather } from '@pattern';
+import { inferPlace } from '@place';
 import type { Example } from '@pattern';
 import { described as describedProgram, text as programText } from '@program';
 import {
@@ -530,10 +531,15 @@ export class View {
 
     return schema.headers.map((header, col) => {
       const inferred = inferKind(shown.length, (row) => shown[row]![col] ?? '');
+      const sample = shown.map((row) => row[col] ?? '');
+      const place =
+        inferred.kind === 'text' ? inferPlace(sample, header) : undefined;
+      const info: ColumnInfo =
+        place === undefined
+          ? { header, ...inferred }
+          : { header, ...inferred, place };
       const binding = schema.binding(col);
-      return binding === undefined
-        ? { header, ...inferred }
-        : { header, ...inferred, binding };
+      return binding === undefined ? info : { ...info, binding };
     });
   }
 
