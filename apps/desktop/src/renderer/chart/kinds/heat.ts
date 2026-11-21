@@ -10,8 +10,13 @@ import { heated, tableOf } from "../table.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
-/** title gives the title a heatmap's plot makes: what it measures per value, per its size or over its dates. */
-function title({ by, at, sum, per }: HeatPlot): string {
+/** heatTitle gives the title a heatmap's plot makes, as a horizon chart by a column does: what it measures per value, per its size or over its dates. */
+export function heatTitle({
+  by,
+  at,
+  sum,
+  per,
+}: Pick<HeatPlot, "by" | "at" | "sum" | "per">): string {
   const words = { by: named(by), at: named(at) };
   if (per === "auto") {
     if (sum === undefined) return m.chart_title_heat_rows_over(words);
@@ -24,7 +29,7 @@ function title({ by, at, sum, per }: HeatPlot): string {
 
 /** heat is what a window does with a heatmap over periods' plot. */
 export const heat: ChartKind<HeatPlot> = (plot) => ({
-  title: () => title(plot),
+  title: () => heatTitle(plot),
   numbered: plot.sum === undefined ? [] : [plot.sum],
   dated: { at: plot.at, reading: "order" in plot ? plot.order : plot.unit },
   valued: [plot.by, plot.at],

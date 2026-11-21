@@ -374,3 +374,18 @@ test("a heatmap over periods' kind titles what it measures per value, per its si
   );
   await setLocale(baseLocale, { reload: false });
 });
+
+test("a horizon chart's kind titles what it measures as an over-time chart does, or per value as a heatmap does", async () => {
+  const at = { col: 0, header: "ordered" };
+  const plot = { t: "horizon", at, per: "month", order: "day" } as const;
+  expect(horizon(plot).title()).toBe("rows per month of ordered");
+  expect(horizon({ ...plot, sum: REVENUE, per: "auto" }).title()).toBe(
+    "sum of revenue over ordered",
+  );
+  expect(horizon({ ...plot, by: REGION }).title()).toBe("rows per region per month of ordered");
+  await setLocale("es", { reload: false });
+  expect(horizon({ ...plot, by: REGION, sum: REVENUE }).title()).toBe(
+    "suma de revenue por region por mes de ordered",
+  );
+  await setLocale(baseLocale, { reload: false });
+});
