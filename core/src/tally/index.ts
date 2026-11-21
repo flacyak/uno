@@ -2,13 +2,16 @@
  * @fileoverview Package tally adds up a column's numbers for its charts.
  */
 
+export { coarsen } from './coarsen.ts';
 export { ExactSum } from './exact.ts';
 export type { SavedSum } from './exact.ts';
 export {
+  Count,
   DISTINCT_AT_MOST,
   GROUPS_SENT,
   GroupsFold,
   LABEL_AT_MOST,
+  counted,
 } from './groups.ts';
 export type {
   Group,

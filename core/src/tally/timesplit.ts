@@ -6,6 +6,7 @@
 import { END_MINUTE, FIRST_MINUTE, readDate } from '@date';
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
+import { coarsen } from './coarsen.ts';
 import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
 import { Count, DISTINCT_AT_MOST, counted } from './groups.ts';
@@ -389,7 +390,7 @@ export class TimeSplitFold {
       this.cells--;
     }
     while (this.cells > PAIRS_AT_MOST && this.level < COARSER.length) {
-      this.coarsen();
+      this.coarsenGroups();
     }
   }
 
@@ -411,24 +412,13 @@ export class TimeSplitFold {
     return made;
   }
 
-  /** coarsen merges every group's periods into the next coarser ones that hold them. */
-  private coarsen(): void {
+  /** coarsenGroups merges every group's periods into the next coarser ones that hold them. */
+  private coarsenGroups(): void {
     const next = COARSER[this.level++]!;
     this.cells = 0;
     for (const group of this.groups.values()) {
-      const finer = [...group.periods];
-      group.periods.clear();
-      for (const [key, count] of finer) {
-        const into = group.periods.get(next(key));
-        if (into === undefined) {
-          group.periods.set(next(key), count);
-          this.cells++;
-          continue;
-        }
-        into.rows += count.rows;
-        into.numbers += count.numbers;
-        into.sum.merge(count.sum);
-      }
+      coarsen(group.periods, next);
+      this.cells += group.periods.size;
     }
   }
 }

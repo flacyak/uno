@@ -13,6 +13,7 @@ import {
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
 
+import { coarsen } from './coarsen.ts';
 import { ExactSum } from './exact.ts';
 import type { SavedSum } from './exact.ts';
 import { Count, counted } from './groups.ts';
@@ -377,23 +378,7 @@ export class TimeFold {
     counted(period, cell, sign, this.mark, this.skipped);
     if (period.rows === 0) this.periods.delete(key);
     while (this.periods.size > HELD_AT_MOST && this.level < COARSER.length) {
-      this.coarsen();
-    }
-  }
-
-  /** coarsen merges every period into the next coarser one that holds it. */
-  private coarsen(): void {
-    const finer = [...this.periods];
-    const next = COARSER[this.level++]!;
-    this.periods.clear();
-    for (const [key, count] of finer) {
-      const into = this.periods.get(next(key));
-      if (into === undefined) {
-        this.periods.set(next(key), count);
-        continue;
-      }
-      into.rows += count.rows;
-      into.sum.merge(count.sum);
+      coarsen(this.periods, COARSER[this.level++]!);
     }
   }
 }
