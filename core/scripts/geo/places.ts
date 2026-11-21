@@ -22,6 +22,22 @@ const NAME_FIELDS = (
   'NAME NAME_LONG NAME_EN ADMIN FORMAL_EN NAME_CIAWF NAME_SORT BRK_NAME ' +
   'ABBREV NAME_ES NAME_PT NAME_FR FORMAL_FR NAME_DE NAME_IT'
 ).split(' ');
+/** ISO 3166-1's English short names that no field above writes. */
+const ISO_NAMES: Record<string, string> = {
+  BO: 'Bolivia, Plurinational State of',
+  CD: 'Congo, The Democratic Republic of the',
+  FK: 'Falkland Islands (Malvinas)',
+  IR: 'Iran, Islamic Republic of',
+  KP: "Korea, Democratic People's Republic of",
+  KR: 'Korea, Republic of',
+  MD: 'Moldova, Republic of',
+  NL: 'Netherlands, Kingdom of the',
+  PS: 'Palestine, State of',
+  TZ: 'Tanzania, United Republic of',
+  VA: 'Holy See',
+  VE: 'Venezuela, Bolivarian Republic of',
+  VG: 'Virgin Islands (British)',
+};
 
 /** text is `p[field]` when it holds a value. */
 function text(p: Properties, field: string): string | undefined {
@@ -52,6 +68,7 @@ export function countries(features: readonly Properties[]): Country[] {
     const written = [
       ...parts.flatMap((p) => NAME_FIELDS.map((f) => text(p, f))),
       ...named.map((n) => n.of(code)),
+      ISO_NAMES[code],
     ].filter((n) => n !== undefined);
     const names = [
       ...new Map(written.map((n) => [n.toLowerCase(), n])).values(),
