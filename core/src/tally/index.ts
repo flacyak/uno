@@ -5,7 +5,7 @@
 export { coarsen } from './coarsen.ts';
 export { ExactSum } from './exact.ts';
 export { CELLS_AT_MOST, GridFold } from './grid.ts';
-export type { Cells, Coords, Unplaced } from './grid.ts';
+export type { Cells, Coords, SavedGrid, Unplaced } from './grid.ts';
 export { LEVEL_FINEST, cellAt, parentOf } from './quad.ts';
 export type { SavedSum } from './exact.ts';
 export {

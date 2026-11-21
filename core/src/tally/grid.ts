@@ -7,6 +7,7 @@ import { parse } from '@num';
 import type { Mark } from '@num';
 
 import { coarsen } from './coarsen.ts';
+import type { SavedSum } from './exact.ts';
 import { Count, counted } from './groups.ts';
 import {
   LAT_AT_MOST,
@@ -15,7 +16,10 @@ import {
   cellAt,
   parentOf,
 } from './quad.ts';
+import { isCount, isMark, isRecord } from './saved.ts';
+import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
+import { restoredCount } from './time.ts';
 
 /** The most cells a fold holds before every four merge into one. */
 export const CELLS_AT_MOST = 8_192;
@@ -40,6 +44,23 @@ export interface Cells {
   unplaced: { rows: number; sum: number };
   left: Unplaced;
   /** Cells of the summed column left out, none when counting rows. */
+  skipped: Skipped;
+}
+
+/** One cell as a save writes it: its key, its rows, and their sum when summed. */
+type SavedCell = [number, number] | [number, number, SavedSum];
+
+/**
+ * SavedGrid is every bit of a GridFold, as a save writes it. Cells are in
+ * ascending key order, so a fold saves the same bytes however its rows came.
+ */
+export interface SavedGrid {
+  coords: Coords;
+  mark?: Mark;
+  level: number;
+  cells: SavedCell[];
+  unplaced: { rows: number; sum?: SavedSum };
+  left: Unplaced;
   skipped: Skipped;
 }
 
@@ -75,6 +96,76 @@ export class GridFold {
   /** remove takes back a row add counted, and an empty cell with it. */
   remove(lat: string, lon: string, cell = ''): void {
     this.count(lat, lon, cell, -1);
+  }
+
+  /** saved is what the fold holds, which `restored` reads back as it was. */
+  saved(): SavedGrid {
+    const summed = this.mark !== undefined;
+    const { rows, sum } = this.unplaced;
+    const cells = [...this.cells].sort(([a], [b]) => a - b);
+    return {
+      coords: { ...this.coords },
+      mark: this.mark,
+      level: this.level,
+      cells: cells.map(([key, c]): SavedCell =>
+        summed ? [key, c.rows, c.sum.saved()] : [key, c.rows],
+      ),
+      unplaced: summed ? { rows, sum: sum.saved() } : { rows },
+      left: { ...this.left },
+      skipped: { ...this.skipped },
+    };
+  }
+
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none: a
+   * level past 0 to LEVEL_FINEST, more than CELLS_AT_MOST cells, a key out
+   * of its level's range or out of order, or an empty cell.
+   */
+  static restored(saved: unknown): GridFold | undefined {
+    if (!isRecord(saved) || !isRecord(saved['coords'])) return undefined;
+    const { mark, level, cells, unplaced, left } = saved;
+    const { lat, lon } = saved['coords'];
+    const skipped = restoredSkipped(saved['skipped']);
+    const unread = restoredSkipped(left);
+    const outside = isRecord(left) ? left['outside'] : undefined;
+    const fields =
+      isMark(lat) &&
+      isMark(lon) &&
+      (mark === undefined || isMark(mark)) &&
+      typeof level === 'number' &&
+      Number.isInteger(level) &&
+      level >= 0 &&
+      level <= LEVEL_FINEST &&
+      Array.isArray(cells) &&
+      cells.length <= CELLS_AT_MOST &&
+      isRecord(unplaced) &&
+      unread !== undefined &&
+      isCount(outside) &&
+      skipped !== undefined;
+    if (!fields) return undefined;
+    const fold = new GridFold({ lat, lon }, mark);
+    fold.level = level;
+    // Level z holds 2^z rows of 2^(z+1) columns.
+    const keys = 2 ** (2 * level + 1);
+    let last = -1;
+    for (const c of cells as unknown[]) {
+      const [key, rows, sum]: unknown[] = Array.isArray(c) ? c : [];
+      const count = restoredCount(rows, sum, mark);
+      const ordered =
+        typeof key === 'number' &&
+        Number.isSafeInteger(key) &&
+        key > last &&
+        key < keys;
+      if (!ordered || count === undefined || count.rows === 0) return undefined;
+      fold.cells.set(key, count);
+      last = key;
+    }
+    const count = restoredCount(unplaced['rows'], unplaced['sum'], mark);
+    if (count === undefined) return undefined;
+    Object.assign(fold.unplaced, count);
+    Object.assign(fold.left, unread, { outside });
+    Object.assign(fold.skipped, skipped);
+    return fold;
   }
 
   /** read is what the fold holds, as plain numbers. */
