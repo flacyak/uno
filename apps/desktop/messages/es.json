@@ -521,6 +521,7 @@
   "chart_kind_box": "Diagrama de caja",
   "chart_kind_swarm": "Enjambre",
   "chart_kind_parallel": "Coordenadas paralelas",
+  "chart_kind_chord": "Cuerdas",
   "chart_form_axis": "eje {n}",
   "chart_form_axis_none": "ninguno",
   "chart_kind_dots": "Gráfico de puntos",

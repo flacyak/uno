@@ -505,6 +505,7 @@
   "chart_kind_box": "Box plot",
   "chart_kind_swarm": "Beeswarm",
   "chart_kind_parallel": "Parallel coordinates",
+  "chart_kind_chord": "Chord",
   "chart_form_axis": "axis {n}",
   "chart_form_axis_none": "none",
   "chart_kind_dots": "Dot plot",

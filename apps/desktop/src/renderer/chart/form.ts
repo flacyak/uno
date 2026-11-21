@@ -160,6 +160,12 @@ const READS_NOTHING: Partial<Record<Rereads, (named: { name: string }) => string
 /** How many number columns a scatter needs: one across it and one up it. */
 const SCATTER_COLUMNS = 2;
 
+/** How many columns a chord needs: one its flows run from and another they run to. */
+const CHORD_COLUMNS = 2;
+
+/** Where a chord's To stands among the columns `offer` keeps, after the selects choose names before it. */
+const CHORD_TO = 10;
+
 export class ChartForm {
   private readonly form: PopForm;
   private readonly from = select("source");
@@ -222,6 +228,13 @@ export class ChartForm {
     field(m.chart_form_split(), this.split),
   ];
   private readonly paired = [field(m.chart_form_x(), this.x), field(m.chart_form_y(), this.y)];
+  /** The two columns a chord's flows run from and to, two different ones. */
+  private readonly flowFrom = select("flow-from");
+  private readonly flowTo = select("flow-to");
+  private readonly flowed = [
+    field(m.chart_form_from(), this.flowFrom),
+    field(m.chart_form_to(), this.flowTo),
+  ];
   /** The number columns parallel coordinates draw an axis of, in order, those past the least of none or one. */
   private readonly axes = Array.from({ length: PARALLEL_AXES_AT_MOST }, (_, i) =>
     select(`axis-${i + 1}`),
@@ -290,6 +303,7 @@ export class ChartForm {
     this.dotsOf.addEventListener("change", () => this.ask());
     this.between.addEventListener("change", () => this.stated());
     this.stateFrom.addEventListener("change", () => this.ask());
+    this.flowFrom.addEventListener("change", () => this.ask());
     for (const axis of this.axes) axis.addEventListener("change", () => this.ask());
     this.per.append(...PERS.map(([per, words]) => option(words(), per)));
 
@@ -312,6 +326,7 @@ export class ChartForm {
       this.between,
       this.stateFrom,
       this.stateTo,
+      this.flowTo,
     ]) {
       column.addEventListener("change", () => this.name());
     }
@@ -338,6 +353,7 @@ export class ChartForm {
       this.spread,
       this.boxed,
       this.rowed,
+      ...this.flowed,
       ...this.grouped,
       ...this.sloping,
       ...this.dotted,
@@ -361,8 +377,9 @@ export class ChartForm {
   private choose(): void {
     const chosen = (select: HTMLSelectElement): ChartColumn | undefined =>
       select.value === "" ? undefined : this.column(select.value);
+    // A chord's From is the column its flows run by.
     const [by, ...kept] = [
-      this.by,
+      this.kind.value === "chord" ? this.flowFrom : this.by,
       this.sum,
       this.x,
       this.y,
@@ -373,6 +390,7 @@ export class ChartForm {
       this.dotsOf,
       this.between,
       this.rowsBy,
+      this.flowTo,
     ].map(chosen);
     const axes = this.chosenAxes();
     this.source = this.sources[Number(this.from.value)] ?? this.source;
@@ -397,8 +415,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column; the form makes no chord yet, so opens one as such.
-    this.kind.value = plot.t === "stack" || plot.t === "chord" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "parallel") this.offer(this.placeAt(plot.axes[0]), [], plot.axes);
     else if (plot.t === "time" || plot.t === "week" || plot.t === "heat" || plot.t === "horizon") {
@@ -417,7 +435,8 @@ export class ChartForm {
     } else if (plot.t === "stack") {
       this.offer(this.placeAt(plot.by), [plot.sum, undefined, undefined, undefined, plot.split]);
     } else if (plot.t === "chord") {
-      this.offer(this.placeAt(plot.from), [plot.sum, undefined, undefined, undefined, plot.to]);
+      const unused = Array.from({ length: CHORD_TO - 1 }, () => undefined);
+      this.offer(this.placeAt(plot.from), [plot.sum, ...unused, plot.to]);
     } else if (plot.t === "histogram" || plot.t === "box" || plot.t === "swarm") {
       const by = plot.t === "histogram" ? undefined : plot.by;
       const unused = [undefined, undefined, undefined, undefined, undefined];
@@ -446,6 +465,7 @@ export class ChartForm {
     if (["time", "week", "horizon"].includes(this.kind.value)) return this.at;
     if (["histogram", "box", "swarm"].includes(this.kind.value)) return this.of;
     if (this.kind.value === "parallel") return this.axes[0]!;
+    if (this.kind.value === "chord") return this.flowFrom;
     return this.kind.value === "scatter" ? this.x : this.by;
   }
 
@@ -515,6 +535,12 @@ export class ChartForm {
     const others = columns.flatMap((c, i) => (i === by ? [] : [{ kind: c.kind, i }]));
     const between = others.find(({ kind }) => kind === "text") ?? others[0];
     this.between.value = String(this.placed(kept[8]) ?? between?.i ?? "");
+    // A chord's flows run from By's column, to another column of names to begin.
+    for (const flow of [this.flowFrom, this.flowTo]) {
+      flow.replaceChildren(...columns.map((c, i) => fromFile(c.header, i)));
+    }
+    this.flowFrom.value = this.by.value;
+    this.flowTo.value = String(this.placed(kept[CHORD_TO]) ?? between?.i ?? "");
     this.stated(false);
     this.x.value = String(xAt ?? "");
     this.y.value = String(yAt ?? "");
@@ -536,6 +562,8 @@ export class ChartForm {
       this.kind.disable(t, dates.length === 0);
       if (dates.length === 0 && this.kind.value === t) this.kind.value = "bars";
     }
+    this.kind.disable("chord", columns.length < CHORD_COLUMNS);
+    if (columns.length < CHORD_COLUMNS && this.kind.value === "chord") this.kind.value = "bars";
     const parallels = numbers.length >= PARALLEL_AXES_LEAST;
     this.kind.disable("parallel", !parallels);
     if (!parallels && this.kind.value === "parallel") this.kind.value = "bars";
@@ -585,6 +613,13 @@ export class ChartForm {
     for (const made of this.split.options) made.disabled = made.value === this.by.value;
     if (this.split.value === this.by.value) this.split.value = "";
     for (const line of this.paired) line.hidden = t !== "scatter";
+    // A chord asks for From and To, two columns, and Sum of, in place of By.
+    for (const line of this.flowed) line.hidden = t !== "chord";
+    this.grouped[0]!.hidden ||= t === "chord";
+    for (const made of this.flowTo.options) made.disabled = made.value === this.flowFrom.value;
+    if (this.flowTo.value === this.flowFrom.value) {
+      this.flowTo.value = [...this.flowTo.options].find((made) => !made.disabled)?.value ?? "";
+    }
     // An axis past one of none names none, and no axis names a column another does.
     const none = this.chosenAxes().length;
     for (const axis of this.axes.slice(none + 1)) axis.value = "";
@@ -604,6 +639,11 @@ export class ChartForm {
       return { t: "scatter", x: this.column(this.x.value), y: this.column(this.y.value) };
     }
     if (this.kind.value === "parallel") return { t: "parallel", axes: this.chosenAxes() };
+    if (this.kind.value === "chord") {
+      const sum = this.sum.value === "" ? {} : { sum: this.column(this.sum.value) };
+      const [from, to] = [this.column(this.flowFrom.value), this.column(this.flowTo.value)];
+      return { t: "chord", from, to, ...sum };
+    }
     if (this.kind.value === "time") return this.overTime();
     if (this.kind.value === "week") return this.weekly();
     if (this.kind.value === "heat") return this.heated();

@@ -521,6 +521,7 @@
   "chart_kind_box": "Diagrama de caixa",
   "chart_kind_swarm": "Enxame",
   "chart_kind_parallel": "Coordenadas paralelas",
+  "chart_kind_chord": "Cordas",
   "chart_form_axis": "eixo {n}",
   "chart_form_axis_none": "nenhum",
   "chart_kind_dots": "Gráfico de pontos",
