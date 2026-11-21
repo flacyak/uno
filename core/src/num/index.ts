@@ -131,5 +131,52 @@ function decimal(v: string, mark: Mark): number | undefined {
  * undefined when what is left fails to read as a decimal number.
  */
 export function parse(v: string, mark: Mark): number | undefined {
+  const plain = plainAt(v, mark);
+  if (plain !== NOT_PLAIN) return plainDecimal(v, plain);
   return decimal(signed(undress(trimSpace(v), mark)), mark);
+}
+
+const MINUS = 0x2d;
+const DIGIT_0 = 0x30;
+const DIGIT_9 = 0x39;
+const MARK_CODE: Record<Mark, number> = { point: 0x2e, comma: 0x2c };
+/** What plainAt returns for a value outside the plain shape. */
+const NOT_PLAIN = -2;
+/** What plainAt returns for a plain whole number, which has no mark. */
+const WHOLE = -1;
+
+/** isDigitCode reports whether `c` is the code of an ASCII digit. */
+function isDigitCode(c: number): boolean {
+  return c >= DIGIT_0 && c <= DIGIT_9;
+}
+
+/**
+ * plainAt reads whether `v` is a plain decimal, `-?[0-9]+([mark][0-9]+)?`,
+ * the shape exports and GPS loggers write. It returns where its mark stands,
+ * WHOLE when it has none, and NOT_PLAIN for anything else, which the full
+ * path reads. A plain decimal is what the full path reads unchanged, so
+ * trimming, decoration and `signed` leave it as it was.
+ */
+function plainAt(v: string, mark: Mark): number {
+  let i = v.length > 0 && v.charCodeAt(0) === MINUS ? 1 : 0;
+  const first = i;
+  while (i < v.length && isDigitCode(v.charCodeAt(i))) i++;
+  if (i === first) return NOT_PLAIN;
+  if (i === v.length) return WHOLE;
+  if (v.charCodeAt(i) !== MARK_CODE[mark]) return NOT_PLAIN;
+  const at = i++;
+  while (i < v.length && isDigitCode(v.charCodeAt(i))) i++;
+  if (i === at + 1 || i !== v.length) return NOT_PLAIN;
+  return at;
+}
+
+/**
+ * plainDecimal reads a plain decimal whose mark stands at `at`, as the full
+ * path would: `Number` of it written with a full stop, which rounds once,
+ * and undefined when it is too large for a float64.
+ */
+function plainDecimal(v: string, at: number): number | undefined {
+  const n =
+    at === WHOLE ? Number(v) : Number(v.slice(0, at) + '.' + v.slice(at + 1));
+  return Number.isFinite(n) ? n : undefined;
 }
