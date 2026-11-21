@@ -297,9 +297,14 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
 function folded(charts: Chart[], rows = ROWS, folders = FOLDERS): Tallies {
   const tallies = new Tallies(folders);
   for (const chart of charts) tallies.attach(chart, HEADERS);
+  return fed(tallies, 0, rows);
+}
+
+/** fed folds the rows of the sheet from `first` to `last` into `tallies`, a TINY block at a time. */
+function fed(tallies: Tallies, first = 0, last = ROWS): Tallies {
   const shown = (col: number) => (row: number) => sales.display(row, col);
-  for (let from = 0; from < rows; from += TINY.blockRows) {
-    const end = Math.min(from + TINY.blockRows, rows);
+  for (let from = first; from < last; from += TINY.blockRows) {
+    const end = Math.min(from + TINY.blockRows, last);
     tallies.fold(from / TINY.blockRows, from, end, shown);
   }
   return tallies;
@@ -801,21 +806,39 @@ test('an edit moves dots of a mean by its one row, and a save keeps the fold, wh
   expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });
 
-test('a slope folded a block at a time reads as the pure split fold of its two states, and another From or To, or a mean, reads no block', () => {
+test("a slope folds its two states' rows alone and reads as the pure split fold's slope, a mean of them reading no block, and another From or To folding again", () => {
   const tallies = folded([CHANNEL_SLOPE]);
-  expect(tallies.read(ROWS, true)).toStrictEqual([
-    [CHANNEL_SLOPE.id, pure(CHANNEL_SLOPE.plot)],
-  ]);
-  const plot: SlopePlot = {
-    ...WEB_TO_DIRECT,
-    from: 'partner',
-    measure: 'mean',
-  };
-  tallies.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
+  const { id } = CHANNEL_SLOPE;
+  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(WEB_TO_DIRECT)]]);
+  const states = JSON.stringify(['web', 'direct']);
+  expect(tallies.saved()[id]?.key).toBe(
+    `pair ${REGION} ${CHANNEL} ${REVENUE} ${states}`,
+  );
+  const mean: SlopePlot = { ...WEB_TO_DIRECT, measure: 'mean' };
+  tallies.attach({ ...CHANNEL_SLOPE, plot: mean }, HEADERS);
   expect(tallies.from()).toBe(ROWS);
-  expect(tallies.read(ROWS, true)).toStrictEqual([
-    [CHANNEL_SLOPE.id, pure(plot)],
-  ]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(mean)]]);
+  const plot: SlopePlot = { ...WEB_TO_DIRECT, from: 'partner' };
+  tallies.attach({ ...CHANNEL_SLOPE, plot }, HEADERS);
+  expect(tallies.from()).toBe(0);
+  fed(tallies);
+  expect(tallies.read(ROWS, true)).toStrictEqual([[id, pure(plot)]]);
+});
+
+test('an edit to a slope moves its fold by the row where it is or was in either state, and by none in another', async () => {
+  const tallies = folded([CHANNEL_SLOPE]);
+  tallies.read(ROWS, true);
+  const sheet = read(NAME, bytes);
+  const block = Math.floor(EDITED / TINY.blockRows);
+  for (const channel of ['partner', 'web', 'mail']) {
+    const before = shownRow(sheet, EDITED);
+    sheet.set(EDITED, CHANNEL, channel);
+    const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+    await tallies.mend(moved, blocks(sheet));
+    expect(tallies.read(ROWS, true)).toStrictEqual([
+      [CHANNEL_SLOPE.id, pure(WEB_TO_DIRECT, sheet)],
+    ]);
+  }
 });
 
 test("dots of rows or a sum share a bar chart's fold, and read as its pure fold", () => {
