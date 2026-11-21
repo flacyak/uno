@@ -1120,6 +1120,7 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   horizon: ['t', 'at', 'by', 'sum', 'per', 'order', 'unit'],
   swarm: ['t', 'of', 'by'],
   parallel: ['t', 'axes'],
+  chord: ['t', 'from', 'to', 'sum'],
 };
 
 /** What a dot plot's dots may stand at. */
@@ -1205,6 +1206,7 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'horizon') return parseHorizon(where, p);
   if (t === 'swarm') return parseSwarm(where, p);
   if (t === 'parallel') return parseParallel(where, p);
+  if (t === 'chord') return parseChord(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };

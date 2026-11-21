@@ -397,8 +397,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
+    // A stacked chart is bars split by a column; the form makes no chord yet, so opens one as such.
+    this.kind.value = plot.t === "stack" || plot.t === "chord" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "parallel") this.offer(this.placeAt(plot.axes[0]), [], plot.axes);
     else if (plot.t === "time" || plot.t === "week" || plot.t === "heat" || plot.t === "horizon") {
@@ -416,6 +416,8 @@ export class ChartForm {
       ]);
     } else if (plot.t === "stack") {
       this.offer(this.placeAt(plot.by), [plot.sum, undefined, undefined, undefined, plot.split]);
+    } else if (plot.t === "chord") {
+      this.offer(this.placeAt(plot.from), [plot.sum, undefined, undefined, undefined, plot.to]);
     } else if (plot.t === "histogram" || plot.t === "box" || plot.t === "swarm") {
       const by = plot.t === "histogram" ? undefined : plot.by;
       const unused = [undefined, undefined, undefined, undefined, undefined];

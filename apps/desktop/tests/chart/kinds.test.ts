@@ -16,6 +16,7 @@ import { COLUMN_PITCH_LEAST, columns, fitted } from "@renderer/chart/columns";
 import type { ChartKind } from "@renderer/chart/kind";
 import { bars } from "@renderer/chart/kinds/bars";
 import { box } from "@renderer/chart/kinds/box";
+import { chord } from "@renderer/chart/kinds/chord";
 import { dots } from "@renderer/chart/kinds/dots";
 import { slope } from "@renderer/chart/kinds/slope";
 import { heat } from "@renderer/chart/kinds/heat";
@@ -200,6 +201,7 @@ test("each plot kind has its module", () => {
     horizon,
     swarm,
     parallel,
+    chord,
   });
 });
 
