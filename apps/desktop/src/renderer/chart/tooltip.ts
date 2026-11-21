@@ -107,7 +107,13 @@ export interface Target {
   lines?: boolean;
   /** reveal scrolls the mark into view where the keys step to it, for a plot that scrolls. */
   reveal?: () => void;
+  /** spot gives where in the page the box stands by in place of `at`, for a point on a mark, as a line's at an axis. */
+  spot?: () => DOMRectReadOnly;
 }
+
+/** anchorOf gives where in the page the box stands by `target` when the keys step to it. */
+const anchorOf = (target: Target): DOMRectReadOnly =>
+  target.spot?.() ?? target.at.getBoundingClientRect();
 
 /** The marks of a drawing, in the order the keys step through them. */
 export interface Targets {
@@ -142,7 +148,7 @@ export function named(value: string): HTMLElement {
  * column gives a column's name as the box says it: the file's header, marked
  * as the file's, or the app's name for one with none.
  */
-function column({ header, col }: ChartColumn): HTMLElement {
+export function column({ header, col }: ChartColumn): HTMLElement {
   const label = columnLabel(header, col);
   return unnamed(header) ? el("span", "", label) : el("bdi", "from-file", label);
 }
@@ -487,7 +493,7 @@ export class Tooltip {
     const point = this.cursor?.point;
     if (point !== undefined) this.hover(document.elementFromPoint(point.x, point.y), point);
     else if (this.cursor !== undefined) {
-      const by = this.targets.all[this.cursor.at]!.at.getBoundingClientRect();
+      const by = anchorOf(this.targets.all[this.cursor.at]!);
       const sight = this.plot.getBoundingClientRect();
       this.box.hidden = by.right <= sight.left || by.left >= sight.right;
       this.stand(by);
@@ -515,19 +521,19 @@ export class Tooltip {
    */
   private place(at: number, point?: Point): void {
     const target = this.targets.all[at]!;
-    if (this.worn !== target.mark) {
+    const moved = this.worn !== target.mark;
+    if (moved) {
       this.worn?.classList.remove(CURSOR);
       target.mark.classList.add(CURSOR);
       this.worn = target.mark;
       if (target.front) target.mark.parentElement?.append(target.mark);
-      this.say(target);
     }
+    // A mark of several targets, as a line at each axis, says the one the cursor is on.
+    if (moved || this.cursor?.at !== at) this.say(target);
     this.cursor = { at, point };
     if (point === undefined) target.reveal?.();
     this.box.hidden = false;
-    this.stand(
-      point === undefined ? target.at.getBoundingClientRect() : new DOMRect(point.x, point.y),
-    );
+    this.stand(point === undefined ? anchorOf(target) : new DOMRect(point.x, point.y));
   }
 
   /**

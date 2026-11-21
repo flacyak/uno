@@ -18,6 +18,8 @@ import {
   BY_HAND,
   DAY_MINUTES,
   HOUR_MINUTES,
+  PARALLEL_AXES_AT_MOST,
+  PARALLEL_AXES_LEAST,
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
 } from "@document";
@@ -220,6 +222,13 @@ export class ChartForm {
     field(m.chart_form_split(), this.split),
   ];
   private readonly paired = [field(m.chart_form_x(), this.x), field(m.chart_form_y(), this.y)];
+  /** The number columns parallel coordinates draw an axis of, in order, those past the least of none or one. */
+  private readonly axes = Array.from({ length: PARALLEL_AXES_AT_MOST }, (_, i) =>
+    select(`axis-${i + 1}`),
+  );
+  private readonly axised = this.axes.map((axis, i) =>
+    field(m.chart_form_axis({ n: num(i + 1) }), axis),
+  );
   private readonly title = el("input");
   /** The minutes between checks of the source, or By hand. */
   private readonly refresh = select("refresh");
@@ -281,6 +290,7 @@ export class ChartForm {
     this.dotsOf.addEventListener("change", () => this.ask());
     this.between.addEventListener("change", () => this.stated());
     this.stateFrom.addEventListener("change", () => this.ask());
+    for (const axis of this.axes) axis.addEventListener("change", () => this.ask());
     this.per.append(...PERS.map(([per, words]) => option(words(), per)));
 
     if (opening.t === "insert") this.inserts(opening.col);
@@ -332,6 +342,7 @@ export class ChartForm {
       ...this.sloping,
       ...this.dotted,
       ...this.paired,
+      ...this.axised,
       field(m.chart_form_title_field(), this.title),
       field(m.chart_form_refresh(), schedule),
     ];
@@ -363,11 +374,12 @@ export class ChartForm {
       this.between,
       this.rowsBy,
     ].map(chosen);
+    const axes = this.chosenAxes();
     this.source = this.sources[Number(this.from.value)] ?? this.source;
     if (this.opening.t === "insert") {
       this.form.heading.textContent = m.chart_form_title_source({ source: this.source.name });
     }
-    this.offer(this.placeAt(by), kept);
+    this.offer(this.placeAt(by), kept, axes);
     this.reveal();
   }
 
@@ -388,6 +400,7 @@ export class ChartForm {
     // A stacked chart is bars split by a column.
     this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
+    else if (plot.t === "parallel") this.offer(this.placeAt(plot.axes[0]), [], plot.axes);
     else if (plot.t === "time" || plot.t === "week" || plot.t === "heat" || plot.t === "horizon") {
       if (plot.t !== "week") this.per.value = plot.per;
       const by = plot.t === "heat" || plot.t === "horizon" ? this.placed(plot.by) : undefined;
@@ -403,8 +416,8 @@ export class ChartForm {
       ]);
     } else if (plot.t === "stack") {
       this.offer(this.placeAt(plot.by), [plot.sum, undefined, undefined, undefined, plot.split]);
-    } else if (plot.t === "histogram" || plot.t === "box") {
-      const by = plot.t === "box" ? plot.by : undefined;
+    } else if (plot.t === "histogram" || plot.t === "box" || plot.t === "swarm") {
+      const by = plot.t === "histogram" ? undefined : plot.by;
       const unused = [undefined, undefined, undefined, undefined, undefined];
       this.offer(this.placeAt(plot.of), [...unused, plot.of, by]);
     } else if (plot.t === "dots" || plot.t === "slope") {
@@ -429,15 +442,22 @@ export class ChartForm {
   /** first gives the column select the kind chosen asks for first. */
   private first(): HTMLSelectElement {
     if (["time", "week", "horizon"].includes(this.kind.value)) return this.at;
-    if (this.kind.value === "histogram" || this.kind.value === "box") return this.of;
+    if (["histogram", "box", "swarm"].includes(this.kind.value)) return this.of;
+    if (this.kind.value === "parallel") return this.axes[0]!;
     return this.kind.value === "scatter" ? this.x : this.by;
   }
 
   /** offer fills the selects with the source's columns, choosing `by` and,
    * for Sum of, X and Y, where the source holds the number columns `kept`. X is
    * otherwise `by` where it holds numbers, or else the first number column, and
-   * never Y's, and Y is otherwise one other than X. */
-  private offer(by: number, kept: ReadonlyArray<ChartColumn | undefined> = []): void {
+   * never Y's, and Y is otherwise one other than X. Parallel coordinates' axes
+   * are those of `axes` the source holds, and the number columns from `by` on
+   * past them, to the least. */
+  private offer(
+    by: number,
+    kept: ReadonlyArray<ChartColumn | undefined> = [],
+    axes: readonly ChartColumn[] = [],
+  ): void {
     const columns = this.source.band.columns;
     const numbers: number[] = [];
     const dates = columns.flatMap((c, i) => (c.kind === "date" || c.unit !== undefined ? [i] : []));
@@ -497,6 +517,15 @@ export class ChartForm {
     this.x.value = String(xAt ?? "");
     this.y.value = String(yAt ?? "");
     this.of.value = String(held(kept[5]) ?? (numbers.includes(by) ? by : (numbers[0] ?? "")));
+    const along = [...numbers.filter((i) => i >= by), ...numbers.filter((i) => i < by)];
+    const axed = axes.flatMap((axis) => held(axis) ?? []);
+    const least = Math.max(axed.length, PARALLEL_AXES_LEAST);
+    const order = [...new Set([...axed, ...along])].slice(0, least);
+    for (const [i, axis] of this.axes.entries()) {
+      const none = i < PARALLEL_AXES_LEAST ? [] : [option(m.chart_form_axis_none(), "")];
+      axis.replaceChildren(...none, ...numbers.map((n) => fromFile(columns[n]!.header, n)));
+      axis.value = String(order[i] ?? "");
+    }
 
     const scatters = numbers.length >= SCATTER_COLUMNS;
     this.kind.disable("scatter", !scatters);
@@ -505,7 +534,10 @@ export class ChartForm {
       this.kind.disable(t, dates.length === 0);
       if (dates.length === 0 && this.kind.value === t) this.kind.value = "bars";
     }
-    for (const t of ["histogram", "box"]) {
+    const parallels = numbers.length >= PARALLEL_AXES_LEAST;
+    this.kind.disable("parallel", !parallels);
+    if (!parallels && this.kind.value === "parallel") this.kind.value = "bars";
+    for (const t of ["histogram", "box", "swarm"]) {
       this.kind.disable(t, numbers.length === 0);
       if (numbers.length === 0 && this.kind.value === t) this.kind.value = "bars";
     }
@@ -525,13 +557,15 @@ export class ChartForm {
     this.timed[1]!.hidden ||= order === undefined || unit !== undefined;
     // A week has its hours, so a week heatmap asks for no size.
     this.timed[2]!.hidden ||= t === "week";
-    const spreads = t === "histogram" || t === "box";
-    this.spread.hidden = !spreads;
-    this.boxed.hidden = t !== "box";
+    const numbered = t === "histogram" || t === "box" || t === "swarm";
+    this.spread.hidden = !numbered;
+    this.boxed.hidden = t !== "box" && t !== "swarm";
     this.rowed.hidden = t !== "horizon";
+    // A scatter and parallel coordinates ask only for their number columns.
+    const related = t === "scatter" || t === "parallel";
     this.grouped[0]!.hidden =
-      t === "scatter" || t === "time" || t === "week" || t === "horizon" || spreads;
-    this.grouped[1]!.hidden = t === "scatter" || t === "dots" || t === "slope" || spreads;
+      related || t === "time" || t === "week" || t === "horizon" || numbered;
+    this.grouped[1]!.hidden = related || t === "dots" || t === "slope" || numbered;
     const measures = t === "dots" || t === "slope";
     this.dotted[0]!.hidden = !measures;
     this.dotted[1]!.hidden = !measures || this.dotsOf.value === "";
@@ -541,7 +575,7 @@ export class ChartForm {
     for (const made of this.stateTo.options) made.disabled = made.value === this.stateFrom.value;
     const other = [...this.stateTo.options].find((made) => !made.disabled)?.value ?? "";
     if (this.stateTo.value === this.stateFrom.value) this.stateTo.value = other;
-    // A box plot splits by another column, never by its numbers'.
+    // A box plot or a beeswarm splits by another column, never by its numbers'.
     for (const made of this.boxBy.options) made.disabled = made.value === this.of.value;
     if (this.boxBy.value === this.of.value) this.boxBy.value = "";
     this.grouped[2]!.hidden = t !== "bars";
@@ -549,6 +583,15 @@ export class ChartForm {
     for (const made of this.split.options) made.disabled = made.value === this.by.value;
     if (this.split.value === this.by.value) this.split.value = "";
     for (const line of this.paired) line.hidden = t !== "scatter";
+    // An axis past one of none names none, and no axis names a column another does.
+    const none = this.chosenAxes().length;
+    for (const axis of this.axes.slice(none + 1)) axis.value = "";
+    for (const [i, axis] of this.axes.entries()) {
+      this.axised[i]!.hidden = t !== "parallel" || i > none;
+      const others = this.axes.filter((other) => other !== axis).map((other) => other.value);
+      for (const made of axis.options)
+        made.disabled = made.value !== "" && others.includes(made.value);
+    }
     this.name();
   }
 
@@ -558,16 +601,16 @@ export class ChartForm {
     if (this.kind.value === "scatter") {
       return { t: "scatter", x: this.column(this.x.value), y: this.column(this.y.value) };
     }
+    if (this.kind.value === "parallel") return { t: "parallel", axes: this.chosenAxes() };
     if (this.kind.value === "time") return this.overTime();
     if (this.kind.value === "week") return this.weekly();
     if (this.kind.value === "heat") return this.heated();
     if (this.kind.value === "horizon") return this.horizoned();
     const of = this.column(this.of.value);
     if (this.kind.value === "histogram") return { t: "histogram", of, span: this.span };
-    if (this.kind.value === "box") {
-      const by = this.boxBy.value === "" ? {} : { by: this.column(this.boxBy.value) };
-      return { t: "box", of, ...by, span: this.span };
-    }
+    const split = this.boxBy.value === "" ? {} : { by: this.column(this.boxBy.value) };
+    if (this.kind.value === "box") return { t: "box", of, ...split, span: this.span };
+    if (this.kind.value === "swarm") return { t: "swarm", of, ...split };
     const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
     if (this.kind.value === "dots") return this.dots(by);
@@ -704,6 +747,13 @@ export class ChartForm {
     const unit = this.source.band.columns[at.col]?.unit;
     if (unit !== undefined) return { unit };
     return { order: ORDERS.find(([reading]) => reading === this.order.value)?.[0] ?? "day" };
+  }
+
+  /** chosenAxes gives the columns the axes name, in order, up to the first of none. */
+  private chosenAxes(): ChartColumn[] {
+    const named = this.axes.map((axis) => axis.value);
+    const none = named.indexOf("");
+    return named.slice(0, none === -1 ? named.length : none).map((value) => this.column(value));
   }
 
   /** column gives the source's column whose option has `value`, as a chart reads it. */

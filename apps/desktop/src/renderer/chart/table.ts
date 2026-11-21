@@ -14,9 +14,11 @@ import type {
   ChartColumn,
   DotsPlot,
   HeatPlot,
+  ParallelPlot,
   Plot,
   SlopePlot,
   StackPlot,
+  SwarmPlot,
   TimePlot,
   WeekPlot,
 } from "@document";
@@ -24,10 +26,12 @@ import { DISTINCT_AT_MOST } from "@engine";
 import type {
   BoxTally,
   Groups,
+  ParallelTally,
   Sample,
   SlopeTally,
   SpreadTally,
   StackTally,
+  SwarmTally,
   TimeTally,
   WeekTally,
   HeatTally,
@@ -40,6 +44,7 @@ import type { Level, SplitLevel, TimeLevel } from "@tally";
 import { SEP, blank, notNumbers } from "./caption.ts";
 import { middle } from "./box.ts";
 import { measuresOf } from "./dots.ts";
+import { LINES_DRAWN } from "./parallel.ts";
 import { endsOf } from "./slope.ts";
 import { slotsOf } from "./week.ts";
 import type { DotsTally } from "./dots.ts";
@@ -450,6 +455,64 @@ export function binned(
  * caption of `called`, what the head calls the chart, in the window's
  * scroller.
  */
+/**
+ * swarmed gives a beeswarm's headers and rows: its strip's name where it has
+ * a column of them, its number and its row; each strip's sampled rows in order
+ * of their number, and a line per strip of how many of its rows it did not
+ * sample, so every row with a number is accounted for.
+ */
+export function swarmed(plot: SwarmPlot, tally: SwarmTally): [HTMLElement[], HTMLElement[]] {
+  const named =
+    plot.by === undefined ? [] : [header(columnLabel(plot.by.header, plot.by.col), true)];
+  const heads = [
+    ...named,
+    header(columnLabel(plot.of.header, plot.of.col), true, true),
+    header(m.chart_table_row(), false, true),
+  ];
+  const strips = tally.rest === undefined ? tally.strips : [...tally.strips, tally.rest];
+  const rows = strips.flatMap((strip) => {
+    const other = strip === tally.rest;
+    const head = (): HTMLElement[] =>
+      named.length === 0 ? [] : [other ? rowNamed(m.chart_pie_other()) : rowHead(strip.value)];
+    const order = strip.at.map((_, i) => i).sort((a, b) => strip.at[a]! - strip.at[b]!);
+    const sampled = order.map((i) =>
+      row(...head(), digits(strip.at[i]!), digits(strip.rows[i]! + 1)),
+    );
+    const left = strip.plotted - strip.at.length;
+    if (left === 0) return sampled;
+    const said = el("td", "", m.chart_table_unsampled({ rows: m.rows_count({ count: left }) }));
+    said.colSpan = 2;
+    return [...sampled, row(...head(), said)];
+  });
+  return [heads, rows];
+}
+
+/**
+ * paralleled gives parallel coordinates' headers and rows: each drawn row's
+ * number in the file and its number at every axis, in the order of the file,
+ * and a line of how many rows it did not draw, so every row with a number on
+ * every axis is accounted for.
+ */
+export function paralleled(
+  plot: ParallelPlot,
+  tally: ParallelTally,
+): [HTMLElement[], HTMLElement[]] {
+  const heads = [
+    header(m.chart_table_row(), false, true),
+    ...plot.axes.map(({ header: name, col }) => header(columnLabel(name, col), true, true)),
+  ];
+  const drawn = tally.values
+    .slice(0, LINES_DRAWN)
+    .map((values, i) => ({ values, at: tally.rows[i]! }));
+  drawn.sort((a, b) => a.at - b.at);
+  const rows = drawn.map(({ values, at }) => row(digits(at + 1), ...values.map(digits)));
+  const left = tally.plotted - drawn.length;
+  if (left === 0) return [heads, rows];
+  const said = el("td", "", m.chart_table_unsampled({ rows: m.rows_count({ count: left }) }));
+  said.colSpan = heads.length;
+  return [heads, [...rows, row(said)]];
+}
+
 export function tableOf([heads, rows]: [HTMLElement[], HTMLElement[]], called: Node): HTMLElement {
   const box = el("div", "chart-table chart-scrolls themed-bar");
   const made = el("table");

@@ -118,11 +118,11 @@ export function fitHistogram(drawn: HTMLElement): void {
   drawn.style.setProperty("--below", `${below}px`);
 }
 
-/** revealed scrolls `slot`'s scroller the least that brings it into sight. */
-export function revealed(slot: Element): void {
+/** revealed scrolls `slot`'s scroller the least that brings `at`, it or a point of it, into sight. */
+export function revealed(slot: Element, at = slot.getBoundingClientRect()): void {
   const along = slot.closest(".chart-along");
   if (along === null) return;
-  const [at, sight] = [slot.getBoundingClientRect(), along.getBoundingClientRect()];
+  const sight = along.getBoundingClientRect();
   if (at.left < sight.left) along.scrollLeft -= sight.left - at.left;
   else if (at.right > sight.right) along.scrollLeft += at.right - sight.right;
 }

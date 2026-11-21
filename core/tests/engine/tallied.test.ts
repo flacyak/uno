@@ -20,7 +20,7 @@ import { hashOf } from '@engine/grown';
 import { decodeBlocks } from '@engine/saved';
 import type { Provider } from '@plugin';
 import { NO_ROW, Op } from '@sheet';
-import { GroupsFold, SampleFold, TALLY_VERSION } from '@tally';
+import { GroupsFold, TALLY_VERSION, pointsOf, restoredPoints } from '@tally';
 import { CHANNEL, REGION, REVENUE, UNITS } from '@core-tests/testdata/sales-q3';
 import { blobProvider } from '@store';
 import { diskProvider } from '@store/node';
@@ -121,7 +121,7 @@ test('a save keeps the fold of each chart, which reads back as the tally the cha
       const { fold, rows } = folds[id];
       const back =
         tally.t === 'sample'
-          ? SampleFold.restored(fold)!.snapshot()
+          ? pointsOf(restoredPoints(fold)!.snapshot())
           : GroupsFold.restored(fold)!.snapshot();
       expect(rows, id).toBe(tally.t === 'unread' ? 0 : tally.coverage.rows);
       expect({ ...tally, ...back }, id).toStrictEqual(tally);

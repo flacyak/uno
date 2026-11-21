@@ -18,9 +18,13 @@ import {
   PAIRS_AT_MOST,
   SPREAD_AT_MOST,
   SampleFold,
+  pointsOf,
+  restoredPoints,
+  savedPoints,
   SpreadFold,
   SpreadsFold,
   SplitFold,
+  SwarmFold,
   TALLY_VERSION,
   TimeFold,
   TimeSplitFold,
@@ -330,7 +334,7 @@ const PAGE_BLOCKS = 256;
 const BLOCK_ROWS = 4;
 /** Rows over two pages and a part of a third. */
 const PAGED_ROWS = (2 * PAGE_BLOCKS + 3) * BLOCK_ROWS;
-const POINTS = { x: 'point', y: 'point' } as const;
+const POINTS = ['point', 'point'] as const;
 
 /** paged is a row's x and y over PAGED_ROWS, with a word and a blank. */
 function paged(row: number): [string, string] {
@@ -351,7 +355,7 @@ const range = (from: number, end: number) =>
 
 test('a scatter fold saves the least and most of each page of blocks', () => {
   const fold = scattered(range(0, PAGED_ROWS));
-  const saved = fold.saved();
+  const saved = savedPoints(fold.saved());
   expect(throughJson(saved)).toEqual(saved);
   expect(saved.pages.map(({ first, span }) => [first, span])).toEqual([
     [0, PAGE_BLOCKS],
@@ -361,7 +365,7 @@ test('a scatter fold saves the least and most of each page of blocks', () => {
   // Each page's least and most are those of its rows alone.
   for (const { first, span, least, most } of saved.pages) {
     const rows = range(first * BLOCK_ROWS, (first + span) * BLOCK_ROWS);
-    const alone = scattered(rows).snapshot();
+    const alone = pointsOf(scattered(rows).snapshot());
     expect({ least, most }).toEqual({ least: alone.least, most: alone.most });
   }
   expect(saved.kept.length).toBeGreaterThan(0);
@@ -373,7 +377,7 @@ test('a scatter fold read back from its save folds on as the fold it was', () =>
   const before = scattered(range(0, half));
   const after = scattered(
     range(half, PAGED_ROWS),
-    SampleFold.restored(throughJson(before.saved())),
+    restoredPoints(throughJson(savedPoints(before.saved()))),
   );
   const whole = scattered(range(0, PAGED_ROWS));
   expect(after.snapshot()).toStrictEqual(whole.snapshot());
@@ -382,7 +386,7 @@ test('a scatter fold read back from its save folds on as the fold it was', () =>
 
 test("an edit of a read back page's least or most folds each of its blocks again", () => {
   const rows = range(0, PAGED_ROWS);
-  const page = scattered(rows).saved().pages[1]!;
+  const page = savedPoints(scattered(rows).saved()).pages[1]!;
   const firstRow = page.first * BLOCK_ROWS;
   // A row inside the page's least and most, then the one on its most x.
   const inside = firstRow + 1;
@@ -409,7 +413,9 @@ test("an edit of a read back page's least or most folds each of its blocks again
     }
     return stale;
   };
-  const fold = SampleFold.restored(throughJson(scattered(rows).saved()))!;
+  const fold = restoredPoints(
+    throughJson(savedPoints(scattered(rows).saved())),
+  )!;
   const whole = scattered(rows);
   expect(mended(fold, inside)).toEqual([]);
   expect(mended(fold, top)).toEqual(range(page.first, page.first + page.span));
@@ -420,7 +426,9 @@ test("an edit of a read back page's least or most folds each of its blocks again
 
 test('a read back page gives a block back to fold again whole, and leaves no block stale', () => {
   const rows = range(0, PAGED_ROWS);
-  const fold = SampleFold.restored(throughJson(scattered(rows).saved()))!;
+  const fold = restoredPoints(
+    throughJson(savedPoints(scattered(rows).saved())),
+  )!;
   const block = PAGE_BLOCKS + 1;
   const alone = range(block * BLOCK_ROWS, (block + 1) * BLOCK_ROWS);
   for (const row of alone) fold.forget(row, ...paged(row));
@@ -431,7 +439,7 @@ test('a read back page gives a block back to fold again whole, and leaves no blo
 });
 
 test('a save that holds no scatter fold reads back as none', () => {
-  const saved = scattered(range(0, BLOCK_ROWS)).saved();
+  const saved = savedPoints(scattered(range(0, BLOCK_ROWS)).saved());
   const page = saved.pages[0]!;
   const unsaved = [
     undefined,
@@ -443,7 +451,62 @@ test('a save that holds no scatter fold reads back as none', () => {
     { ...saved, pages: [{ ...page, span: PAGE_BLOCKS + 1 }] },
     { ...saved, pages: [{ ...page, least: page.most, most: page.least }] },
   ];
+  for (const v of unsaved) expect(restoredPoints(v)).toBeUndefined();
+});
+
+test('a sample fold of three columns read back from its save folds on as the fold it was', () => {
+  const cells = (row: number) => [...paged(row), `${row}`];
+  const fold = (
+    rows: number[],
+    into = new SampleFold(['point', 'point', 'point']),
+  ) => {
+    for (const row of rows)
+      into.add(Math.floor(row / BLOCK_ROWS), row, ...cells(row));
+    return into;
+  };
+  const half = (PAGE_BLOCKS + 1) * BLOCK_ROWS;
+  const saved = fold(range(0, half)).saved();
+  expect(saved.pages[0]!.least).toHaveLength(3);
+  const after = fold(
+    range(half, PAGED_ROWS),
+    SampleFold.restored(throughJson(saved)),
+  );
+  expect(after.snapshot()).toStrictEqual(fold(range(0, PAGED_ROWS)).snapshot());
+  // A kept row or a page of another count of columns is no save of it.
+  const page = saved.pages[0]!;
+  const unsaved = [
+    { ...saved, marks: [] },
+    { ...saved, kept: [[1, 2, 3]] },
+    { ...saved, pages: [{ ...page, least: [0, 0] }] },
+  ];
   for (const v of unsaved) expect(SampleFold.restored(v)).toBeUndefined();
+});
+
+test('a swarm fold read back from its save folds on as the fold it was', () => {
+  const regions = ['North', 'South', 'East'];
+  const fold = (rows: number[], into = new SwarmFold('point')) => {
+    for (const row of rows) {
+      const [x] = paged(row);
+      into.add(Math.floor(row / BLOCK_ROWS), row, regions[row % 3]!, x);
+    }
+    return into;
+  };
+  const half = (PAGE_BLOCKS + 1) * BLOCK_ROWS;
+  const saved = fold(range(0, half)).saved();
+  const back = SwarmFold.restored(throughJson(saved));
+  const after = fold(range(half, PAGED_ROWS), back);
+  expect(after.snapshot()).toStrictEqual(fold(range(0, PAGED_ROWS)).snapshot());
+  // A value twice or empty, a sample of two columns or past its rows, or a kept row of two numbers is no save of it.
+  const [first] = saved.values;
+  const unsaved = [
+    { ...saved, values: [first, first] },
+    { ...saved, values: [['North', { ...first![1], rows: 0, plotted: 0 }]] },
+    { ...saved, all: { ...saved.all, marks: ['point', 'point'] } },
+    { ...saved, rest: { ...saved.rest, plotted: saved.rest.rows + 1 } },
+    { ...saved, rest: { ...saved.rest, kept: [[1, 2, 3]] } },
+  ];
+  for (const v of unsaved)
+    expect(SwarmFold.restored(throughJson(v))).toBeUndefined();
 });
 
 /** Dates in every layout, blank, not dates, and dates only one order reads. */
@@ -873,7 +936,9 @@ test('a save that holds no spreads fold reads back as none', () => {
  * region by channel with each mark, with CELLS added, and its revenue and
  * units spread with each mark, exact and coarsened, with SPREAD_CELLS, and
  * its revenue spread by region and by rep with each mark, and its revenue
- * and units' mean by channel with each mark, with CELLS added. It
+ * and units' mean by channel with each mark, with CELLS added, and a sample
+ * of its units, revenue and units again with each mark, and a swarm of its
+ * revenue by region with each mark. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -888,6 +953,8 @@ const GOLDEN = {
   mean: '46fe0e11379d829a37ab6ee93bbfb3c25da30cff2630076375e3aca28605c4f9',
   week: '34cedec1c28038164d7bec62b8722839122943259e473f3da14a8b2ecebcc5f1',
   timesplit: 'b9c33792e532174a66fd6d6c4da76ab4660357618dcb803a2b748b93085bd914',
+  sampled: 'f3605671c11cde835fd86490d87ecacf5d3fc5d2228126629b2c1dc577b0fd99',
+  swarm: 'd9d9a3ae10d466537ca13c062093e4724c7c7db3704e699758706281d9a177cf',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -917,11 +984,11 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
   ).toBe(GOLDEN.groups);
   const [units, revenue] = [column(UNITS), column(REVENUE)];
   const samples = (['point', 'comma'] as const).map((mark) => {
-    const fold = new SampleFold({ x: mark, y: mark });
+    const fold = new SampleFold([mark, mark]);
     units.forEach((x, r) =>
       fold.add(Math.floor(r / BLOCK_ROWS), r, x, revenue[r]!),
     );
-    return fold.saved();
+    return savedPoints(fold.saved());
   });
   expect(
     hashOf(encoder.encode(JSON.stringify(samples))),
@@ -1014,4 +1081,26 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(timeSplits.map((f) => f.saved())))),
     'a time split fold, or how a cell reads as a date or a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.timesplit);
+  const sampled = (['point', 'comma'] as const).map((mark) => {
+    const fold = new SampleFold([mark, mark, mark]);
+    units.forEach((u, r) =>
+      fold.add(Math.floor(r / BLOCK_ROWS), r, u, revenue[r]!, u),
+    );
+    return fold.saved();
+  });
+  expect(
+    hashOf(encoder.encode(JSON.stringify(sampled))),
+    'a sample fold of three columns, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.sampled);
+  const swarms = (['point', 'comma'] as const).map((mark) => {
+    const fold = new SwarmFold(mark);
+    revenue.forEach((cell, r) =>
+      fold.add(Math.floor(r / BLOCK_ROWS), r, regions[r]!, cell),
+    );
+    return fold.saved();
+  });
+  expect(
+    hashOf(encoder.encode(JSON.stringify(swarms))),
+    'a swarm fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.swarm);
 });

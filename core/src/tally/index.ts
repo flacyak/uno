@@ -17,9 +17,15 @@ export type {
   Measure,
   SavedGroups,
 } from './groups.ts';
-export { SCATTER_POINTS_AT_MOST, SampleFold } from './sample.ts';
-export type { Marks, SavedSample } from './sample.ts';
-export type { Point, Sample } from './sample.ts';
+export {
+  SCATTER_POINTS_AT_MOST,
+  SampleFold,
+  pointsOf,
+  restoredPoints,
+  savedPoints,
+} from './sample.ts';
+export type { Marks, SavedSample, SavedSampled } from './sample.ts';
+export type { Point, Sample, Sampled } from './sample.ts';
 export { FIGURES_AT_MOST, SPREAD_AT_MOST, SpreadFold } from './spread.ts';
 export type { Bucket, Figures, SavedSpread, Spreading } from './spread.ts';
 export type { Box, Past, Span, Spread, Within } from './spread.ts';
@@ -75,4 +81,6 @@ export type {
   TimeSplits,
   ValuePeriods,
 } from './timesplit.ts';
+export { SWARM_ROWS_AT_MOST, SwarmFold } from './swarm.ts';
+export type { SavedKept, SavedSwarm, Strip, Swarm } from './swarm.ts';
 export type { Skipped } from './skipped.ts';

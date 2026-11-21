@@ -12,6 +12,8 @@ import type {
   HeatPlot,
   SlopePlot,
   StackPlot,
+  ParallelPlot,
+  SwarmPlot,
   TimePlot,
   WeekPlot,
 } from '@document';
@@ -21,6 +23,8 @@ import {
   parseSlope,
   parseHeat,
   parseStacked,
+  parseParallel,
+  parseSwarm,
   parseWeek,
 } from '@document/codec';
 import { GROUPS_SENT } from '@tally';
@@ -67,6 +71,8 @@ describe('parsePlot', () => {
     { t: 'week', at: DATE, sum: REVENUE, unit: 'ms' },
     { t: 'heat', by: REGION, at: DATE, per: 'day', order: 'month' },
     { t: 'horizon', at: DATE, per: 'week', order: 'day' },
+    { t: 'swarm', of: REVENUE, by: REGION },
+    { t: 'parallel', axes: [REVENUE, REGION, DATE] },
     {
       t: 'horizon',
       at: DATE,
@@ -190,6 +196,57 @@ describe('parseOverTime', () => {
     expect(() => parseOverTime(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
+  });
+});
+
+describe('parseParallel', () => {
+  const UNITS = { col: 3, header: 'units' };
+  test.each<ParallelPlot>([
+    { t: 'parallel', axes: [REVENUE, REGION, UNITS] },
+    {
+      t: 'parallel',
+      axes: Array.from({ length: 8 }, (_, col) => ({ col, header: `c${col}` })),
+    },
+  ])('reads %j', (plot) => {
+    expect(parseParallel(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'parallel' }, 'axes is not a list'],
+    [{ t: 'parallel', axes: [REVENUE, UNITS] }, 'axes are 3 to 8 columns'],
+    [
+      { t: 'parallel', axes: Array(9).fill(REVENUE) },
+      'axes are 3 to 8 columns',
+    ],
+    [
+      { t: 'parallel', axes: [REVENUE, UNITS, REVENUE] },
+      'axes name a column twice',
+    ],
+    [
+      { t: 'parallel', axes: [REVENUE, UNITS, 1] },
+      'axes: 2: col is not a column number',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseParallel(PLOT, plot)).toThrow(
+      new Error(`${PLOT}: ${said}`),
+    );
+  });
+});
+
+describe('parseSwarm', () => {
+  test.each<SwarmPlot>([
+    { t: 'swarm', of: REVENUE },
+    { t: 'swarm', of: REVENUE, by: REGION },
+  ])('reads %j', (plot) => {
+    expect(parseSwarm(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [{ t: 'swarm', by: REGION }, 'of: col is not a column number'],
+    [{ t: 'swarm', of: REVENUE, by: REVENUE }, 'by and of name one column'],
+    [{ t: 'swarm', of: REVENUE, by: 1 }, 'by: col is not a column number'],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseSwarm(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });
 

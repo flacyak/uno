@@ -185,3 +185,8 @@ export function clock(ms: number): string {
 export function list(names: readonly string[]): string {
   return new Intl.ListFormat(getLocale(), { type: "unit", style: "short" }).format(names);
 }
+
+/** joined gives `names` as a sentence joins them, "a, b and c", in the language chosen. */
+export function joined(names: readonly string[]): string {
+  return new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(names);
+}

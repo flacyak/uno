@@ -20,6 +20,8 @@ import { dots } from "@renderer/chart/kinds/dots";
 import { slope } from "@renderer/chart/kinds/slope";
 import { heat } from "@renderer/chart/kinds/heat";
 import { horizon } from "@renderer/chart/kinds/horizon";
+import { parallel } from "@renderer/chart/kinds/parallel";
+import { swarm } from "@renderer/chart/kinds/swarm";
 import { week } from "@renderer/chart/kinds/week";
 import { histogram } from "@renderer/chart/kinds/histogram";
 import { KINDS } from "@renderer/chart/kinds/index";
@@ -196,6 +198,8 @@ test("each plot kind has its module", () => {
     week,
     heat,
     horizon,
+    swarm,
+    parallel,
   });
 });
 

@@ -33,11 +33,15 @@ import type {
   Reading,
   SlopePlot,
   StackPlot,
+  ParallelPlot,
+  SwarmPlot,
   TimePlot,
   WeekPlot,
 } from './chart.ts';
 import {
   CHARTS_AT_MOST,
+  PARALLEL_AXES_AT_MOST,
+  PARALLEL_AXES_LEAST,
   PLACE_DIGITS,
   REFRESH_MINUTES_AT_MOST,
   TITLE_AT_MOST,
@@ -1113,6 +1117,8 @@ const PLOT_KEYS: Record<Plot['t'], readonly string[]> = {
   week: ['t', 'at', 'sum', 'order', 'unit'],
   heat: ['t', 'by', 'at', 'sum', 'per', 'order', 'unit'],
   horizon: ['t', 'at', 'by', 'sum', 'per', 'order', 'unit'],
+  swarm: ['t', 'of', 'by'],
+  parallel: ['t', 'axes'],
 };
 
 /** What a dot plot's dots may stand at. */
@@ -1196,6 +1202,8 @@ export function parsePlot(where: string, value: unknown): Plot {
   if (t === 'week') return parseWeek(where, p);
   if (t === 'heat') return parseHeat(where, p);
   if (t === 'horizon') return parseHorizon(where, p);
+  if (t === 'swarm') return parseSwarm(where, p);
+  if (t === 'parallel') return parseParallel(where, p);
   if (t === 'histogram' || t === 'box') {
     const [of, span] = [column('of'), required(p, 'span', SPAN, where)];
     if (t === 'histogram' || p['by'] === undefined) return { t, of, span };
@@ -1328,6 +1336,37 @@ export function parseHorizon(where: string, value: unknown): HorizonPlot {
   const at = columnOf(where, p, 'at');
   const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
   return { t: 'horizon', at, ...sum, per, ...readingOf(where, p) };
+}
+
+/** parseSwarm reads a beeswarm's plot: its column `of` numbers, and a column `by` of strips it may name. */
+export function parseSwarm(where: string, value: unknown): SwarmPlot {
+  const p = asRecord(value);
+  const of = columnOf(where, p, 'of');
+  if (p['by'] === undefined) return { t: 'swarm', of };
+  const by = columnOf(where, p, 'by');
+  if (by.col === of.col) throw new Error(`${where}: by and of name one column`);
+  return { t: 'swarm', of, by };
+}
+
+/**
+ * parseParallel reads parallel coordinates' plot: its `axes`, from
+ * PARALLEL_AXES_LEAST to PARALLEL_AXES_AT_MOST columns, no column twice.
+ */
+export function parseParallel(where: string, value: unknown): ParallelPlot {
+  const listed = asRecord(value)['axes'];
+  if (!Array.isArray(listed)) throw new Error(`${where}: axes is not a list`);
+  const count = listed.length;
+  if (count < PARALLEL_AXES_LEAST || count > PARALLEL_AXES_AT_MOST)
+    throw new Error(
+      `${where}: axes are ${PARALLEL_AXES_LEAST} to ${PARALLEL_AXES_AT_MOST} columns`,
+    );
+  // Each axis is read as a column under its place in the list.
+  const axes = listed.map((axis: unknown, i) =>
+    columnOf(`${where}: axes`, { [i]: axis }, String(i)),
+  );
+  if (new Set(axes.map(({ col }) => col)).size < count)
+    throw new Error(`${where}: axes name a column twice`);
+  return { t: 'parallel', axes };
 }
 
 /** readingOf reads how a plot's dates read: a column's `order` or a Unix `unit`, one of the two. */

@@ -42,7 +42,9 @@ import {
   GroupsFold,
   LEVEL_BATCH,
   SampleFold,
+  pointsOf,
   SplitFold,
+  SwarmFold,
   SpreadFold,
   SpreadsFold,
   TimeFold,
@@ -239,6 +241,30 @@ const WEB_TO_DIRECT: SlopePlot = {
 };
 const CHANNEL_SLOPE: Chart = { ...REGION_ROWS, id: 'c12', plot: WEB_TO_DIRECT };
 
+/** The fixture's revenue, sampled per region and as one strip. */
+const REGION_SWARM: Chart = {
+  ...REGION_ROWS,
+  id: 'c13',
+  plot: { t: 'swarm', of: column(REVENUE), by: column(REGION) },
+};
+/**
+ * The fixture's units, revenue and units again on parallel axes: it has two
+ * number columns, and a fold, unlike the record, takes a column twice.
+ */
+const PARALLEL: Chart = {
+  ...REGION_ROWS,
+  id: 'c15',
+  plot: {
+    t: 'parallel',
+    axes: [column(UNITS), column(REVENUE), column(UNITS)],
+  },
+};
+const REVENUE_SWARM: Chart = {
+  ...REGION_ROWS,
+  id: 'c14',
+  plot: { t: 'swarm', of: column(REVENUE) },
+};
+
 /** A date in the fixture's span that no row of it holds. */
 const LATER = '2026-12-25';
 
@@ -248,10 +274,10 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
   const coverage =
     rows === ROWS ? WHOLE : { rows, total: rows, complete: true };
   if (plot.t === 'scatter') {
-    const fold = new SampleFold({ x: 'point', y: 'point' });
+    const fold = new SampleFold(['point', 'point']);
     for (let r = 0; r < rows; r++)
       fold.add(0, r, cell(r, plot.x), cell(r, plot.y));
-    return { t: 'sample', plot, coverage, ...fold.snapshot() };
+    return { t: 'sample', plot, coverage, ...pointsOf(fold.snapshot()) };
   }
   if (plot.t === 'stack') {
     const { by, split, sum } = plot;
@@ -340,6 +366,21 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
       coverage,
       ...fold.slope(ends, plot.measure === 'mean'),
     };
+  }
+  if (plot.t === 'parallel') {
+    const fold = new SampleFold(plot.axes.map(() => 'point'));
+    for (let r = 0; r < rows; r++) {
+      fold.add(0, r, ...plot.axes.map((axis) => cell(r, axis)));
+    }
+    return { t: 'parallel', plot, coverage, ...fold.snapshot() };
+  }
+  if (plot.t === 'swarm') {
+    const fold = new SwarmFold('point');
+    for (let r = 0; r < rows; r++) {
+      const value = plot.by === undefined ? '' : cell(r, plot.by);
+      fold.add(0, r, value, cell(r, plot.of));
+    }
+    return { t: 'swarm', plot, coverage, ...fold.snapshot() };
   }
   if (plot.t === 'dots' && plot.measure === 'mean') {
     const fold = new GroupsFold('mean', 'point');
@@ -1893,4 +1934,50 @@ test('a chart over a formula sums what it computes from a column with its decima
   } finally {
     done();
   }
+});
+
+test('a beeswarm folded a block at a time reads as the pure fold of its samples, moves by an edit, and reads back from a save with no pass', async () => {
+  const tallies = folded([REGION_SWARM, REVENUE_SWARM]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [REGION_SWARM.id, pure(REGION_SWARM.plot)],
+    [REVENUE_SWARM.id, pure(REVENUE_SWARM.plot)],
+  ]);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REVENUE, '-1');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [
+    [REGION_SWARM.id, pure(REGION_SWARM.plot, sheet)],
+    [REVENUE_SWARM.id, pure(REVENUE_SWARM.plot, sheet)],
+  ];
+  expect(tallies.read(ROWS, true)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(REGION_SWARM, HEADERS);
+  reopened.attach(REVENUE_SWARM, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
+});
+
+test('parallel coordinates folded a block at a time read as the pure sample of their axes, move by an edit, and read back from a save with no pass', async () => {
+  const tallies = folded([PARALLEL, UNITS_REVENUE]);
+  expect(tallies.read(ROWS, true)).toStrictEqual([
+    [PARALLEL.id, pure(PARALLEL.plot)],
+    [UNITS_REVENUE.id, pure(UNITS_REVENUE.plot)],
+  ]);
+  const sheet = read(NAME, bytes);
+  const before = shownRow(sheet, EDITED);
+  sheet.set(EDITED, REVENUE, '-1');
+  const block = Math.floor(EDITED / TINY.blockRows);
+  const moved = tallies.cell(block, EDITED, before, shownRow(sheet, EDITED));
+  await tallies.mend(moved, blocks(sheet));
+  const edited = [[PARALLEL.id, pure(PARALLEL.plot, sheet)]];
+  expect(tallies.read(ROWS, true).slice(0, 1)).toStrictEqual(edited);
+  const reopened = new Tallies();
+  reopened.restore(JSON.parse(JSON.stringify(tallies.saved())), ROWS);
+  reopened.attach(PARALLEL, HEADERS);
+  expect(reopened.from()).toBe(ROWS);
+  expect(reopened.read(ROWS, true)).toStrictEqual(edited);
 });

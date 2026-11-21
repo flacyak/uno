@@ -7,7 +7,9 @@
 
 import "./form.css";
 
+import { PARALLEL_AXES_AT_MOST } from "@document";
 import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import type { MenuPlace } from "./menu.ts";
 import { button, clickAway, el, hang, walk } from "./util.ts";
 
@@ -36,6 +38,10 @@ export const LABELS: ReadonlyArray<() => string> = [
   m.chart_form_to,
   m.chart_form_x,
   m.chart_form_y,
+  ...Array.from(
+    { length: PARALLEL_AXES_AT_MOST },
+    (_, i) => () => m.chart_form_axis({ n: num(i + 1) }),
+  ),
   m.chart_form_title_field,
   m.chart_form_refresh,
 ];

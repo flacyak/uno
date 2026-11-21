@@ -14,6 +14,8 @@ import { stack } from "./stack.ts";
 import { time } from "./time.ts";
 import { heat } from "./heat.ts";
 import { horizon } from "./horizon.ts";
+import { parallel } from "./parallel.ts";
+import { swarm } from "./swarm.ts";
 import { week } from "./week.ts";
 
 /** Each plot's kind. */
@@ -30,4 +32,6 @@ export const KINDS: Kinds = {
   week,
   heat,
   horizon,
+  swarm,
+  parallel,
 };
