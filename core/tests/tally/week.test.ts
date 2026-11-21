@@ -67,6 +67,7 @@ test('a week fold counts the rows of each hour of the week, Sunday first', () =>
     [72, 1],
     [167, 1],
   ]);
+  expect(week.timed).toBe(5);
   expect(week.undated.rows).toBe(3);
   expect(week.dates).toEqual({ blank: 1, unparsed: 2, other: 0 });
 });
@@ -88,23 +89,40 @@ test('a week fold counts dates over every year it reads as Date does', () => {
   }
 });
 
+test('a week fold sums cells with their mark, and undated rows apart', () => {
+  const fold = new WeekFold('day', 'comma');
+  fold.add('2024-03-03 00:30', '1,5');
+  fold.add('2024-03-03 00:59', '-0,25');
+  fold.add('2024-03-03 00:10', '');
+  fold.add('2024-03-03 00:20', 'n/a');
+  fold.add('', '2');
+  const week = fold.snapshot();
+  expect(week.hours[0]).toEqual({ rows: 4, sum: 1.25 });
+  expect(week.hours[1]).toEqual({ rows: 0, sum: 0 });
+  expect(week.undated).toEqual({ rows: 1, sum: 2 });
+  expect(week.skipped).toEqual({ blank: 1, unparsed: 1 });
+});
+
 test('a week fold moved by edits reads as one that counts again', () => {
   for (let seed = 1; seed <= SEEDS; seed++) {
     const random = seeded(seed);
     const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
-    const row = (): string => pick(EDITED_DATES);
+    const row = (): [string, string] => [
+      pick(EDITED_DATES),
+      pick(['', 'n/a', `${random()}`, `${-random()}`]),
+    ];
     const rows = Array.from({ length: EDITED_ROWS }, row);
     const folded = () => {
-      const fold = new WeekFold('day');
-      for (const r of rows) fold.add(r);
+      const fold = new WeekFold('day', 'point');
+      for (const r of rows) fold.add(...r);
       return fold;
     };
     const fold = folded();
     for (let edit = 0; edit < EDITED_ROWS; edit++) {
       const r = Math.floor(random() * EDITED_ROWS);
-      fold.remove(rows[r]!);
+      fold.remove(...rows[r]!);
       rows[r] = row();
-      fold.add(rows[r]);
+      fold.add(...rows[r]);
     }
     expect(fold.snapshot(), `seed ${seed}`).toEqual(folded().snapshot());
   }
