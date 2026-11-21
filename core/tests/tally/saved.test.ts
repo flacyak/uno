@@ -12,7 +12,9 @@ import { read } from '@ingest';
 import {
   BOX_VALUES_AT_MOST,
   DISTINCT_AT_MOST,
+  CELLS_AT_MOST,
   ExactSum,
+  GridFold,
   GroupsFold,
   HELD_AT_MOST,
   PAIRS_AT_MOST,
@@ -928,6 +930,91 @@ test('a save that holds no spreads fold reads back as none', () => {
   expect(SpreadsFold.restored(throughJson(saved))).toBeDefined();
 });
 
+/** Coordinates a grid's tests fold that no cell of the fixture writes. */
+const GRID_POINTS: ReadonlyArray<[string, string]> = [
+  ['', '-74.0'],
+  ['n/a', '0'],
+  ['91', '0'],
+  ['0', '-180.5'],
+  ['90', '180'],
+  ['-90', '-180'],
+];
+/** Steps that spread the fixture's rows over the world, as tenths of a degree. */
+const LAT_STEP = 37;
+const LON_STEP = 91;
+const DEGREE_TENTHS = 10;
+const LAT_SPAN = 180;
+const LON_SPAN = 360;
+
+/**
+ * gridPoints is `rows` points spread over the world, then GRID_POINTS, each
+ * written with `mark`.
+ */
+function gridPoints(
+  rows: number,
+  mark: 'point' | 'comma',
+): Array<[string, string]> {
+  const tenths = (r: number, step: number, span: number) =>
+    String(((r * step) % (span * DEGREE_TENTHS)) / DEGREE_TENTHS - span / 2);
+  const spread = Array.from({ length: rows }, (_, r): [string, string] => [
+    tenths(r, LAT_STEP, LAT_SPAN),
+    tenths(r, LON_STEP, LON_SPAN),
+  ]);
+  const written = (v: string) => (mark === 'comma' ? v.replace('.', ',') : v);
+  return [...spread, ...GRID_POINTS].map(([lat, lon]) => [
+    written(lat),
+    written(lon),
+  ]);
+}
+
+test('a grid fold reads back as it was, and folds on as it would have', () => {
+  for (const mark of [undefined, 'point'] as const) {
+    const coords = { lat: 'point', lon: 'point' } as const;
+    const points = gridPoints(2 * CELLS_AT_MOST, 'point');
+    const half = points.length / 2;
+    const whole = new GridFold(coords, mark);
+    const first = new GridFold(coords, mark);
+    points.forEach(([lat, lon], r) => {
+      whole.add(lat, lon, CELLS[r % CELLS.length]);
+      if (r < half) first.add(lat, lon, CELLS[r % CELLS.length]);
+    });
+    const restored = GridFold.restored(throughJson(first.saved()))!;
+    expect(restored.read()).toEqual(first.read());
+    points
+      .slice(half)
+      .forEach(([lat, lon], i) =>
+        restored.add(lat, lon, CELLS[(half + i) % CELLS.length]),
+      );
+    expect(restored.saved()).toEqual(whole.saved());
+  }
+});
+
+test('a save that holds no grid fold reads back as none', () => {
+  const fold = new GridFold({ lat: 'point', lon: 'point' }, 'point');
+  gridPoints(100, 'point').forEach(([lat, lon]) => fold.add(lat, lon, '2.5'));
+  const saved = fold.saved();
+  const [key, rows, sum] = saved.cells[0]!;
+  const unsaved = [
+    { ...saved, level: 21 },
+    { ...saved, level: -1 },
+    { ...saved, coords: { lat: 'point' } },
+    { ...saved, mark: 'dot' },
+    { ...saved, cells: [[key, 0, sum], ...saved.cells.slice(1)] },
+    { ...saved, cells: [[key, rows, sum], ...saved.cells] },
+    { ...saved, cells: [...saved.cells].reverse() },
+    { ...saved, cells: [[2 ** 42, rows, sum]] },
+    {
+      ...saved,
+      cells: Array.from({ length: CELLS_AT_MOST + 1 }, (_, i) => [i, 1, sum]),
+    },
+    { ...saved, left: { blank: 0, unparsed: 0 } },
+    { ...saved, unplaced: { rows: -1 } },
+  ];
+  for (const v of unsaved)
+    expect(GridFold.restored(throughJson(v))).toBeUndefined();
+  expect(GridFold.restored(throughJson(saved))).toBeDefined();
+});
+
 /**
  * The hash of the folds TALLY_VERSION makes of the fixture: its rows by
  * region, its revenue and units summed by channel with each mark, its
@@ -938,7 +1025,8 @@ test('a save that holds no spreads fold reads back as none', () => {
  * its revenue spread by region and by rep with each mark, and its revenue
  * and units' mean by channel with each mark, with CELLS added, and a sample
  * of its units, revenue and units again with each mark, and a swarm of its
- * revenue by region with each mark. It
+ * revenue by region with each mark, and a grid of GRID_POINTS counted and
+ * summed with each mark. It
  * changes only with a fold or how a cell reads as a number, and with it the
  * version.
  */
@@ -955,6 +1043,7 @@ const GOLDEN = {
   timesplit: 'b9c33792e532174a66fd6d6c4da76ab4660357618dcb803a2b748b93085bd914',
   sampled: 'f3605671c11cde835fd86490d87ecacf5d3fc5d2228126629b2c1dc577b0fd99',
   swarm: 'd9d9a3ae10d466537ca13c062093e4724c7c7db3704e699758706281d9a177cf',
+  grid: '503f388d6a487cf2e010569a4dff09ff771424739c37e9b41c1896175e3368d6',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -1103,4 +1192,17 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(swarms))),
     'a swarm fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.swarm);
+  const grids = (['point', 'comma'] as const).flatMap((mark) => {
+    const coords = { lat: mark, lon: mark };
+    const folds = [new GridFold(coords), new GridFold(coords, mark)];
+    for (const fold of folds)
+      gridPoints(revenue.length, mark).forEach(([lat, lon], r) =>
+        fold.add(lat, lon, revenue[r] ?? ''),
+      );
+    return folds.map((f) => f.saved());
+  });
+  expect(
+    hashOf(encoder.encode(JSON.stringify(grids))),
+    'a grid fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.grid);
 });
