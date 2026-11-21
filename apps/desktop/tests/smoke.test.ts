@@ -9,12 +9,13 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, vi } from "vite-plus/test";
 
-import { displayMissing, drive, electronEnv, verdict } from "@scripts/launch";
+import { displayMissing, drive, electronEnv, fetchElectron, verdict } from "@scripts/launch";
 import { DRIVEN_OPEN, openPathFor } from "@main/smoke/pick";
 import { savePathFor } from "@main/smoke/save";
 
@@ -107,6 +108,46 @@ test("what the stand-in S3 tells the child is part of that one environment", () 
   // environment, which the utility process inherits from the app. They go
   // through electronEnv with everything else.
   expect(read("smoke.js")).toMatch(/env:\s*electronEnv\(process\.env,\s*\{[^}]*\.\.\.standinEnv\(/);
+});
+
+// ------------------------------------------------------------ the runtime
+
+// Electron's package fetches its runtime the first time it is asked for its
+// path, unless ELECTRON_OVERRIDE_DIST_PATH is set, as uno-bounded sets it. A
+// fresh checkout's first bounded smoke then found no binary and failed in
+// seconds. The launchers fetch it first, with the override left out, so the
+// installer fills the package's own dist/.
+test("the runtime is fetched with the override left out", () => {
+  const dir = mkdtempSync(join(tmpdir(), "uno-fetch-electron-"));
+  const installer = join(dir, "install.js");
+  const seen = join(dir, "seen.json");
+  writeFileSync(
+    installer,
+    `require("node:fs").writeFileSync(${JSON.stringify(seen)}, JSON.stringify(process.env));`,
+  );
+  const env = { ELECTRON_OVERRIDE_DIST_PATH: "/headless", HOME: "/home/someone" };
+
+  expect(fetchElectron(env, installer)).toBe(0);
+  const passed = JSON.parse(readFileSync(seen, "utf8"));
+  expect(passed).not.toHaveProperty("ELECTRON_OVERRIDE_DIST_PATH");
+  expect(passed).toHaveProperty("HOME", "/home/someone");
+  expect(env).toHaveProperty("ELECTRON_OVERRIDE_DIST_PATH", "/headless");
+});
+
+test("an installer that fails says so in its status", () => {
+  const dir = mkdtempSync(join(tmpdir(), "uno-fetch-electron-"));
+  const installer = join(dir, "install.js");
+  writeFileSync(installer, "process.exit(3);");
+  expect(fetchElectron({}, installer)).toBe(3);
+});
+
+test("smoke and preview fetch the runtime before they ask for its path", () => {
+  for (const name of ["smoke.js", "preview.js"]) {
+    const src = read(name);
+    const fetched = src.indexOf("requireElectron(");
+    expect(fetched, name).toBeGreaterThan(-1);
+    expect(fetched, name).toBeLessThan(src.indexOf('await import("electron")'));
+  }
 });
 
 // ----------------------------------------------------------------- the display
