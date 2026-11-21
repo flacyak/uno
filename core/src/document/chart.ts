@@ -215,7 +215,8 @@ export type Plot =
   | HorizonPlot
   | SwarmPlot
   | ParallelPlot
-  | ChordPlot;
+  | ChordPlot
+  | MapPlot;
 
 /**
  * Where a chart's window sits. width and height are CSS px. x and y are

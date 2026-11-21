@@ -413,6 +413,7 @@ function pure(plot: Plot, sheet: Sheet = sales, rows = ROWS): Tally {
     for (let r = 0; r < rows; r++) fold.add(cell(r, plot.by), cell(r, plot.of));
     return { t: 'mean', plot, coverage, ...fold.means(plot.order) };
   }
+  if (plot.t === 'map') throw new Error('map.test.ts folds the maps');
   const by = plot.by;
   const sum = plot.t === 'dots' ? plot.of : plot.sum;
   const fold =

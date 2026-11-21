@@ -63,6 +63,7 @@ export interface Heard extends SourceState {
 function columnsOf(plot: Plot): ReadonlyArray<ChartColumn | undefined> {
   if (plot.t === "scatter") return [plot.x, plot.y];
   if (plot.t === "parallel") return plot.axes;
+  if (plot.t === "map") return [plot.lat, plot.lon, plot.sum];
   if (plot.t === "stack") return [plot.by, plot.split, plot.sum];
   if (plot.t === "chord") return [plot.from, plot.to, plot.sum];
   if (plot.t === "histogram") return [plot.of];

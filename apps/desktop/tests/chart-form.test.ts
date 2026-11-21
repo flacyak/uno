@@ -656,6 +656,15 @@ test("a chart's form opens on what it shows, over its source", () => {
   expect(document.activeElement).toBe(select("x"));
 });
 
+test("a map, which the form makes none of yet, opens as a scatter of its longitude against its latitude", () => {
+  const [lat, lon] = [
+    { col: UNITS, header: "units" },
+    { col: REVENUE, header: "revenue" },
+  ];
+  changing({ t: "map", lat, lon, projection: "world" });
+  expect(chosen("kind", "x", "y")).toStrictEqual(["scatter", String(REVENUE), String(UNITS)]);
+});
+
 test("a chart's form is titled by the chart, and Apply sends what it holds", async () => {
   const { asked, box } = changing(REGION_BARS, "Takings");
   const heading = (): string | null => box.querySelector(".title")!.textContent;
