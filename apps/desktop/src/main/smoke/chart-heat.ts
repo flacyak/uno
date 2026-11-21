@@ -2,7 +2,8 @@
  * @fileoverview Checks of heatmaps over periods in real layout: a row per
  * region with orders, largest first, a cell per month, each in its class's
  * step of the ramp, West's months of no order in the rule, East's March of
- * returns in the pole's, every cell inside its window and 2 px from the next.
+ * returns in the pole's, every cell inside its window and 2 px from the next,
+ * and the legend over the cells, its breaks apart.
  *
  * They open the workspace smoke.js wrote of a year of four regions' orders.
  */
@@ -52,6 +53,11 @@ export const CHART_HEAT: Check[] = [
         const cells = [...win.querySelectorAll(".chart-heat-cell")].map((c) => c.getBoundingClientRect());
         if (cells.some((c) => c.left < box.left || c.right > box.right || c.bottom > box.bottom)) return "a cell stands past its window";
         if (Math.abs(cells[1].left - cells[0].right - ${GAP}) > ${PX_SLACK}) return "a row's cells stand " + (cells[1].left - cells[0].right) + " px apart";
+        const breaks = [...win.querySelectorAll(".chart-scale .chart-tick")].map((b) => b.getBoundingClientRect());
+        const keys = [...win.querySelectorAll(".chart-swatch")].map((k) => k.getBoundingClientRect());
+        if (breaks.length < 2 || breaks.some((b, i) => i > 0 && b.left < breaks[i - 1].right)) return "the legend's breaks overlap";
+        if (breaks.some((b) => b.top < keys[0].bottom || b.bottom > cells[0].top)) return "a break stands over the swatches or the cells";
+        if ([...breaks, ...keys].some((b) => b.left < cells[0].left || b.right > box.right)) return "the legend stands past the cells";
       }
       return "";
     `,

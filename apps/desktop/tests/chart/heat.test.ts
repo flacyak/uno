@@ -1,7 +1,8 @@
 /**
  * @fileoverview A heatmap over periods' drawing: the finest size whose cells
  * fit, a row per value largest first, each cell in the class of its rows or
- * sum either side of zero, and a period of no rows in no class.
+ * sum either side of zero, a period of no rows in no class, and a line that
+ * counts the values left out.
  *
  * @vitest-environment happy-dom
  */
@@ -78,6 +79,7 @@ test("a heatmap draws the finest size whose cells get 6 px, a row per value, eac
     "r0",
     "r1",
   ]);
+  expect(drawn.querySelector(".chart-bars-line")).toBeNull();
 });
 
 test("a heatmap of sums draws a period below zero in the pole's class", () => {
@@ -86,11 +88,11 @@ test("a heatmap of sums draws a period below zero in the pole's class", () => {
   expect(fillsOf(drawn)).toEqual([["var(--div-3)", "", "var(--seq-4)"]]);
 });
 
-test("a heatmap draws at most twelve rows, fewer where the plot is short", () => {
+test("a heatmap draws at most twelve rows, fewer where the plot is short, and counts the values left out", () => {
   const tally = tallyOf(Array.from({ length: HEAT_ROWS_AT_MOST + 2 }, () => [1, 1, 1]));
-  expect(fillsOf(heatGrid(tally, tally.levels[1]!, false, ROOM, 1_000))).toHaveLength(
-    HEAT_ROWS_AT_MOST,
-  );
+  const tall = heatGrid(tally, tally.levels[1]!, false, ROOM, 1_000);
+  expect(fillsOf(tall)).toHaveLength(HEAT_ROWS_AT_MOST);
+  expect(tall.querySelector(".chart-bars-line")?.textContent).toBe("+2 more · 6 rows");
   const short = heatGrid(tally, tally.levels[1]!, false, ROOM, 160);
   expect(fillsOf(short).length).toBeLessThan(HEAT_ROWS_AT_MOST);
   expect(heat(PLOT).drawing({ ...tally, levels: [] }, ROOM)?.empty).toBe(true);

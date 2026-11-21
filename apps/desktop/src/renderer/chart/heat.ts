@@ -6,14 +6,17 @@
  */
 
 import type { HeatTally } from "@engine";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
 import type { SplitLevel } from "@tally";
 import { barsBox } from "./bars.ts";
 import type { PlotRoom } from "./kind.ts";
-import { classOf, classesOver, fillOf } from "./ramp.ts";
+import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
 import { BARS_INSET, row, rowsIn } from "./rows.ts";
+import { TICK_GAP } from "./scatter.ts";
 
-/** The most values a heatmap draws a row for. */
+/** The most values a heatmap draws a row for, before a line counts the rest. */
 export const HEAT_ROWS_AT_MOST = 12;
 
 /** The least room a period takes across, in px: a 4 px cell and the dataviz skill's 2 px gap. */
@@ -23,8 +26,8 @@ export const HEAT_PITCH_LEAST = 6;
 const NAMES_MOST = 0.4;
 const NAMES_GAP = 8;
 
-/** The rows the periods' labels under the cells take. */
-const ROWS_BESIDE = 1;
+/** The rows the legend over the cells and the periods' labels under them take. */
+const ROWS_BESIDE = 2;
 
 /** cellsWide gives how wide the cells of `tally` stand in `room`, after its values' names. */
 function cellsWide(tally: HeatTally, room: PlotRoom): number {
@@ -40,9 +43,10 @@ export function heatLevel(tally: HeatTally, room: PlotRoom): SplitLevel | undefi
 }
 
 /**
- * heatGrid draws `level` of `tally` in a plot `height` px high: a row per
- * value that fits, at most HEAT_ROWS_AT_MOST, each a cell per period in the
- * class of its rows, or of its sum where `summed`.
+ * heatGrid draws `level` of `tally` in a plot `height` px high: the legend,
+ * then a row per value that fits, at most HEAT_ROWS_AT_MOST, each a cell per
+ * period in the class of its rows, or of its sum where `summed`, and a line
+ * counting the values left out.
  */
 export function heatGrid(
   tally: HeatTally,
@@ -52,10 +56,17 @@ export function heatGrid(
   height: number,
 ): HTMLElement {
   const box = barsBox("chart-heat");
+  box.style.setProperty("--tick-gap", `${TICK_GAP}px`);
   const fits = Math.max(rowsIn(height) - ROWS_BESIDE, 1);
-  const shown = Math.min(tally.values.length, HEAT_ROWS_AT_MOST, fits);
+  const left = (shown: number) => tally.values.length - shown + tally.others.values;
+  let shown = Math.min(tally.values.length, HEAT_ROWS_AT_MOST, fits);
+  if (left(shown) > 0 && shown === fits) shown = Math.max(shown - 1, 1);
   const amounts = (summed ? level.sum : level.rows).slice(0, shown);
   const classes = classesOver(amounts.flat(), !summed);
+  const signed = amounts.some((each) => each.some((amount) => amount < 0));
+  const legend = el("div", "chart-bar-row chart-heat-legend");
+  legend.append(el("span"), scaleOf(classes, signed, cellsWide(tally, room), room.ch));
+  box.append(legend);
   for (const [i, { value }] of tally.values.slice(0, shown).entries()) {
     const cells = el("div", "chart-heat-cells");
     cells.style.setProperty("--span", `${level.rows[i]!.length}`);
@@ -66,6 +77,11 @@ export function heatGrid(
       cells.append(cell);
     }
     box.append(row(value, cells));
+  }
+  const rest = tally.values.slice(shown).reduce((n, v) => n + v.rows, tally.others.rows);
+  if (left(shown) > 0) {
+    const more = m.chart_bars_more({ count: num(left(shown)) });
+    box.append(el("div", "chart-bars-line", `${more} · ${m.rows_count({ count: rest })}`));
   }
   return box;
 }
