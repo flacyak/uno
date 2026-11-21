@@ -18,6 +18,7 @@ import { pie } from "@renderer/chart/pie";
 import { scatter } from "@renderer/chart/scatter";
 import { stack } from "@renderer/chart/stack";
 import {
+  ACCENT,
   HIT_RADIUS,
   NONE,
   TIP_EDGE,
@@ -598,4 +599,22 @@ test("Right and Left step within a bar, Home and End to its ends, and Down and U
   tip.step(pressed("Home"));
   tip.step(pressed("ArrowDown"));
   expect(worn()).toBe(3);
+});
+
+test("targets that share a mark, as a line's points, each say their own reading and stand the box by their own spot", () => {
+  const line = el("span", "chart-bar-row");
+  const target = (value: string, x: number, y: number): Target => ({
+    mark: line,
+    at: line,
+    spot: () => new DOMRect(x, y),
+    front: false,
+    key: ACCENT,
+    said: () => [{ value, label: el("span", "", "units") }],
+  });
+  const all = [target("1", 100, 50), target("2", 200, 80)];
+  const { tip } = over(line, () => ({ all, under: () => undefined }));
+  tip.step(pressed("ArrowRight"));
+  expect(shown(tip)).toStrictEqual([true, "1 units", `${100 + TIP_OFFSET}px ${50 - SIZE.h / 2}px`]);
+  tip.step(pressed("ArrowRight"));
+  expect(shown(tip)).toStrictEqual([true, "2 units", `${200 + TIP_OFFSET}px ${80 - SIZE.h / 2}px`]);
 });
