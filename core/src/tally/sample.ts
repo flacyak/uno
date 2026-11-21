@@ -21,6 +21,8 @@ const KEPT_AT_MOST = 2 * SCATTER_POINTS_AT_MOST;
 // A page holds the least and most of this many blocks in 8 KB, so a fold of
 // one block stays small, and one of every block holds 32 bytes a block.
 const PAGE_BLOCKS = 256;
+/** A point's columns, x and y. */
+const POINT_COLUMNS = 2;
 
 /** A row's x and y, both numbers. */
 export interface Point {
@@ -65,7 +67,7 @@ export interface SavedSample {
   pages: Array<{ first: number; span: number; least: Point; most: Point }>;
 }
 
-/** The least and most x and y of the plotted rows of PAGE_BLOCKS blocks. */
+/** The least and most of each column over the plotted rows of PAGE_BLOCKS blocks. */
 class Page {
   /**
    * How many of the first blocks hold the least and most of them all, as a
@@ -73,43 +75,43 @@ class Page {
    */
   coarse = 0;
 
-  readonly leastX = new Float64Array(PAGE_BLOCKS).fill(Infinity);
-  readonly leastY = new Float64Array(PAGE_BLOCKS).fill(Infinity);
-  readonly mostX = new Float64Array(PAGE_BLOCKS).fill(-Infinity);
-  readonly mostY = new Float64Array(PAGE_BLOCKS).fill(-Infinity);
+  /** Each column's least and most, by block. */
+  readonly least: Float64Array[];
+  readonly most: Float64Array[];
+
+  constructor(columns: number) {
+    const each = (v: number) =>
+      Array.from({ length: columns }, () =>
+        new Float64Array(PAGE_BLOCKS).fill(v),
+      );
+    this.least = each(Infinity);
+    this.most = each(-Infinity);
+  }
 
   /** extent returns block `at`'s least and most. */
-  extent(at: number): [Point, Point] {
+  extent(at: number): [number[], number[]] {
     const i = at % PAGE_BLOCKS;
-    return [
-      { x: this.leastX[i]!, y: this.leastY[i]! },
-      { x: this.mostX[i]!, y: this.mostY[i]! },
-    ];
+    return [this.least.map((c) => c[i]!), this.most.map((c) => c[i]!)];
   }
 
   /** widen moves block `at`'s least and most out over `least` and `most`. */
-  widen(at: number, least: Point, most: Point): void {
+  widen(at: number, least: readonly number[], most: readonly number[]): void {
     const i = at % PAGE_BLOCKS;
-    this.leastX[i] = Math.min(this.leastX[i]!, least.x);
-    this.leastY[i] = Math.min(this.leastY[i]!, least.y);
-    this.mostX[i] = Math.max(this.mostX[i]!, most.x);
-    this.mostY[i] = Math.max(this.mostY[i]!, most.y);
+    this.least.forEach((c, k) => (c[i] = Math.min(c[i]!, least[k]!)));
+    this.most.forEach((c, k) => (c[i] = Math.max(c[i]!, most[k]!)));
   }
 
   /** set puts block `at`'s least and most at `least` and `most`. */
-  set(at: number, least: Point, most: Point): void {
+  set(at: number, least: readonly number[], most: readonly number[]): void {
     const i = at % PAGE_BLOCKS;
-    this.leastX[i] = least.x;
-    this.leastY[i] = least.y;
-    this.mostX[i] = most.x;
-    this.mostY[i] = most.y;
+    this.least.forEach((c, k) => (c[i] = least[k]!));
+    this.most.forEach((c, k) => (c[i] = most[k]!));
   }
 
   /** touches reports whether `p` sits on block `at`'s least or most. */
-  touches(at: number, p: Point): boolean {
+  touches(at: number, p: readonly number[]): boolean {
     const [least, most] = this.extent(at);
-    const onX = p.x === least.x || p.x === most.x;
-    return onX || p.y === least.y || p.y === most.y;
+    return p.some((v, k) => v === least[k] || v === most[k]);
   }
 }
 
@@ -142,7 +144,8 @@ export class SampleFold {
   /** add folds `row` of `block`, whose x cell is `xCell` and y `yCell`. */
   add(block: number, row: number, xCell: string, yCell: string): void {
     const point = this.count(xCell, yCell, 1);
-    if (point !== undefined) this.page(block).widen(block, point, point);
+    const at = point && [point.x, point.y];
+    if (at !== undefined) this.page(block).widen(block, at, at);
     this.keep(row, point);
   }
 
@@ -153,7 +156,7 @@ export class SampleFold {
   remove(block: number, row: number, xCell: string, yCell: string): void {
     const point = this.count(xCell, yCell, -1);
     const page = this.page(block);
-    if (point !== undefined && page.touches(block, point)) {
+    if (point !== undefined && page.touches(block, [point.x, point.y])) {
       this.stales.add(block);
       // A block of a coarse page holds the page's least and most, which
       // only every block of it folded again tells apart.
@@ -207,9 +210,11 @@ export class SampleFold {
       p === undefined ? [row] : [row, p.x, p.y],
     );
     const pages = [...this.pages].flatMap(([first, page]) => {
-      const [least, most] = extentOf([page]);
-      const span = 1 + page.leastX.findLastIndex((x, i) => x <= page.mostX[i]!);
-      return least.x <= most.x ? [{ first, span, least, most }] : [];
+      const [least, most] = extentOf([page], POINT_COLUMNS);
+      const [leastOf, mostOf] = [page.least[0]!, page.most[0]!];
+      const span = 1 + leastOf.findLastIndex((v, i) => v <= mostOf[i]!);
+      const [l, m] = [pointOf(least), pointOf(most)];
+      return l.x <= m.x ? [{ first, span, least: l, most: m }] : [];
     });
     const { last, plotted } = this;
     const skipped = { ...this.skipped };
@@ -243,7 +248,8 @@ export class SampleFold {
     for (const block of stale) fold.stales.add(block);
     for (const { first, span, least, most } of pages) {
       const page = fold.page(first);
-      for (let b = first; b < first + span; b++) page.set(b, least, most);
+      const [l, m] = [least, most].map(({ x, y }) => [x, y]);
+      for (let b = first; b < first + span; b++) page.set(b, l!, m!);
       page.coarse = span;
     }
     return fold;
@@ -261,15 +267,15 @@ export class SampleFold {
       x: points.map((p) => p.x),
       y: points.map((p) => p.y),
       plotted: this.plotted,
-      least: seen ? least : { x: 0, y: 0 },
-      most: seen ? most : { x: 0, y: 0 },
+      least: seen ? pointOf(least) : { x: 0, y: 0 },
+      most: seen ? pointOf(most) : { x: 0, y: 0 },
       skipped: { ...this.skipped },
     };
   }
 
   /** extent returns the least and most x and y of every block. */
-  private extent(): [Point, Point] {
-    return extentOf(this.pages.values());
+  private extent(): [number[], number[]] {
+    return extentOf(this.pages.values(), POINT_COLUMNS);
   }
 
   /** page returns the page that holds block `at`, made when it has none. */
@@ -277,7 +283,7 @@ export class SampleFold {
     const first = at - (at % PAGE_BLOCKS);
     let page = this.pages.get(first);
     if (page === undefined) {
-      page = new Page();
+      page = new Page(POINT_COLUMNS);
       this.pages.set(first, page);
     }
     return page;
@@ -311,17 +317,23 @@ export class SampleFold {
   }
 }
 
-/** extentOf returns the least and most x and y of every block of `pages`. */
-function extentOf(pages: Iterable<Page>): [Point, Point] {
-  const least = { x: Infinity, y: Infinity };
-  const most = { x: -Infinity, y: -Infinity };
+/** extentOf returns each column's least and most over every block of `pages`. */
+function extentOf(
+  pages: Iterable<Page>,
+  columns: number,
+): [number[], number[]] {
+  const least = Array<number>(columns).fill(Infinity);
+  const most = Array<number>(columns).fill(-Infinity);
   for (const page of pages) {
-    least.x = Math.min(least.x, ...page.leastX);
-    least.y = Math.min(least.y, ...page.leastY);
-    most.x = Math.max(most.x, ...page.mostX);
-    most.y = Math.max(most.y, ...page.mostY);
+    page.least.forEach((c, k) => (least[k] = Math.min(least[k]!, ...c)));
+    page.most.forEach((c, k) => (most[k] = Math.max(most[k]!, ...c)));
   }
   return [least, most];
+}
+
+/** pointOf is the point of x and y. */
+function pointOf([x, y]: readonly number[]): Point {
+  return { x: x!, y: y! };
 }
 
 /** isKept says whether `v` is a kept row as a save writes it. */
