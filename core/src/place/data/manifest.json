@@ -1,0 +1,12 @@
+{
+  "source": {
+    "commit": "ca96624a56bd078437bca8184e78163e5039ad19",
+    "layers": {
+      "ne_10m_admin_0_countries_usa": "d3166691d3d86f113c0d8db52506f4b72936513691d1593f47010fed01fc0b93"
+    },
+    "icu": "78.3"
+  },
+  "hashes": {
+    "places.json": "d724b35f66a6af002d1352e1929d03d041090787438b4e3791d030fbd48faa57"
+  }
+}
