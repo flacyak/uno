@@ -665,6 +665,7 @@
   "chart_stack_total": "total",
   "chart_bar_moved": "{value} moved to {place} of {count}",
   "chart_summary_stack": "Split by {split} into {count} series.",
+  "chart_summary_chord": "The largest flow is {from} to {to}, {value}.",
   "chart_stack_unsplit": "rows past {count} pairs are in Other",
   "chart_table_under": "under {edge}",
   "chart_table_over": "{edge} and over",

@@ -16,6 +16,9 @@ const CHORDED = process.env["UNO_SMOKE_CHORDED"] ?? "";
 /** The ribbons of the flights: one between each two of the seven arcs, and Other's to itself. */
 const RIBBONS = 22;
 
+/** The flights smoke.js wrote, which the table's totals account for. */
+const FLIGHTS = 1_894;
+
 /** How far a measure may stand off: half a px of rounding. */
 const PX_SLACK = 0.5;
 
@@ -92,6 +95,20 @@ export const CHART_CHORD: Check[] = [
       if (!(await until(() => win.querySelector(".chart-chord-ribbon.cursor") !== null))) return "no ribbon wears the cursor";
       const lines = [...win.querySelectorAll(".chart-tip-line")].map((line) => line.textContent.replace(/\\s+/gu, " ").trim());
       return lines.length === 2 && /^[\\d,]+ ORD to Other$/u.test(lines[0]) && /^[\\d,]+ Other to ORD$/u.test(lines[1]) ? "" : "the box says " + lines.join(" / ");
+    `,
+  },
+  {
+    name: "a chord chart's table lists its square, from in rows and to in columns, Other last, with each row's total",
+    click: { selector: ".chart:first-child .chart-table-toggle" },
+    shot: "chart-chord-table",
+    script: `
+      const win = document.querySelector(".chart");
+      if (!(await until(() => win.querySelector(".chart-table tbody tr") !== null))) return "the window shows no table";
+      const lines = [...win.querySelectorAll(".chart-table tr")].map((tr) => [...tr.children].map((c) => c.textContent).join(" | "));
+      if (lines[0] !== "origin | ORD | ATL | DEN | LAX | JFK | SFO | Other | total") return "the table's head reads " + lines[0];
+      const totals = lines.slice(1).map((line) => Number(line.split(" | ").at(-1).replace(/,/gu, "")));
+      const rows = totals.reduce((n, total) => n + total, 0);
+      return rows === ${FLIGHTS} ? "" : "the table's totals add to " + rows;
     `,
   },
 ];

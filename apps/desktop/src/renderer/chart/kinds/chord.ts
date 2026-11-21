@@ -4,6 +4,8 @@ import type { ChordPlot } from "@document";
 import { arcs, chord as drawChord, chordTargets, fitRing } from "../chord.ts";
 import type { ChartKind } from "../kind.ts";
 import { fitLabels } from "../pie.ts";
+import { flowed } from "../summary.ts";
+import { squared, tableOf } from "../table.ts";
 import { named } from "./bars.ts";
 import { undrawn } from "./undrawn.ts";
 
@@ -25,5 +27,7 @@ export const chord: ChartKind<ChordPlot> = (plot) => ({
             fitRing(drawn);
           },
           targets: (drawn) => chordTargets(plot, tally, drawn),
+          table: (called) => tableOf(squared(plot, tally), called),
+          told: () => flowed(plot, tally),
         },
 });

@@ -9,8 +9,17 @@
  * apart from them, so a window can mark them as the file's.
  */
 
-import type { ChartColumn, ParallelPlot, Plot, StackPlot, SwarmPlot, TimePlot } from "@document";
 import type {
+  ChartColumn,
+  ChordPlot,
+  ParallelPlot,
+  Plot,
+  StackPlot,
+  SwarmPlot,
+  TimePlot,
+} from "@document";
+import type {
+  ChordTally,
   Group,
   Groups,
   HeatTally,
@@ -88,6 +97,29 @@ export function valued(plot: Grouped, tally: Groups): Told {
  * that splits its bars and how many series it draws, Other one of them, and
  * its values by their totals, as a bar chart's.
  */
+/**
+ * flowed gives what a chord chart's summary says: its largest flow between two
+ * nodes, and each node, Other last, with what it runs to the others.
+ */
+export function flowed(plot: ChordPlot, tally: ChordTally): Told {
+  const measure = (g: { rows: number; sum: number }): number =>
+    plot.sum === undefined ? g.rows : g.sum;
+  const name = (place: number) => named(tally.nodes[place] ?? m.chart_pie_other());
+  const flows = tally.flows.flatMap((out, p) =>
+    out.map((flow, q) => ({ p, q, size: measure(flow) })),
+  );
+  const largest = flows.reduce((most, flow) => (flow.size > most.size ? flow : most));
+  const span = m.chart_summary_chord({
+    from: name(largest.p),
+    to: name(largest.q),
+    value: num(largest.size),
+  });
+  const each = tally.flows.map(
+    (out, p) => `${name(p)} ${num(out.reduce((n, flow) => n + measure(flow), 0))}`,
+  );
+  return { span, each, more: Math.max(each.length - SUMMARY_VALUES, 0) };
+}
+
 export function split(plot: StackPlot, tally: StackTally): Told {
   const measure = (g: { rows: number; sum: number }): number =>
     plot.sum === undefined ? g.rows : g.sum;

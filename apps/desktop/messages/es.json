@@ -687,6 +687,7 @@
   "chart_stack_total": "total",
   "chart_bar_moved": "{value} pasa al puesto {place} de {count}",
   "chart_summary_stack": "Dividido por {split} en {count} series.",
+  "chart_summary_chord": "El mayor flujo es de {from} a {to}, {value}.",
   "chart_stack_unsplit": "las filas pasados {count} pares van en Otros",
   "chart_table_under": "menos de {edge}",
   "chart_table_over": "{edge} o más",
