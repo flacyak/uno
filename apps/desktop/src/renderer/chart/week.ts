@@ -9,13 +9,17 @@
  */
 
 import type { WeekTally } from "@engine";
+import { m } from "@paraglide/messages";
+import { num } from "@renderer/locale";
 import { el } from "@renderer/shell/util";
-import { DAY_HOURS, WEEK_DAYS } from "@tally";
+import { DAY_HOURS, WEEK_DAYS, WEEK_HOURS } from "@tally";
 import type { PlotRoom } from "./kind.ts";
-import { dayName, hourName } from "./periods.ts";
+import { dayName, hourName, weekHourName } from "./periods.ts";
 import { classOf, classesOver, fillOf, scaleOf } from "./ramp.ts";
 import { BARS_INSET } from "./rows.ts";
 import { TICK_GAP } from "./scatter.ts";
+import { among } from "./tooltip.ts";
+import type { Reading, Targets } from "./tooltip.ts";
 
 /** The steps a week heatmap labels its hours at, each a whole share of a day, finest first. */
 const HOUR_STEPS = [1, 2, 3, 6, 12] as const;
@@ -88,4 +92,44 @@ export function weekGrid(tally: WeekTally, summed: boolean, room: PlotRoom): HTM
   const scale = scaleOf(classes, signed, cellsWide(room, daysCh), room.ch);
   box.append(scale, days, cells, hours);
   return box;
+}
+
+/** Where each key takes the cursor from the hour of the week `at`: along its day, to its ends, or to the day before or after. */
+const WEEK_STEPS: ReadonlyMap<string, (at: number) => number> = new Map([
+  ["ArrowRight", (at: number) => (at % DAY_HOURS < DAY_HOURS - 1 ? at + 1 : at)],
+  ["ArrowLeft", (at: number) => (at % DAY_HOURS > 0 ? at - 1 : at)],
+  ["ArrowDown", (at: number) => (at + DAY_HOURS < WEEK_HOURS ? at + DAY_HOURS : at)],
+  ["ArrowUp", (at: number) => (at >= DAY_HOURS ? at - DAY_HOURS : at)],
+  ["Home", (at: number) => at - (at % DAY_HOURS)],
+  ["End", (at: number) => at - (at % DAY_HOURS) + DAY_HOURS - 1],
+]);
+
+/** The keys a week heatmap's cursor takes past the tooltip's own: to the day after and the day before. */
+const DAY_KEYS = ["ArrowDown", "ArrowUp"] as const;
+
+/**
+ * weekTargets gives the cells of `drawn`, as weekGrid drew `tally`: each worth
+ * its rows, or its sum and its rows where `summed`, named by its day and hour.
+ * Right and Left step along a day, Home and End to its ends, and Down and Up
+ * to the same hour of the day after and before, from Sunday 00:00 where no
+ * cell has the cursor.
+ */
+export function weekTargets(tally: WeekTally, summed: boolean, drawn: HTMLElement): Targets {
+  const cells = [...drawn.querySelectorAll<HTMLElement>(".chart-week-cell")];
+  const all = cells.map((mark, i) => {
+    const said = (): Reading[] => {
+      const { rows, sum } = tally.hours[i]!;
+      const name = el("span", "", weekHourName(i));
+      const counted = { value: num(rows), label: el("span", "", m.chart_table_rows()) };
+      return summed ? [{ value: num(sum), label: name }, counted] : [{ ...counted, label: name }];
+    };
+    const key = mark.style.getPropertyValue("--fill") || "var(--rule)";
+    return { mark, at: mark, front: false, key, said };
+  });
+  const step = (key: string, at: number | undefined): number | undefined => {
+    const to = WEEK_STEPS.get(key);
+    if (to === undefined) return undefined;
+    return at === undefined ? 0 : to(at);
+  };
+  return { all, under: among(all, ".chart-week-cell"), step, keys: DAY_KEYS };
 }

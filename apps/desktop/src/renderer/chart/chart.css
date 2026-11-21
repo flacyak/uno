@@ -1131,6 +1131,11 @@
   background: color-mix(in srgb, var(--accent) 80%, var(--ink));
 }
 
+/* A week heatmap's cell under the cursor is ringed in the ink, over the gaps beside it. */
+.chart-week-cell.cursor {
+  outline: 2px solid var(--ink);
+}
+
 .chart-slice.cursor {
   fill: color-mix(in srgb, var(--key) 80%, var(--ink));
 }
@@ -1267,6 +1272,10 @@
   .chart-point.cursor,
   .chart-slice.cursor {
     fill: Highlight;
+  }
+
+  .chart-week-cell.cursor {
+    outline-color: Highlight;
   }
 }
 

@@ -147,6 +147,16 @@ export function hourName(hour: number): string {
   return format("hour alone", { hour: "numeric" }).format(at).replace(NARROW, NO_BREAK);
 }
 
+/** weekHourName gives an hour of the week in full, as the tooltip says it: "Tuesday, 2:00 PM to 3:00 PM". */
+export function weekHourName(at: number): string {
+  const hour = (h: number): string =>
+    format("hour false", FORMATS.hour[0])
+      .format(new Date(A_SUNDAY_MS + h * HOUR_MS))
+      .replace(NARROW, NO_BREAK);
+  const day = dayName(Math.floor(at / DAY_HOURS), "long");
+  return m.chart_period_hour({ day, from: hour(at), to: hour(at + 1) });
+}
+
 /** monthOf gives the month `minute` minutes from 1970 falls in, as the language names it. */
 export function monthOf(minute: number): string {
   return format("month long", { month: "long" }).format(new Date(minute * MINUTE_MS));

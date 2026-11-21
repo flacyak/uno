@@ -9,7 +9,7 @@
  * They open the workspace smoke.js wrote of four weeks of orders.
  */
 
-import type { Check } from "./check.ts";
+import type { Check, Input } from "./check.ts";
 
 /** The workspace smoke.js wrote of two week heatmaps. */
 const WEEKLY = process.env["UNO_SMOKE_WEEKLY"] ?? "";
@@ -19,6 +19,12 @@ const WEEK_HOURS = 168;
 const SUNDAY_NIGHT = 3;
 const SUNDAY_EVENING = 20;
 const MONDAY_PEAK = 24 + 13;
+
+/** A real press of `key`. */
+const press = (key: string): readonly Input[] => [
+  { type: "keyDown", keyCode: key },
+  { type: "keyUp", keyCode: key },
+];
 
 /** The dataviz skill's gap between fills, in px, and a px's rounding. */
 const GAP = 2;
@@ -80,6 +86,30 @@ export const CHART_WEEK: Check[] = [
         if (keys.some((k) => k.bottom > rect(cells[0]).top)) return "the legend stands over the cells";
       }
       return "";
+    `,
+  },
+  {
+    name: "a click on Monday 13:00 says its hour and its twenty rows, and its cell wears the cursor",
+    click: { selector: `.chart:first-child .chart-week-cell:nth-child(${MONDAY_PEAK + 1})` },
+    shot: "chart-week-tip",
+    script: `
+      const win = document.querySelector(".chart");
+      const cell = win.querySelectorAll(".chart-week-cell")[${MONDAY_PEAK}];
+      if (!(await until(() => cell.classList.contains("cursor")))) return "Monday 13:00 wears no cursor";
+      if (getComputedStyle(cell).outlineStyle !== "solid") return "the cursor's cell has no ring";
+      const said = win.querySelector(".chart-tip-words").textContent.replace(/\\s/gu, " ");
+      return /^20 Monday, 1:00 PM to 2:00 PM$/.test(said) ? "" : "the box says " + said;
+    `,
+  },
+  {
+    name: "Down, End and Up step the cursor to Tuesday 13:00, Tuesday 23:00 and Monday 23:00",
+    input: { events: [...press("Down"), ...press("End"), ...press("Up")], through: true },
+    script: `
+      const win = document.querySelector(".chart");
+      const cells = [...win.querySelectorAll(".chart-week-cell")];
+      if (!(await until(() => cells[24 + 23].classList.contains("cursor")))) return "the cursor is on cell " + cells.findIndex((c) => c.classList.contains("cursor"));
+      const said = win.querySelector(".chart-tip-words").textContent.replace(/\\s/gu, " ");
+      return /^0 Monday, 11:00 PM to 12:00 AM$/.test(said) ? "" : "the box says " + said;
     `,
   },
 ];

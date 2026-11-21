@@ -12,7 +12,7 @@ import type { WeekPlot } from "@document";
 import type { WeekTally } from "@engine";
 import { baseLocale, setLocale } from "@paraglide/runtime";
 import { week } from "@renderer/chart/kinds/week";
-import { hourStep, weekGrid } from "@renderer/chart/week";
+import { hourStep, weekGrid, weekTargets } from "@renderer/chart/week";
 import { DAY_HOURS, WEEK_HOURS } from "@tally";
 
 const AT = { col: 0, header: "ordered" };
@@ -128,4 +128,47 @@ test("a week heatmap's hours stand as close as their labels let them, in each la
     (t) => t.textContent,
   );
   expect(days).toEqual(["dom", "lun", "mar", "mié", "jue", "vie", "sáb"]);
+});
+
+/** What a target's box says, its readings' values and labels, spaces as one. */
+const saidOf = (target: { said: () => Array<{ value: string; label: Node }> }): string =>
+  target
+    .said()
+    .map(({ value, label }) => `${value} ${label.textContent}`)
+    .join(" / ")
+    .replace(/\s/gu, " ");
+
+test("a week heatmap's cells each say their day and hour and what they hold", () => {
+  const rows = tallyOf(ROWS, { [MONDAY_NINE]: [7, 0] });
+  const targets = weekTargets(rows, false, weekGrid(rows, false, ROOM));
+  expect(targets.all).toHaveLength(WEEK_HOURS);
+  expect(saidOf(targets.all[MONDAY_NINE]!)).toBe("7 Monday, 9:00 AM to 10:00 AM");
+  expect(saidOf(targets.all[0]!)).toBe("0 Sunday, 12:00 AM to 1:00 AM");
+  const sums = tallyOf(SUMS, { [WEEK_HOURS - 1]: [2, -300] });
+  const summed = weekTargets(sums, true, weekGrid(sums, true, ROOM));
+  expect(saidOf(summed.all[WEEK_HOURS - 1]!)).toBe("-300 Saturday, 11:00 PM to 12:00 AM / 2 rows");
+  expect(summed.all[WEEK_HOURS - 1]!.key).toBe("var(--div-4)");
+});
+
+test("the keys step a week heatmap's cursor along a day, to its ends, and to the days either side", () => {
+  const tally = tallyOf(ROWS, { 0: [1, 0] });
+  const { step, keys } = weekTargets(tally, false, weekGrid(tally, false, ROOM));
+  const after = (key: string, at: number | undefined) => step!(key, at);
+  expect(after("ArrowDown", undefined)).toBe(0);
+  expect([
+    after("ArrowRight", 0),
+    after("ArrowLeft", 0),
+    after("ArrowRight", DAY_HOURS - 1),
+  ]).toEqual([1, 0, DAY_HOURS - 1]);
+  expect([after("ArrowDown", MONDAY_NINE), after("ArrowUp", MONDAY_NINE)]).toEqual([
+    MONDAY_NINE + DAY_HOURS,
+    9,
+  ]);
+  expect([after("ArrowUp", 9), after("ArrowDown", WEEK_HOURS - 1)]).toEqual([9, WEEK_HOURS - 1]);
+  expect([after("Home", MONDAY_NINE), after("End", MONDAY_NINE)]).toEqual([
+    DAY_HOURS,
+    2 * DAY_HOURS - 1,
+  ]);
+  expect(after("PageDown", 0)).toBeUndefined();
+  expect(keys).toEqual(["ArrowDown", "ArrowUp"]);
 });
