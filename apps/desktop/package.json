@@ -17,6 +17,7 @@
     "start": "electron .",
     "smoke": "node scripts/build.js && node --import ../../paths.js scripts/smoke.js",
     "preview": "node scripts/build.js && node --import ../../paths.js scripts/preview.js",
+    "package": "node scripts/package.js",
     "test": "vp test",
     "check": "node scripts/messages.js && vp check"
   },
@@ -24,6 +25,7 @@
     "@uno/core": "workspace:*"
   },
   "devDependencies": {
+    "@electron/packager": "20.3.0",
     "@inlang/paraglide-js": "^2.25.4",
     "@inlang/plugin-message-format": "^4.4.4",
     "@types/node": "^26.1.1",

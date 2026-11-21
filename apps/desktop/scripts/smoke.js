@@ -11,6 +11,8 @@
  * (after node scripts/build.js). With --affected, only the groups the files
  * changed since <base> touch are run, by smoke-groups.json; see
  * src/main/smoke/affected.ts. UNO_SMOKE_ONLY set by hand wins over it.
+ * With --app <executable>, a packaged uno (scripts/package.js) is driven in
+ * place of the checkout's Electron, so a release is checked as the build is.
  */
 
 import { newManifest, readContainer, writeDocument } from "@uno/core/document";
@@ -48,7 +50,10 @@ const root = join(pkg, "../..");
 // would end the options before the first one.
 const argv = process.argv.slice(2);
 if (argv[0] === "--") argv.shift();
-const { values: flags } = parseArgs({ args: argv, options: { affected: { type: "string" } } });
+const { values: flags } = parseArgs({
+  args: argv,
+  options: { affected: { type: "string" }, app: { type: "string" } },
+});
 if (flags.affected !== undefined && (process.env[ONLY_VARIABLE] ?? "") === "") {
   const git = (...args) =>
     execFileSync("git", args, { cwd: root, encoding: "utf8" })
@@ -988,7 +993,10 @@ await writeFile(
   }),
 );
 
-const electron = (await import("electron")).default;
+// The executable and what names the app to it: the checkout's Electron, told
+// this package, or a packaged uno, which holds the app itself.
+const electron = flags.app ?? (await import("electron")).default;
+const appArgs = flags.app === undefined ? [pkg] : [];
 
 requireDisplay("smoke");
 
@@ -1027,7 +1035,12 @@ const AGAIN_MS = 15_000;
 function again(path) {
   const child = spawn(
     electron,
-    [pkg, `--user-data-dir=${data}`, DRIVEN_LANGUAGE_SWITCH, ...(path === undefined ? [] : [path])],
+    [
+      ...appArgs,
+      `--user-data-dir=${data}`,
+      DRIVEN_LANGUAGE_SWITCH,
+      ...(path === undefined ? [] : [path]),
+    ],
     { stdio: ["ignore", "inherit", "inherit"], env: electronEnv(process.env, DRIVEN_LANGUAGE_ENV) },
   );
   return new Promise((resolve) => {
@@ -1075,7 +1088,7 @@ async function run(only, folder, deadlineMs) {
   await rm(dataDir, { recursive: true, force: true });
   const { code, out } = await drive("smoke", {
     electron,
-    args: [pkg, `--user-data-dir=${dataDir}`, DRIVEN_LANGUAGE_SWITCH, fixture],
+    args: [...appArgs, `--user-data-dir=${dataDir}`, DRIVEN_LANGUAGE_SWITCH, fixture],
     env: electronEnv(process.env, {
       ...DRIVEN_LANGUAGE_ENV,
       UNO_SMOKE: folder,
