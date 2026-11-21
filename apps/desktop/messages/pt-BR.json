@@ -517,6 +517,7 @@
   "chart_kind_histogram": "Histograma",
   "chart_form_of": "de",
   "chart_kind_box": "Diagrama de caixa",
+  "chart_kind_swarm": "Enxame",
   "chart_kind_dots": "Gráfico de pontos",
   "chart_kind_slope": "Inclinação",
   "chart_form_box_none": "nenhuma, uma caixa",

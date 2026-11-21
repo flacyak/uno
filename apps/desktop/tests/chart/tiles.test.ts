@@ -37,7 +37,7 @@ test("each question is a row of its kinds' tiles, one radio group the form names
       m.chart_kind_heat(),
       m.chart_kind_horizon(),
     ],
-    [m.chart_kinds_spread(), m.chart_kind_histogram(), m.chart_kind_box()],
+    [m.chart_kinds_spread(), m.chart_kind_histogram(), m.chart_kind_box(), m.chart_kind_swarm()],
     [m.chart_kinds_relate(), m.chart_kind_scatter()],
   ]);
   expect(tiles.box.getAttribute("role")).toBe("radiogroup");

@@ -385,8 +385,8 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column; the form makes no beeswarm yet.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t === "swarm" ? "box" : plot.t;
+    // A stacked chart is bars split by a column.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
     if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "time" || plot.t === "week" || plot.t === "heat" || plot.t === "horizon") {
       if (plot.t !== "week") this.per.value = plot.per;
@@ -429,7 +429,7 @@ export class ChartForm {
   /** first gives the column select the kind chosen asks for first. */
   private first(): HTMLSelectElement {
     if (["time", "week", "horizon"].includes(this.kind.value)) return this.at;
-    if (this.kind.value === "histogram" || this.kind.value === "box") return this.of;
+    if (["histogram", "box", "swarm"].includes(this.kind.value)) return this.of;
     return this.kind.value === "scatter" ? this.x : this.by;
   }
 
@@ -505,7 +505,7 @@ export class ChartForm {
       this.kind.disable(t, dates.length === 0);
       if (dates.length === 0 && this.kind.value === t) this.kind.value = "bars";
     }
-    for (const t of ["histogram", "box"]) {
+    for (const t of ["histogram", "box", "swarm"]) {
       this.kind.disable(t, numbers.length === 0);
       if (numbers.length === 0 && this.kind.value === t) this.kind.value = "bars";
     }
@@ -525,13 +525,13 @@ export class ChartForm {
     this.timed[1]!.hidden ||= order === undefined || unit !== undefined;
     // A week has its hours, so a week heatmap asks for no size.
     this.timed[2]!.hidden ||= t === "week";
-    const spreads = t === "histogram" || t === "box";
-    this.spread.hidden = !spreads;
-    this.boxed.hidden = t !== "box";
+    const numbered = t === "histogram" || t === "box" || t === "swarm";
+    this.spread.hidden = !numbered;
+    this.boxed.hidden = t !== "box" && t !== "swarm";
     this.rowed.hidden = t !== "horizon";
     this.grouped[0]!.hidden =
-      t === "scatter" || t === "time" || t === "week" || t === "horizon" || spreads;
-    this.grouped[1]!.hidden = t === "scatter" || t === "dots" || t === "slope" || spreads;
+      t === "scatter" || t === "time" || t === "week" || t === "horizon" || numbered;
+    this.grouped[1]!.hidden = t === "scatter" || t === "dots" || t === "slope" || numbered;
     const measures = t === "dots" || t === "slope";
     this.dotted[0]!.hidden = !measures;
     this.dotted[1]!.hidden = !measures || this.dotsOf.value === "";
@@ -541,7 +541,7 @@ export class ChartForm {
     for (const made of this.stateTo.options) made.disabled = made.value === this.stateFrom.value;
     const other = [...this.stateTo.options].find((made) => !made.disabled)?.value ?? "";
     if (this.stateTo.value === this.stateFrom.value) this.stateTo.value = other;
-    // A box plot splits by another column, never by its numbers'.
+    // A box plot or a beeswarm splits by another column, never by its numbers'.
     for (const made of this.boxBy.options) made.disabled = made.value === this.of.value;
     if (this.boxBy.value === this.of.value) this.boxBy.value = "";
     this.grouped[2]!.hidden = t !== "bars";
@@ -564,10 +564,9 @@ export class ChartForm {
     if (this.kind.value === "horizon") return this.horizoned();
     const of = this.column(this.of.value);
     if (this.kind.value === "histogram") return { t: "histogram", of, span: this.span };
-    if (this.kind.value === "box") {
-      const by = this.boxBy.value === "" ? {} : { by: this.column(this.boxBy.value) };
-      return { t: "box", of, ...by, span: this.span };
-    }
+    const split = this.boxBy.value === "" ? {} : { by: this.column(this.boxBy.value) };
+    if (this.kind.value === "box") return { t: "box", of, ...split, span: this.span };
+    if (this.kind.value === "swarm") return { t: "swarm", of, ...split };
     const t = this.kind.value === "pie" ? "pie" : "bars";
     const by = this.column(this.by.value);
     if (this.kind.value === "dots") return this.dots(by);

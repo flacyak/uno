@@ -190,7 +190,7 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a horizon, a histogram, a box plot and a scatter, and opens on bars", () => {
+test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heatmap, a heatmap, a horizon, a histogram, a box plot, a beeswarm and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
@@ -205,6 +205,7 @@ test("it offers bars, a dot plot, a slope, a pie, a chart over time, a week heat
     m.chart_kind_horizon(),
     m.chart_kind_histogram(),
     m.chart_kind_box(),
+    m.chart_kind_swarm(),
     m.chart_kind_scatter(),
   ];
   expect(offered).toStrictEqual(kinds.map((words) => [words, false]));
@@ -1007,6 +1008,30 @@ test("a box plot's form opens on its columns, and keeps its span", () => {
   const of = { col: REVENUE, header: "revenue" };
   changing({ t: "box", of, by: { col: REGION, header: "region" }, span: "all" });
   expect(chosen("kind", "of", "box-by")).toStrictEqual(["box", String(REVENUE), String(REGION)]);
+});
+
+test("a beeswarm asks for the number column it is of and a column of strips, none or another, and opens on its columns", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: REVENUE });
+  pick("kind", "swarm");
+  expect(shown(box)).toStrictEqual([
+    m.chart_form_source(),
+    ...QUESTION_WORDS,
+    m.chart_form_of(),
+    m.chart_form_by(),
+    m.chart_form_title_field(),
+    m.chart_form_refresh(),
+  ]);
+  pick("box-by", String(REGION));
+  const of = { col: REVENUE, header: "revenue" };
+  const swarmPlot: Plot = { t: "swarm", of, by: { col: REGION, header: "region" } };
+  expect(box.querySelector<HTMLInputElement>('input[type="text"]')!.placeholder).toBe(
+    madeTitle(swarmPlot),
+  );
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(swarmPlot), "closed"]);
+  changing(swarmPlot);
+  expect(chosen("kind", "of", "box-by")).toStrictEqual(["swarm", String(REVENUE), String(REGION)]);
 });
 
 test("a heatmap asks for its dates, a size, its values' column and a sum, and makes one of By's values per period", async () => {

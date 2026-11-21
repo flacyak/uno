@@ -75,6 +75,9 @@
  * - `box`: selects revenue, opens the chart form on it by Ctrl+Shift+G,
  *   steps its kind to Box plot and By to region, presses Enter, then clicks a
  *   region's row and presses Down. Goes to out/box.gif.
+ * - `swarmed`: selects revenue, opens the chart form on it by Ctrl+Shift+G,
+ *   steps its kind to Beeswarm and By to region, presses Enter, then clicks a
+ *   dot and presses Down. Goes to out/swarmed.gif.
  * - `moving`: carries the last of region's bars to the top by its label, then
  *   steps the cursor and moves a bar with Alt+Down and Alt+Up. Goes to
  *   out/moving.gif.
@@ -96,7 +99,7 @@
  *   Insert chart…, drawn as a stand-in, and press Enter on it. Each goes to
  *   out/<story>.gif.
  *
- * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|heated|horizoned|stacked|histogram|box|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
+ * Usage: node --import ../../paths.js scripts/preview.js [browse|sidebar|chart|edit|refresh|opening|connecting|refused|moves|wheel|table|tip|insert|kinds|dates|weekly|heated|horizoned|stacked|histogram|box|swarmed|moving|dots|sloped|dotted|change|schedule|reread|focus|aside|chord|command|menu]
  * (after node scripts/build.js)
  */
 
@@ -161,6 +164,7 @@ const CHARTED = [
   "stacked",
   "histogram",
   "box",
+  "swarmed",
   "moving",
   "dots",
   "sloped",
@@ -522,6 +526,7 @@ const staged = {
   stacked: () => stageCharts("stacked", []),
   histogram: () => stageCharts("histogram", []),
   box: () => stageCharts("box", []),
+  swarmed: () => stageCharts("swarmed", []),
   moving: () => stageCharts("moving", [REGION_BARS]),
   dots: () => stageCharts("dots", []),
   sloped: () => stageCharts("sloped", []),

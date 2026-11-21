@@ -319,6 +319,10 @@ const BOX = {
 };
 /** How many Downs take By from None, past the date, to region. */
 const TO_REGION = 2;
+/** The swarmed story's beats, the box story's, with Beeswarm one kind past Box plot. */
+const SWARMED = BOX;
+/** How many Downs step the kinds from Histogram to Beeswarm. */
+const TO_SWARM = 2;
 
 /**
  * The moving story's beats: the last of region's bars carried to the top by
@@ -1055,6 +1059,7 @@ const STORIES: Record<string, Story> = {
   stacked: { end: STACKED.end, script: playStacked },
   histogram: { end: HISTOGRAM.stop, script: playHistogram },
   box: { end: BOX.stop, script: playBox },
+  swarmed: { end: SWARMED.stop, script: playSwarmed },
   moving: { end: MOVING.end, script: playMoving },
   dots: { end: DOTS.stop, script: playDots },
   weekly: { end: WEEKLY.stop, script: playWeekly },
@@ -1326,6 +1331,40 @@ async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
   await at(BOX.down);
   press(win, "Down");
   await at(BOX.stop);
+}
+
+/**
+ * playSwarmed performs the swarmed story: revenue selected, the form opened on
+ * it by Ctrl+Shift+G, Down on the kinds from Histogram to Beeswarm, By set to
+ * region, Enter, then a click on a dot for its amount and row, and Down to the
+ * next region's nearest.
+ */
+async function playSwarmed(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(SWARMED.column);
+  await pressOn(REVENUE_CELL);
+  await glideTo(KEYED_REST);
+  await at(SWARMED.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(SWARMED.kind);
+  // The keys open in Of, after the kinds.
+  press(win, "Tab", ["shift"]);
+  await presses(win, "Down", TO_SWARM, KIND_STEP_MS);
+  await glideTo('.chart-form select[name="box-by"]');
+  await at(SWARMED.by);
+  press(win, "Tab");
+  press(win, "Tab");
+  await presses(win, "Down", TO_REGION, KIND_STEP_MS);
+  await at(SWARMED.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-swarm-dot")', "the beeswarm never drew");
+  await at(SWARMED.cursor);
+  await pressOn(".chart .chart-swarm-track .chart-swarm-dot");
+  await at(SWARMED.down);
+  press(win, "Down");
+  await at(SWARMED.stop);
 }
 
 /**
