@@ -183,6 +183,15 @@ test("each plot kind has its module", () => {
   expect(KINDS).toStrictEqual({ bars, pie, scatter, time, stack, histogram, box, dots, slope });
 });
 
+test("a slope chart's kind titles what it measures per value and its two states", () => {
+  const between = { col: 0, header: "year" };
+  const plot = { t: "slope", by: REGION, between, from: "2024", to: "2025" } as const;
+  expect(slope(plot).title()).toBe("rows per region, 2024 to 2025");
+  expect(slope({ ...plot, of: REVENUE, measure: "sum" }).title()).toBe(
+    "sum of revenue per region, 2024 to 2025",
+  );
+});
+
 test("a slope chart's kind reads its values, its states and its numbers from its columns", () => {
   const between = { col: 0, header: "year" };
   const plot = { t: "slope", by: REGION, between, from: "2024", to: "2025" } as const;
