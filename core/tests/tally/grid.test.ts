@@ -4,9 +4,15 @@
  * the same however its rows arrive, and moved by one row on an edit.
  */
 
-import { expect, test } from 'vite-plus/test';
+import { describe, expect, test } from 'vite-plus/test';
 
-import { CELLS_AT_MOST, GridFold, LEVEL_FINEST } from '@tally';
+import {
+  CELLS_AT_MOST,
+  ExactSum,
+  GridFold,
+  LEVEL_FINEST,
+  cellAt,
+} from '@tally';
 import type { Coords } from '@tally';
 import { seeded, shuffled } from '@core-tests/lab/cache/stats';
 
@@ -29,52 +35,67 @@ function world(seed: number): Row[] {
   ]);
 }
 
-const fold = (rows: readonly Row[]) => {
-  const f = new GridFold(POINT);
-  for (const [lat, lon] of rows) f.add(lat, lon);
+const fold = (rows: readonly Row[], summed: boolean) => {
+  const f = new GridFold(POINT, summed ? 'point' : undefined);
+  for (const [lat, lon, cell] of rows) f.add(lat, lon, cell);
   return f;
 };
 
-test('a fold is the same however its rows arrive', () => {
-  const rows = world(1);
-  const whole = fold(rows).read();
-  const size = rows.length / BLOCKS;
-  const blocks = Array.from({ length: BLOCKS }, (_, b) =>
-    rows.slice(b * size, (b + 1) * size),
-  );
-  expect(fold(shuffled(blocks, seeded(3)).flat()).read()).toEqual(whole);
-  expect(whole.keys.length).toBeLessThanOrEqual(CELLS_AT_MOST);
-  expect(whole.level).toBeLessThan(LEVEL_FINEST);
+describe('a fold is the same however its rows arrive', () => {
+  for (const summed of [false, true])
+    test(summed ? 'summed' : 'counted', () => {
+      const rows = world(1);
+      const whole = fold(rows, summed).read();
+      const size = rows.length / BLOCKS;
+      const blocks = Array.from({ length: BLOCKS }, (_, b) =>
+        rows.slice(b * size, (b + 1) * size),
+      );
+      const byBlock = fold(shuffled(blocks, seeded(3)).flat(), summed);
+      expect(byBlock.read()).toEqual(whole);
+      expect(whole.keys.length).toBeLessThanOrEqual(CELLS_AT_MOST);
+      expect(whole.level).toBeLessThan(LEVEL_FINEST);
+    });
+});
+
+test('a summed cell is exact, whatever order its doubles came in', () => {
+  const rows = world(4);
+  const { level, keys, sum } = fold(rows, true).read();
+  const exact = new Map<number, ExactSum>();
+  for (const [lat, lon, cell] of rows) {
+    const key = cellAt(Number(lat), Number(lon), level);
+    if (!exact.has(key)) exact.set(key, new ExactSum());
+    exact.get(key)!.add(Number(cell));
+  }
+  expect(sum).toEqual(keys.map((k) => exact.get(k)!.value()));
 });
 
 test('an edit moves a fold by its one row', () => {
   const rows = world(5);
-  const edited = fold(rows);
-  const [lat, lon] = rows[7]!;
-  edited.remove(lat, lon);
-  edited.add('-33.8688', '151.2093');
-  const before = fold(rows);
+  const edited = fold(rows, true);
+  const [lat, lon, cell] = rows[7]!;
+  edited.remove(lat, lon, cell);
+  edited.add('-33.8688', '151.2093', '12');
+  const before = fold(rows, true);
   const was = before.read();
   const now = edited.read();
   expect(now.level).toBe(was.level);
   const total = (c: typeof was) => c.rows.reduce((a, b) => a + b, 0);
   expect(total(now)).toBe(total(was));
-  edited.remove('-33.8688', '151.2093');
-  edited.add(lat, lon);
+  edited.remove('-33.8688', '151.2093', '12');
+  edited.add(lat, lon, cell);
   expect(edited.read()).toEqual(was);
 });
 
 test('a row whose coordinates do not read is counted apart, by why', () => {
-  const f = new GridFold({ lat: 'point', lon: 'comma' });
-  for (const [lat, lon] of [
-    ['40.7', '-74,0'],
-    ['', '-74,0'],
-    ['40.7', 'west'],
-    ['91', '0'],
-    ['0', '-180,5'],
-  ] as const)
-    f.add(lat, lon);
-  const { keys, rows, left } = f.read();
+  const f = new GridFold({ lat: 'point', lon: 'comma' }, 'point');
+  f.add('40.7', '-74,0', '1');
+  f.add('', '-74,0', '2');
+  f.add('40.7', 'west', '3');
+  f.add('91', '0', '4');
+  f.add('0', '-180,5', 'x');
+  const { keys, rows, unplaced, left, skipped } = f.read();
   expect([keys.length, rows]).toEqual([1, [1]]);
+  expect(unplaced).toEqual({ rows: 4, sum: 9 });
   expect(left).toEqual({ blank: 1, unparsed: 1, outside: 2 });
+  expect(skipped).toEqual({ blank: 0, unparsed: 1 });
 });
