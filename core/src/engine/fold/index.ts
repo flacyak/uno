@@ -33,4 +33,7 @@ export const FOLDERS: Folders = {
   swarm: swarmFolder,
   parallel: parallelFolder,
   chord: splitFolder,
+  // Until a map has its own fold, it folds as a scatter of where its rows are.
+  map: (plot, headers, marks) =>
+    sampleFolder({ t: 'scatter', x: plot.lon, y: plot.lat }, headers, marks),
 };

@@ -21,6 +21,7 @@ import { dots } from "@renderer/chart/kinds/dots";
 import { slope } from "@renderer/chart/kinds/slope";
 import { heat } from "@renderer/chart/kinds/heat";
 import { horizon } from "@renderer/chart/kinds/horizon";
+import { map } from "@renderer/chart/kinds/map";
 import { parallel } from "@renderer/chart/kinds/parallel";
 import { swarm } from "@renderer/chart/kinds/swarm";
 import { week } from "@renderer/chart/kinds/week";
@@ -202,6 +203,7 @@ test("each plot kind has its module", () => {
     swarm,
     parallel,
     chord,
+    map,
   });
 });
 

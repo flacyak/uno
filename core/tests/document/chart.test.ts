@@ -80,6 +80,7 @@ describe('parsePlot', () => {
     { t: 'swarm', of: REVENUE, by: REGION },
     { t: 'parallel', axes: [REVENUE, REGION, DATE] },
     { t: 'chord', from: REGION, to: DATE, sum: REVENUE },
+    { t: 'map', lat: UNITS, lon: REVENUE, projection: 'world' },
     {
       t: 'horizon',
       at: DATE,

@@ -415,9 +415,10 @@ export class ChartForm {
 
   /** opensOn chooses `plot`'s kind, and the source's columns it names. */
   private opensOn(plot: Plot): void {
-    // A stacked chart is bars split by a column.
-    this.kind.value = plot.t === "stack" ? "bars" : plot.t;
-    if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
+    // A stacked chart is bars split by a column; the form makes no maps yet, so a map opens as a scatter of where its rows are.
+    this.kind.value = plot.t === "stack" ? "bars" : plot.t === "map" ? "scatter" : plot.t;
+    if (plot.t === "map") this.offer(this.placeAt(plot.lon), [undefined, plot.lon, plot.lat]);
+    else if (plot.t === "scatter") this.offer(this.placeAt(plot.x), [undefined, plot.x, plot.y]);
     else if (plot.t === "parallel") this.offer(this.placeAt(plot.axes[0]), [], plot.axes);
     else if (plot.t === "time" || plot.t === "week" || plot.t === "heat" || plot.t === "horizon") {
       if (plot.t !== "week") this.per.value = plot.per;
