@@ -4,6 +4,7 @@
  */
 
 import type { Order, UnixUnit } from '@date';
+import type { Reading as PlaceReading } from '@place';
 import type { Per, Span } from '@tally';
 
 /**
@@ -127,6 +128,14 @@ export interface MapPlot {
   sum?: ChartColumn;
   projection?: Projection;
   box?: MapBox;
+}
+
+/** A map of places: rows, or the sum of `sum`, per place `by` names, read as `reads`. */
+export interface PlacesPlot {
+  t: 'places';
+  by: ChartColumn;
+  reads: PlaceReading;
+  sum?: ChartColumn;
 }
 
 /**

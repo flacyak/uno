@@ -16,6 +16,8 @@ import {
 } from '@go';
 import type { Order, UnixUnit } from '@date';
 import { read as ingestRead } from '@ingest';
+import { REGION_COUNTRIES } from '@place';
+import type { Reading as PlaceReading } from '@place';
 import { Op } from '@sheet';
 import type { Edit, Sheet } from '@sheet';
 import { GROUPS_SENT, PER } from '@tally';
@@ -36,6 +38,7 @@ import type {
   ParallelPlot,
   MapBox,
   MapPlot,
+  PlacesPlot,
   Projection,
   SwarmPlot,
   TimePlot,
@@ -1400,6 +1403,36 @@ export function parseMap(where: string, value: unknown): MapPlot {
     plot.projection = required(p, 'projection', PROJECTION, where);
   if (p['box'] !== undefined) plot.box = required(p, 'box', BOX, where);
   return plot;
+}
+
+/** How a map of places may read its column: countries, or one region country's regions. */
+const PLACE_READING: Expects<PlaceReading> = {
+  is: (v): v is PlaceReading => {
+    if (typeof v !== 'object' || v === null) return false;
+    const { level, country } = v as Record<string, unknown>;
+    if (level === 'country') return Object.keys(v).length === 1;
+    return (
+      level === 'region' &&
+      typeof country === 'string' &&
+      REGION_COUNTRIES.includes(country)
+    );
+  },
+  not: "is not a reading of countries or of a region country's regions",
+};
+
+/**
+ * parsePlaces reads a map of places' plot: its column `by`, how it `reads`,
+ * and a `sum` it may name that is another column.
+ */
+export function parsePlaces(where: string, value: unknown): PlacesPlot {
+  const p = asRecord(value);
+  const by = columnOf(where, p, 'by');
+  const reads = required(p, 'reads', PLACE_READING, where);
+  if (p['sum'] === undefined) return { t: 'places', by, reads };
+  const sum = columnOf(where, p, 'sum');
+  if (sum.col === by.col)
+    throw new Error(`${where}: by and sum name one column`);
+  return { t: 'places', by, reads, sum };
 }
 
 /**

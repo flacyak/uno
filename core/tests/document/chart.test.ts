@@ -14,6 +14,7 @@ import type {
   StackPlot,
   ParallelPlot,
   MapPlot,
+  PlacesPlot,
   SwarmPlot,
   TimePlot,
   WeekPlot,
@@ -26,6 +27,7 @@ import {
   parseStacked,
   parseParallel,
   parseMap,
+  parsePlaces,
   parseSwarm,
   parseWeek,
 } from '@document/codec';
@@ -284,6 +286,39 @@ describe('parseMap', () => {
     ],
   ])('refuses %j, naming the key', (plot, said) => {
     expect(() => parseMap(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
+  });
+});
+
+describe('parsePlaces', () => {
+  test.each<PlacesPlot>([
+    { t: 'places', by: REGION, reads: { level: 'country' } },
+    {
+      t: 'places',
+      by: REGION,
+      reads: { level: 'region', country: 'US' },
+      sum: REVENUE,
+    },
+  ])('reads %j', (plot) => {
+    expect(parsePlaces(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [
+      { t: 'places', by: REGION },
+      "reads is not a reading of countries or of a region country's regions",
+    ],
+    [
+      { t: 'places', by: REGION, reads: { level: 'region', country: 'JP' } },
+      "reads is not a reading of countries or of a region country's regions",
+    ],
+    [
+      { t: 'places', by: REGION, reads: { level: 'country' }, sum: REGION },
+      'by and sum name one column',
+    ],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parsePlaces(PLOT, plot)).toThrow(
+      new Error(`${PLOT}: ${said}`),
+    );
   });
 });
 

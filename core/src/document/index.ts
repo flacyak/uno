@@ -74,6 +74,7 @@ export type {
   ParallelPlot,
   MapBox,
   MapPlot,
+  PlacesPlot,
   Projection,
   SwarmPlot,
   Plot,
