@@ -362,6 +362,17 @@ const TO_HEAT = 6;
 const FIFTH_WEEK = 5;
 
 /**
+ * The horizoned story's beats: region selected, the chart form opened on it,
+ * its kind stepped from Bars to Horizon, Enter, a click on a day, and Down to
+ * the next region's.
+ */
+const HORIZONED = HEATED;
+/** How many Rights step the kinds from Bars to Horizon, one past Heatmap. */
+const TO_HORIZON = TO_HEAT + 1;
+/** The first region's twentieth day, the horizoned story's first period, from 1 for nth-of-type. */
+const TWENTIETH_DAY = 20;
+
+/**
  * The dots story's beats: region selected, the chart form opened on it, its
  * kind stepped from Bars to Dot plot, Of stepped to revenue, Enter, a click on
  * a region's row, and Alt+Up.
@@ -1047,6 +1058,7 @@ const STORIES: Record<string, Story> = {
   dots: { end: DOTS.stop, script: playDots },
   weekly: { end: WEEKLY.stop, script: playWeekly },
   heated: { end: HEATED.stop, script: playHeated },
+  horizoned: { end: HORIZONED.stop, script: playHorizoned },
   sloped: { end: SLOPED.stop, script: playSloped },
   dotted: { end: DOTTED.end, script: playDotted },
   change: { end: CHANGE.end, script: playChange },
@@ -1313,6 +1325,34 @@ async function playBox(win: BrowserWindow, at: Clock): Promise<void> {
   await at(BOX.down);
   press(win, "Down");
   await at(BOX.stop);
+}
+
+/**
+ * playHorizoned performs the horizoned story: region selected, the form opened
+ * on it by Ctrl+Shift+G, its kind stepped to Horizon, Enter, a click on the
+ * first region's twentieth day for what it says, and Down to the next region's.
+ */
+async function playHorizoned(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(HORIZONED.column);
+  await pressOn(REGION_CELL);
+  await glideTo(KEYED_REST);
+  await at(HORIZONED.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(HORIZONED.kind);
+  // The keys open in By, after the kinds, and Right steps Bars to Horizon.
+  press(win, "Tab", ["shift"]);
+  await presses(win, "Right", TO_HORIZON, KIND_STEP_MS);
+  await at(HORIZONED.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-horizon-period")', "the horizon never drew");
+  await at(HORIZONED.cursor);
+  await pressOn(`.chart .chart-horizon-period:nth-of-type(${TWENTIETH_DAY})`);
+  await at(HORIZONED.down);
+  press(win, "Down");
+  await at(HORIZONED.stop);
 }
 
 /**
