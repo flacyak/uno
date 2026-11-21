@@ -76,6 +76,21 @@ export const STATUS: Check[] = [
       return missing().length === 0 ? whole() : JSON.stringify(missing()) + " are hidden";
     `,
   },
+  {
+    // The bar is a grid row high whatever the font's own line height, and
+    // its line stands as far from the border above as from the bar's foot.
+    name: "the bar is as tall as a grid row, with its line in the middle",
+    script: `
+      ${BAR}
+      const bar = el(".win-status").getBoundingClientRect();
+      const row = document.querySelector("tbody tr").getBoundingClientRect().height;
+      if (bar.height !== row) return "the bar is " + bar.height + "px tall, a row " + row + "px";
+      const line = el("#status-file").getBoundingClientRect();
+      const above = line.top - bar.top - parseFloat(getComputedStyle(el(".win-status")).borderTopWidth);
+      const below = bar.bottom - line.bottom;
+      return above === below ? "" : "the line is " + above + "px below the border and " + below + "px above the foot";
+    `,
+  },
   narrowed(
     "at 200% zoom, the file line keeps its row count, the clock and switch give way, and the panel toggle stays on",
     { zoom: DOUBLE_ZOOM },
