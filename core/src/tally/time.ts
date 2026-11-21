@@ -407,12 +407,12 @@ export function undate(
 }
 
 /** isReading says whether `v` is how a fold reads dates. */
-function isReading(v: unknown): v is Order | UnixUnit {
+export function isReading(v: unknown): v is Order | UnixUnit {
   return typeof v === 'string' && Object.hasOwn(OTHER, v);
 }
 
 /** The count a save holds of `rows`, and of `sum` where `mark` sums. */
-function restoredCount(
+export function restoredCount(
   rows: unknown,
   sum: unknown,
   mark: Mark | undefined,

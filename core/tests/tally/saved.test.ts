@@ -22,6 +22,8 @@ import {
   SplitFold,
   TALLY_VERSION,
   TimeFold,
+  WEEK_HOURS,
+  WeekFold,
 } from '@tally';
 import { UINT32_RANGE, seeded } from '@core-tests/lab/cache/stats';
 import {
@@ -544,6 +546,89 @@ test('a save that holds no time fold reads back as none', () => {
   expect(TimeFold.restored(yearOf(8029))).toBeDefined();
 });
 
+test('a week fold read back from its save folds on as the fold it was', () => {
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const random = seeded(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(random() * xs.length)]!;
+    const rows = Array.from({ length: DRAWS }, (): [string, string] => [
+      pick(DATES),
+      pick(CELLS),
+    ]);
+    for (const make of [
+      () => new WeekFold('day'),
+      () => new WeekFold('month', 'point'),
+      () => new WeekFold('s', 'comma'),
+    ]) {
+      // An edit takes the first row back before the save, and puts it back
+      // after it.
+      const first = (fold: WeekFold) => {
+        for (const r of rows.slice(0, HALF)) fold.add(...r);
+        fold.remove(...rows[0]!);
+      };
+      const then = (fold: WeekFold) => {
+        for (const r of rows.slice(HALF)) fold.add(...r);
+        fold.add(...rows[0]!);
+      };
+      const [whole, before] = [make(), make()];
+      first(whole);
+      then(whole);
+      first(before);
+      const after = WeekFold.restored(throughJson(before.saved()))!;
+      then(after);
+      expect(after.saved(), `seed ${seed}`).toStrictEqual(whole.saved());
+      expect(after.snapshot(), `seed ${seed}`).toStrictEqual(whole.snapshot());
+    }
+  }
+});
+
+test("a week fold saves the hours that hold a row, in the week's order", () => {
+  const fold = new WeekFold('day');
+  fold.add('2024-03-09 23:00');
+  fold.add('2024-03-03 01:00');
+  fold.add('2024-03-03 01:30');
+  expect(throughJson(fold.saved())).toStrictEqual({
+    reading: 'day',
+    timed: 3,
+    hours: [
+      [1, 2],
+      [WEEK_HOURS - 1, 1],
+    ],
+    undated: { rows: 0 },
+    dates: { blank: 0, unparsed: 0, other: 0 },
+    skipped: { blank: 0, unparsed: 0 },
+  });
+});
+
+test('a save that holds no week fold reads back as none', () => {
+  const fold = new WeekFold('day', 'point');
+  fold.add('2024-03-03 01:00', '1');
+  fold.add('2024-03-04 01:00', '2');
+  const saved = fold.saved();
+  const [sunday, monday] = saved.hours as [
+    [number, number, unknown],
+    [number, number, unknown],
+  ];
+  const [hour, rows, sum] = sunday;
+  const unsaved = [
+    undefined,
+    { ...saved, reading: 'week' },
+    { ...saved, mark: 'dot' },
+    { ...saved, timed: -1 },
+    { ...saved, dates: { blank: 0, unparsed: 0 } },
+    { ...saved, skipped: { blank: 0.5, unparsed: 0 } },
+    { ...saved, undated: { rows: 0 } },
+    { ...saved, hours: [[hour, 0, sum]] },
+    { ...saved, hours: [[hour, rows]] },
+    { ...saved, hours: [[hour + 0.5, rows, sum]] },
+    { ...saved, hours: [[-1, rows, sum]] },
+    { ...saved, hours: [[WEEK_HOURS, rows, sum]] },
+    { ...saved, hours: [sunday, sunday] },
+    { ...saved, hours: [monday, sunday] },
+  ];
+  for (const v of unsaved) expect(WeekFold.restored(v)).toBeUndefined();
+  expect(WeekFold.restored(throughJson(saved))?.saved()).toStrictEqual(saved);
+});
+
 /** Numbers of a few figures over many decades, either side of zero. */
 const SPREAD_CELLS = [...CELLS, '0', '2.3', '-2.25', '1e300', '7e-12'];
 // Few enough buckets that a spread of DRAWS rows coarsens.
@@ -692,6 +777,7 @@ const GOLDEN = {
   spread: 'e623684be52f441a3afae50186f5f68a0d942ccb3b267715a208bd1734956c67',
   spreads: '4d692394f8b2ad5f577c4016013a381dc2662741743816ab00b57a35dc29e6d1',
   mean: '46fe0e11379d829a37ab6ee93bbfb3c25da30cff2630076375e3aca28605c4f9',
+  week: '34cedec1c28038164d7bec62b8722839122943259e473f3da14a8b2ecebcc5f1',
 };
 
 test('the folds of a fixed file are as TALLY_VERSION says', () => {
@@ -794,4 +880,14 @@ test('the folds of a fixed file are as TALLY_VERSION says', () => {
     hashOf(encoder.encode(JSON.stringify(means))),
     'a mean fold, or how a cell reads as a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
   ).toBe(GOLDEN.mean);
+  const weeks = (['day', 'month'] as const).flatMap((order) => [
+    new WeekFold(order),
+    new WeekFold(order, 'point'),
+    new WeekFold(order, 'comma'),
+  ]);
+  for (const fold of weeks) dates.forEach((v, r) => fold.add(v, cells[r]));
+  expect(
+    hashOf(encoder.encode(JSON.stringify(weeks.map((f) => f.saved())))),
+    'a week fold, or how a cell reads as a date or a number, holds otherwise for the same cells: bump TALLY_VERSION in core/src/tally/saved.ts and pin this hash with it',
+  ).toBe(GOLDEN.week);
 });

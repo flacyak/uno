@@ -7,9 +7,12 @@ import { readDate } from '@date';
 import type { Order, UnixUnit } from '@date';
 import type { Mark } from '@num';
 
+import type { SavedSum } from './exact.ts';
 import { Count, counted } from './groups.ts';
+import { isCount, isMark, isRecord } from './saved.ts';
+import { restoredSkipped } from './skipped.ts';
 import type { Skipped } from './skipped.ts';
-import { undate } from './time.ts';
+import { isReading, restoredCount, undate } from './time.ts';
 import type { Undated } from './time.ts';
 
 const HOUR_MINUTES = 60;
@@ -45,6 +48,25 @@ export interface Week {
   undated: { rows: number; sum: number };
   dates: Undated;
   /** Cells of the summed column, none when the fold counts rows. */
+  skipped: Skipped;
+}
+
+/** One hour that holds a row, as a save writes it: its hour of the week, its rows, and their sum when summed. */
+type SavedHour = [number, number] | [number, number, SavedSum];
+
+/**
+ * SavedWeek is every bit of a WeekFold, as a save writes it: how it reads
+ * dates, the mark it sums with, none when it counts rows, its rows dated past
+ * midnight, the hours that hold a row in the week's order, and what it left
+ * out.
+ */
+export interface SavedWeek {
+  reading: Order | UnixUnit;
+  mark?: Mark;
+  timed: number;
+  hours: SavedHour[];
+  undated: { rows: number; sum?: SavedSum };
+  dates: Undated;
   skipped: Skipped;
 }
 
@@ -84,6 +106,65 @@ export class WeekFold {
   /** remove takes back a row that add counted. */
   remove(date: string, cell = ''): void {
     this.count(date, cell, -1);
+  }
+
+  /** saved is what the fold holds, which `restored` reads back as it was. */
+  saved(): SavedWeek {
+    const summed = this.mark !== undefined;
+    const { rows, sum } = this.undated;
+    const hours = this.hours.flatMap((c, hour): SavedHour[] => {
+      if (c.rows === 0) return [];
+      return [summed ? [hour, c.rows, c.sum.saved()] : [hour, c.rows]];
+    });
+    return {
+      reading: this.reading,
+      mark: this.mark,
+      timed: this.timed,
+      hours,
+      undated: summed ? { rows, sum: sum.saved() } : { rows },
+      dates: { ...this.dates },
+      skipped: { ...this.skipped },
+    };
+  }
+
+  /**
+   * restored is the fold `saved` holds, or undefined where it holds none: a
+   * field out of range, or an hour past the week, empty, or not after the
+   * hour before it.
+   */
+  static restored(saved: unknown): WeekFold | undefined {
+    if (!isRecord(saved) || !isRecord(saved['dates'])) return undefined;
+    const { reading, mark, timed, hours, undated } = saved;
+    const dates = restoredSkipped(saved['dates']);
+    const other = saved['dates']['other'];
+    const skipped = restoredSkipped(saved['skipped']);
+    const fields =
+      isReading(reading) &&
+      (mark === undefined || isMark(mark)) &&
+      isCount(timed) &&
+      isCount(other) &&
+      dates !== undefined &&
+      skipped !== undefined &&
+      isRecord(undated) &&
+      Array.isArray(hours);
+    if (!fields) return undefined;
+    const fold = new WeekFold(reading, mark);
+    let last = -1;
+    for (const h of hours as unknown[]) {
+      const [hour, rows, sum]: unknown[] = Array.isArray(h) ? h : [];
+      const count = restoredCount(rows, sum, mark);
+      const placed = isCount(hour) && hour > last && hour < WEEK_HOURS;
+      if (!placed || count === undefined || count.rows === 0) return undefined;
+      fold.hours[hour] = count;
+      last = hour;
+    }
+    const count = restoredCount(undated['rows'], undated['sum'], mark);
+    if (count === undefined) return undefined;
+    Object.assign(fold.undated, count);
+    Object.assign(fold.dates, dates, { other });
+    Object.assign(fold.skipped, skipped);
+    fold.timed = timed;
+    return fold;
   }
 
   /** snapshot is what the fold holds, as plain numbers. */
