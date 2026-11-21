@@ -190,13 +190,14 @@ test("Enter inserts bars of the selected column, and closes", async () => {
   expect(asked).toStrictEqual([regionBars, "closed"]);
 });
 
-test("it offers bars, a dot plot, a pie, a chart over time, a histogram, a box plot and a scatter, and opens on bars", () => {
+test("it offers bars, a dot plot, a slope, a pie, a chart over time, a histogram, a box plot and a scatter, and opens on bars", () => {
   form();
   const kind = select("kind");
   const offered = [...kind.options].map((o) => [o.parentElement!.textContent, o.disabled]);
   const kinds = [
     m.chart_kind_bars(),
     m.chart_kind_dots(),
+    m.chart_kind_slope(),
     m.chart_kind_pie(),
     m.chart_kind_time(),
     m.chart_kind_histogram(),
@@ -246,6 +247,80 @@ test("a dot plot's form opens on its columns and measure, and keeps its order", 
   press("Enter");
   await settle();
   expect(asked[0]).toBe(inserting(plot));
+});
+
+/** The sales export with a sample of its rows: three channels, web the most common and partner the least. */
+const SAMPLED = {
+  ...SALES,
+  band: banded(
+    COLUMNS,
+    ["web", "direct", "web", "partner", "direct", "web"].map((channel) => [
+      "2025-07-01",
+      "North",
+      "Ada",
+      channel,
+      "1",
+      "2",
+    ]),
+  ),
+};
+
+test("a slope asks for By, Between, its From and To among Between's most common values, the earlier first, and Of", async () => {
+  const { asked, box } = form(undefined, { t: "insert", col: REGION }, SAMPLED);
+  pick("kind", "slope");
+  // Between opens on the first text column other than By's.
+  expect(select("between").value).toBe("2");
+  pick("between", String(CHANNEL));
+  expect(shown(box)).toStrictEqual([
+    m.chart_form_source(),
+    ...QUESTION_WORDS,
+    m.chart_form_by(),
+    m.chart_form_between(),
+    m.chart_form_from(),
+    m.chart_form_to(),
+    m.chart_form_of(),
+    m.chart_form_title_field(),
+    m.chart_form_refresh(),
+  ]);
+  const offered = (name: string) => [...select(name).options].map((o) => o.value);
+  expect(offered("from")).toStrictEqual(["web", "direct", "partner"]);
+  expect(chosen("from", "to")).toStrictEqual(["direct", "web"]);
+  // A slope's states are another column's than its values'.
+  const own = [...select("between").options].find((o) => o.value === String(REGION))!;
+  expect(own.disabled).toBe(true);
+  const by = { col: REGION, header: "region" };
+  const plot: Plot = {
+    t: "slope",
+    by,
+    between: { col: CHANNEL, header: "channel" },
+    from: "direct",
+    to: "web",
+  };
+  press("Enter");
+  await settle();
+  expect(asked).toStrictEqual([inserting(plot), "closed"]);
+});
+
+test("a slope's form opens on its columns, its two states and its measure", () => {
+  const plot: Plot = {
+    t: "slope",
+    by: { col: REGION, header: "region" },
+    between: { col: CHANNEL, header: "channel" },
+    from: "partner",
+    to: "mail",
+    of: { col: REVENUE, header: "revenue" },
+    measure: "sum",
+  };
+  changing(plot, "", SAMPLED);
+  expect(chosen("kind", "by", "between", "from", "to", "dots-of", "measure")).toStrictEqual([
+    "slope",
+    String(REGION),
+    String(CHANNEL),
+    "partner",
+    "mail",
+    String(REVENUE),
+    "sum",
+  ]);
 });
 
 test("a pie shares out the rows, or a sum, per value of the selected column", async () => {

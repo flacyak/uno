@@ -340,6 +340,30 @@ const DOTS = {
   up: 13_800,
   stop: 16_400,
 };
+/**
+ * The sloped story's beats: region selected, the chart form opened on it, its
+ * kind stepped to Slope, Between to channel, Of to revenue, Enter, then the
+ * form opened on the slope once its fold of every channel has filled, and To
+ * stepped to the next channel, which redraws at once.
+ */
+const SLOPED = {
+  column: 500,
+  open: 2_400,
+  kind: 4_400,
+  between: 7_400,
+  of: 10_400,
+  enter: 15_400,
+  edit: 18_400,
+  to: 20_400,
+  apply: 24_400,
+  stop: 27_400,
+};
+/** How many Downs take Between from rep, the first text column other than By, to channel. */
+const BETWEEN_TO_CHANNEL = 1;
+/** How many Tabs take the keys from By, past Between and From, to To, and from Between, past From and To, to Of. */
+const TO_TO = 3;
+const TO_OF = 3;
+
 /** The fixture's third region cell, which the dots story selects. */
 const REGION_CELL = "tbody tr:nth-child(3) td:nth-child(3)";
 
@@ -985,6 +1009,7 @@ const STORIES: Record<string, Story> = {
   box: { end: BOX.stop, script: playBox },
   moving: { end: MOVING.end, script: playMoving },
   dots: { end: DOTS.stop, script: playDots },
+  sloped: { end: SLOPED.stop, script: playSloped },
   dotted: { end: DOTTED.end, script: playDotted },
   change: { end: CHANGE.end, script: playChange },
   schedule: { end: SCHEDULE.end, script: playSchedule },
@@ -1284,6 +1309,48 @@ async function playDots(win: BrowserWindow, at: Clock): Promise<void> {
   await at(DOTS.up);
   press(win, "Up", ["alt"]);
   await at(DOTS.stop);
+}
+
+/**
+ * playSloped performs the sloped story: region selected, the form opened on it
+ * by Ctrl+Shift+G, its kind stepped to Slope, Between to channel and Of to
+ * revenue, Enter, then the form opened on the slope and its To stepped on.
+ */
+async function playSloped(win: BrowserWindow, at: Clock): Promise<void> {
+  const { glideTo, pressOn } = await glider(win);
+  await at(SLOPED.column);
+  await pressOn(REGION_CELL);
+  await glideTo(KEYED_REST);
+  await at(SLOPED.open);
+  press(win, "G", ["control", "shift"]);
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened");
+  await glideTo(".chart-form .chart-tile:has(input:checked)");
+  await at(SLOPED.kind);
+  // The keys open in By, after the kinds, and Right steps Bars past Dot plot to Slope.
+  press(win, "Tab", ["shift"]);
+  await presses(win, "Right", 2, KIND_STEP_MS);
+  await glideTo('.chart-form select[name="between"]');
+  await at(SLOPED.between);
+  press(win, "Tab");
+  press(win, "Tab");
+  await presses(win, "Down", BETWEEN_TO_CHANNEL, KIND_STEP_MS);
+  await glideTo('.chart-form select[name="dots-of"]');
+  await at(SLOPED.of);
+  await presses(win, "Tab", TO_OF, KIND_STEP_MS);
+  await presses(win, "Down", TO_REVENUE, KIND_STEP_MS);
+  await at(SLOPED.enter);
+  press(win, "Return");
+  await waitIn(win, 'document.querySelector(".chart-slope-line")', "the slope never drew");
+  await at(SLOPED.edit);
+  await pressOn(".chart .chart-edit");
+  await waitIn(win, 'document.querySelector(".chart-form")', "the chart form never opened again");
+  await glideTo('.chart-form select[name="to"]');
+  await at(SLOPED.to);
+  await presses(win, "Tab", TO_TO, KIND_STEP_MS);
+  press(win, "Down");
+  await at(SLOPED.apply);
+  press(win, "Return");
+  await at(SLOPED.stop);
 }
 
 /**
