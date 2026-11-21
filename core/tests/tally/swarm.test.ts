@@ -82,3 +82,46 @@ test('a swarm fold keeps SWARM_VALUES_AT_MOST values, and later ones share Other
   fold.add(0, values, 'v0', '1');
   expect(fold.snapshot().strips.find((s) => s.value === 'v0')?.plotted).toBe(2);
 });
+
+test('an edit moves a dot, takes a row from its old value, and marks a block it took a least or most from', () => {
+  const rows = [...Array(ROWS).keys()];
+  const valueOf = (r: number) => VALUES[r % VALUES.length]!;
+  const cells = new Map(rows.map((r) => [r, [valueOf(r), cellOf(r)] as const]));
+  const fold = new SwarmFold('point');
+  const add = (r: number) =>
+    fold.add(Math.floor(r / BLOCK_ROWS), r, ...cells.get(r)!);
+  const edit = (r: number, value: string, cell: string) => {
+    fold.remove(Math.floor(r / BLOCK_ROWS), r, ...cells.get(r)!);
+    cells.set(r, [value, cell]);
+    add(r);
+  };
+  rows.forEach(add);
+  const stripOf = (v: string) =>
+    fold.snapshot().strips.find((s) => s.value === v)!;
+  const north = stripOf('North');
+  // North's first dot moves, and its second goes to South.
+  const [moved, gone] = north.rows;
+  edit(moved!, 'North', '-1');
+  edit(gone!, 'South', `${gone}.5`);
+  const after = stripOf('North');
+  expect(after.at[0]).toBe(-1);
+  expect(after.rows).not.toContain(gone);
+  expect(after.plotted).toBe(north.plotted - 1);
+  expect(stripOf('South').rows).toContain(gone);
+  expect(fold.snapshot().least).toBe(-1);
+  // Taking -1 back leaves its block to fold again, and then the least is the next.
+  edit(moved!, 'North', `${moved}.5`);
+  const block = Math.floor(moved! / BLOCK_ROWS);
+  expect(fold.stale()).toEqual([block]);
+  const alone = new SwarmFold('point');
+  const own = rows.filter((r) => Math.floor(r / BLOCK_ROWS) === block);
+  for (const r of own) alone.add(block, r, ...cells.get(r)!);
+  fold.refold(block, alone);
+  expect(fold.stale()).toEqual([]);
+  expect(fold.snapshot().least).toBe(1.5);
+  // A value whose every row an edit takes goes.
+  const lone = new SwarmFold('point');
+  lone.add(0, 0, 'Solo', '1');
+  lone.remove(0, 0, 'Solo', '1');
+  expect(lone.snapshot().strips).toEqual([]);
+});

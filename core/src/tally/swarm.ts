@@ -35,11 +35,12 @@ class Kept {
   plotted = 0;
   readonly ranked = new Ranked<number>(SWARM_ROWS_AT_MOST);
 
-  /** add counts `row`, with its number `n` where it has one. */
-  add(row: number, n: number | undefined): void {
-    this.rows++;
-    if (n !== undefined) this.plotted++;
-    this.ranked.keep(row, n);
+  /** count counts `row`, with its number `n` where it has one, or takes it back where `sign` is -1. */
+  count(row: number, n: number | undefined, sign: 1 | -1): void {
+    this.rows += sign;
+    if (n !== undefined) this.plotted += sign;
+    if (sign > 0) this.ranked.keep(row, n);
+    else this.ranked.delete(row);
   }
 
   /** strip is the strip of `value`, with these rows. */
@@ -77,7 +78,29 @@ export class SwarmFold {
       kept = new Kept();
       this.values.set(value, kept);
     }
-    (kept ?? this.rest).add(row, parse(cell, this.mark));
+    (kept ?? this.rest).count(row, parse(cell, this.mark), 1);
+  }
+
+  /** remove takes back a row that add folded, which leaves its value's sample, as SampleFold's remove does. */
+  remove(block: number, row: number, value: string, cell: string): void {
+    this.all.remove(block, row, cell);
+    this.take(row, value, cell);
+  }
+
+  /** forget takes back a row as remove does, for a block that folds again whole. */
+  forget(row: number, value: string, cell: string): void {
+    this.all.forget(row, cell);
+    this.take(row, value, cell);
+  }
+
+  /** refold mends stale `block` from `alone`, a fold of its rows alone. */
+  refold(block: number, alone: SwarmFold): void {
+    this.all.refold(block, alone.all);
+  }
+
+  /** stale lists the blocks whose least and most an edit may leave too wide. */
+  stale(): number[] {
+    return this.all.stale();
   }
 
   /** snapshot reads the fold as plain numbers. */
@@ -91,5 +114,12 @@ export class SwarmFold {
     );
     const rest = this.rest.rows === 0 ? {} : { rest: this.rest.strip('') };
     return { strips, ...rest, plotted, least, most, skipped };
+  }
+
+  /** take takes `row` back from its value's sample, and the value goes once it has no row. */
+  private take(row: number, value: string, cell: string): void {
+    const kept = this.values.get(value);
+    (kept ?? this.rest).count(row, parse(cell, this.mark), -1);
+    if (kept?.rows === 0) this.values.delete(value);
   }
 }
