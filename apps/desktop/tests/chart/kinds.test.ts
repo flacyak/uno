@@ -358,3 +358,17 @@ test("a box plot is titled by its column, and by both where it splits by another
   expect(madeTitle({ t: "box", of: revenue, span: "most" })).toBe("revenue");
   expect(madeTitle({ t: "box", of: revenue, by: region, span: "most" })).toBe("revenue per region");
 });
+
+test("a heatmap over periods' kind titles what it measures per value, per its size or over its dates", async () => {
+  const at = { col: 0, header: "ordered" };
+  const plot = { t: "heat", by: REGION, at, per: "month", order: "day" } as const;
+  expect(heat(plot).title()).toBe("rows per region per month of ordered");
+  expect(heat({ ...plot, sum: REVENUE, per: "auto" }).title()).toBe(
+    "sum of revenue per region over ordered",
+  );
+  await setLocale("es", { reload: false });
+  expect(heat({ ...plot, sum: REVENUE }).title()).toBe(
+    "suma de revenue por region por mes de ordered",
+  );
+  await setLocale(baseLocale, { reload: false });
+});
