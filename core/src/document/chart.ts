@@ -66,6 +66,19 @@ export type WeekPlot = {
 } & Reading;
 
 /**
+ * A heatmap over periods: rows, or the sum of `sum`, per value of `by` and
+ * per period of `at`, at the size `per` or the finest that fits, its dates
+ * read as the chart was made.
+ */
+export type HeatPlot = {
+  t: 'heat';
+  by: ChartColumn;
+  at: ChartColumn;
+  sum?: ChartColumn;
+  per: Per | 'auto';
+} & Reading;
+
+/**
  * A stacked bar chart: rows, or the sum of `sum`, per value of `by`, each
  * bar split by the value of `split` in the same row.
  */

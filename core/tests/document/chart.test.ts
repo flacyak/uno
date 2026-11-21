@@ -9,6 +9,7 @@ import { REFRESH_MINUTES_AT_MOST, TITLE_AT_MOST, parseChart } from '@document';
 import type {
   Chart,
   Plot,
+  HeatPlot,
   SlopePlot,
   StackPlot,
   TimePlot,
@@ -18,6 +19,7 @@ import {
   parseOverTime,
   parsePlot,
   parseSlope,
+  parseHeat,
   parseStacked,
   parseWeek,
 } from '@document/codec';
@@ -178,6 +180,33 @@ describe('parseOverTime', () => {
     expect(() => parseOverTime(PLOT, plot)).toThrow(
       new Error(`${PLOT}: ${said}`),
     );
+  });
+});
+
+describe('parseHeat', () => {
+  test.each<HeatPlot>([
+    { t: 'heat', by: REGION, at: DATE, per: 'month', order: 'day' },
+    { t: 'heat', by: REGION, at: DATE, sum: REVENUE, per: 'auto', unit: 'ms' },
+  ])('reads %j', (plot) => {
+    expect(parseHeat(PLOT, plot)).toStrictEqual(plot);
+  });
+
+  test.each<[unknown, string]>([
+    [
+      { t: 'heat', at: DATE, per: 'day', order: 'day' },
+      'by: col is not a column number',
+    ],
+    [
+      { t: 'heat', by: REGION, at: REGION, per: 'day', order: 'day' },
+      'by and at name one column',
+    ],
+    [
+      { t: 'heat', by: REGION, at: DATE, order: 'day' },
+      `per is not one of ${PERS}`,
+    ],
+    [{ t: 'heat', by: REGION, at: DATE, per: 'day' }, ONE_READING],
+  ])('refuses %j, naming the key', (plot, said) => {
+    expect(() => parseHeat(PLOT, plot)).toThrow(new Error(`${PLOT}: ${said}`));
   });
 });
 

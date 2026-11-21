@@ -27,6 +27,7 @@ import type {
   ChartPlace,
   DotMeasure,
   DotsPlot,
+  HeatPlot,
   Plot,
   Reading,
   SlopePlot,
@@ -1298,6 +1299,20 @@ export function parseWeek(where: string, value: unknown): WeekPlot {
   const at = columnOf(where, p, 'at');
   const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
   return { t: 'week', at, ...sum, ...readingOf(where, p) };
+}
+
+/**
+ * parseHeat reads a heatmap over periods' plot: the column `by` whose values
+ * are its rows, its date column `at`, a `sum` it may name, its size `per`,
+ * and how its dates read, as an over-time chart's do.
+ */
+export function parseHeat(where: string, value: unknown): HeatPlot {
+  const p = asRecord(value);
+  const [by, at] = [columnOf(where, p, 'by'), columnOf(where, p, 'at')];
+  if (by.col === at.col) throw new Error(`${where}: by and at name one column`);
+  const per = required(p, 'per', PER_SIZE, where);
+  const sum = p['sum'] === undefined ? {} : { sum: columnOf(where, p, 'sum') };
+  return { t: 'heat', by, at, ...sum, per, ...readingOf(where, p) };
 }
 
 /** readingOf reads how a plot's dates read: a column's `order` or a Unix `unit`, one of the two. */

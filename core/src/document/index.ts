@@ -67,6 +67,7 @@ export type {
   ChartPlace,
   DotMeasure,
   DotsPlot,
+  HeatPlot,
   Plot,
   Reading,
   SlopePlot,
