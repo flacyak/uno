@@ -113,3 +113,25 @@ test("a slope names its states over its ends, as wide as their names, and a line
   expect(wides).toStrictEqual(["4ch", "9ch"]);
   expect(drawn.querySelector(".chart-bars-line")?.textContent).toBe("+1 more");
 });
+
+test("a slope's From ends say their numbers at their left and its To ends their names and numbers at their right, each side as wide as its widest", () => {
+  const drawn = slopes(
+    sloped(
+      SUMS,
+      tallyOf([
+        ["", end(0, 1), end(0, 1)],
+        ["West", end(10, 1), NONE],
+        ["A name longer than any key's", end(200, 1), end(5, 1)],
+      ]),
+    ),
+  );
+  const texts = (side: string) =>
+    [...drawn.querySelectorAll(`.chart-slope-ends.${side} > *`)].map((at) => at.textContent);
+  expect(texts("from")).toStrictEqual(["0", "10", "200"]);
+  // West has no To end, and the blank value reads as the app's word for one.
+  expect(texts("to")).toStrictEqual(["(blank) 0", "A name longer than any key's 5"]);
+  const blank = drawn.querySelector<HTMLElement>(".chart-slope-ends.to > *")!;
+  expect([blank.title, blank.style.top]).toStrictEqual(["(blank)", "100%"]);
+  const wides = ["--from-wide", "--to-wide"].map((at) => drawn.style.getPropertyValue(at));
+  expect(wides).toStrictEqual(["4ch", "20ch"]);
+});

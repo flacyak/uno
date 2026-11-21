@@ -654,6 +654,41 @@
   grid-column: 1 / -1;
 }
 
+/* An end's label centres on its end, a From's against the left axis and a
+ * To's from the right, its name cut at --name-most, in the window's ink and
+ * its number in the caption's. They stand inside the axes' reach of the edge. */
+.chart-slope-ends {
+  position: relative;
+  margin-block: var(--dot-reach);
+}
+
+.chart-slope-ends > * {
+  position: absolute;
+  max-width: 100%;
+  translate: 0 -50%;
+  white-space: nowrap;
+}
+
+.chart-slope-ends.from > * {
+  right: 0;
+}
+
+.chart-slope-end {
+  display: flex;
+  gap: 0.5ch;
+}
+
+.chart-slope-name {
+  overflow: hidden;
+  max-width: var(--name-most);
+  text-overflow: ellipsis;
+}
+
+.chart-slope-value {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
 .chart-slope-plot {
   width: calc(100% - 2 * var(--dot-reach));
   height: calc(100% - 2 * var(--dot-reach));

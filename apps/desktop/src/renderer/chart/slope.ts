@@ -13,6 +13,7 @@ import { el } from "@renderer/shell/util";
 import type { Ended } from "@tally";
 import { axis } from "./axes.ts";
 import { TIP_GAP } from "./bars.ts";
+import { LEGEND_NAME_AT_MOST } from "./legend.ts";
 import { BARS_INSET } from "./rows.ts";
 import { POINT_RADIUS, gridline, mark, percent } from "./scatter.ts";
 
@@ -66,6 +67,28 @@ const LETTERS = new Intl.Segmenter();
 /** wide gives the characters `text` takes, mono. */
 const wide = (text: string): number => [...LETTERS.segment(text)].length;
 
+/** placed gives `label` standing at `top` of its side, its middle on its end. */
+function placed(label: HTMLElement, top: string): HTMLElement {
+  label.style.top = top;
+  return label;
+}
+
+/**
+ * ended gives a To end's label: the value's name, whole in its title and cut
+ * at LEGEND_NAME_AT_MOST characters, and its number.
+ */
+function ended(label: string, at: number): HTMLElement {
+  const name = label === "" ? m.chart_blank_value() : label;
+  const made = el("span", "chart-slope-end");
+  made.title = name;
+  const named =
+    label === ""
+      ? el("span", "chart-slope-name chart-blank", name)
+      : el("bdi", "chart-slope-name from-file", name);
+  made.append(named, " ", el("span", "chart-slope-value", num(at)));
+  return made;
+}
+
 /** line gives a mark of class `cls` from `x1`, `y1` to `x2`, `y2` of the plot. */
 function line(cls: string, x1: string, y1: string, x2: string, y2: string): SVGLineElement {
   const made = mark("line", cls);
@@ -76,14 +99,14 @@ function line(cls: string, x1: string, y1: string, x2: string, y2: string): SVGL
 /**
  * slopes draws `rows` on two axes named by `states`, a line per value between
  * its ends on one scale over every end, a dot at each end, over every line,
- * and a line under them counting the `more` values left out.
+ * each From end's number left of it and each To end's name and number right
+ * of it, and a line under them counting the `more` values left out.
  */
 export function slopes({ rows, states, more }: Slopes): HTMLElement {
   const box = el("div", "chart-slope");
   box.style.setProperty("--inset", `${BARS_INSET}px`);
   box.style.setProperty("--tip-gap", `${TIP_GAP}px`);
-  box.style.setProperty("--from-wide", `${wide(states[0])}ch`);
-  box.style.setProperty("--to-wide", `${wide(states[1])}ch`);
+  box.style.setProperty("--name-most", `${LEGEND_NAME_AT_MOST}ch`);
   box.style.setProperty("--ring", `${RING}px`);
   box.style.setProperty("--dot-reach", `${POINT_RADIUS + RING}px`);
   const ends = rows.flatMap(({ ends: both }) => both.filter((at) => at !== undefined));
@@ -111,9 +134,27 @@ export function slopes({ rows, states, more }: Slopes): HTMLElement {
   }
   // Every dot stands over every line, so no line runs across another's end.
   plot.append(...dots);
+  const [from, to] = [el("div", "chart-slope-ends from"), el("div", "chart-slope-ends to")];
+  // A side is as wide as its state's name and its widest label, a To end's name cut as a key's.
+  const wides = [[wide(states[0])], [wide(states[1])]];
+  for (const {
+    label,
+    ends: [left, right],
+  } of rows) {
+    if (left !== undefined) {
+      from.append(placed(el("span", "chart-slope-value", num(left)), y(left)));
+      wides[0]!.push(wide(num(left)));
+    }
+    if (right === undefined) continue;
+    to.append(placed(ended(label, right), y(right)));
+    const name = label === "" ? m.chart_blank_value() : label;
+    wides[1]!.push(Math.min(wide(name), LEGEND_NAME_AT_MOST) + 1 + wide(num(right)));
+  }
+  box.style.setProperty("--from-wide", `${Math.max(...wides[0]!)}ch`);
+  box.style.setProperty("--to-wide", `${Math.max(...wides[1]!)}ch`);
   const named = el("div", "chart-slope-states");
   named.append(...states.map((state) => el("bdi", "chart-slope-state from-file", state)));
-  box.append(named, el("div"), plot);
+  box.append(named, from, plot, to);
   if (more > 0) box.append(el("div", "chart-bars-line", m.chart_bars_more({ count: num(more) })));
   return box;
 }

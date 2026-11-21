@@ -12,13 +12,16 @@ import type { Check } from "./check.ts";
 /** The workspace smoke.js wrote of two slope charts. */
 const SLOPED = process.env["UNO_SMOKE_SLOPED"] ?? "";
 
+/** How far a mark may stand off where it should: a px's rounding. */
+const PX_SLACK = 1;
+
 /** A line's width, and a dot's radius, in px: the dataviz skill's. */
 const LINE = 2;
 const RADIUS = 4;
 
 export const CHART_SLOPE: Check[] = [
   {
-    name: "a slope chart draws a line per region between its two years in the accent, a dot at each end, West one dot, the years over the ends",
+    name: "a slope chart draws a line per region between its two years in the accent, a dot at each end, West one dot, the years over the ends, and each end's label on its own side",
     send: ["menu:open-path", SLOPED],
     shot: "chart-slope",
     script: `
@@ -44,6 +47,13 @@ export const CHART_SLOPE: Check[] = [
         const plot = rect(win.querySelector(".chart-slope-plot"));
         const [from, to] = [...win.querySelectorAll(".chart-slope-state")].map(rect);
         if (from.right > plot.left || to.left < plot.right) return "a year stands over the plot, not over its end";
+        // Each end's label centres on its dot, on its own side of the plot.
+        for (const label of win.querySelectorAll(".chart-slope-ends > *")) {
+          const at = rect(label);
+          const middle = at.top + at.height / 2;
+          const near = dots.some((dot) => Math.abs(rect(dot).top + rect(dot).height / 2 - middle) <= ${PX_SLACK});
+          if (!near || (at.right > plot.left && at.left < plot.right)) return "the label " + label.textContent + " stands off its end";
+        }
       }
       return "";
     `,
